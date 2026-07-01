@@ -20,6 +20,16 @@ support-agent              <- trace root (input, output)
 ## Steps
 
 <Steps>
+  <Step title="Optional: install the agent skill">
+    If you want a coding agent to add tracing for you, install the Lemma skill from the public repo:
+
+    ```bash
+    npx skills add uselemma/lemma --skill "skills/lemma-tracing"
+    ```
+
+    Then prompt your agent to use the Lemma AI skill from `github.com/uselemma/lemma` at `skills/lemma-tracing`.
+  </Step>
+
   <Step title="Install the SDK">
     <Tabs>
       <Tab title="TypeScript">
@@ -136,6 +146,9 @@ support-agent              <- trace root (input, output)
   </Card>
   <Card title="Concepts" icon="book" href="/getting-started/concepts">
     Traces, spans, generations, and threads.
+  </Card>
+  <Card title="Agent skill" icon="bot" href="/getting-started/agent-skill">
+    Install the Lemma skill from the public repo.
   </Card>
   <Card title="Threads & context" icon="users" href="/tracing/instrumentation/context">
     Group conversations and attach users.
