@@ -1,0 +1,238 @@
+{
+  "theme": "almond",
+  "name": "Lemma",
+  "styling": {
+    "css": "/style.css"
+  },
+  "colors": {
+    "primary": "#755CFE",
+    "light": "#755CFE",
+    "dark": "#1D1956"
+  },
+  "fonts": {
+    "heading": {
+      "family": "Britti Sans",
+      "weight": 500,
+      "format": "woff2",
+      "source": "/fonts/britti-sans-medium.woff2"
+    },
+    "body": {
+      "family": "Britti Sans",
+      "weight": 400,
+      "format": "woff2",
+      "source": "/fonts/britti-sans-regular.woff2"
+    }
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "logo": {
+    "light": "/logo-light.svg",
+    "dark": "/logo-dark.svg"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Talk to us",
+        "href": "https://cal.com/jerryzhang/lemma-demo"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Dashboard",
+      "href": "https://platform.uselemma.ai"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "icon": "rocket",
+            "expanded": true,
+            "pages": [
+              "getting-started/introduction",
+              "getting-started/quickstart",
+              "getting-started/concepts"
+            ]
+          },
+          {
+            "group": "Instrumentation",
+            "icon": "workflow",
+            "expanded": true,
+            "pages": [
+              "tracing/overview",
+              "tracing/instrumentation/instrument-an-agent",
+              "tracing/instrumentation/setup",
+              "tracing/instrumentation/traces",
+              "tracing/instrumentation/generations",
+              "tracing/instrumentation/tool-calls",
+              "tracing/instrumentation/spans",
+              "tracing/instrumentation/context",
+              {
+                "group": "Troubleshooting",
+                "expanded": false,
+                "pages": [
+                  "tracing/troubleshooting/debug-mode",
+                  "tracing/troubleshooting/common-issues"
+                ]
+              },
+              {
+                "group": "Reference",
+                "expanded": false,
+                "pages": [
+                  "reference/trace-contract",
+                  "reference/good-vs-bad-traces"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Integrations",
+            "icon": "plug-zap",
+            "expanded": true,
+            "pages": [
+              "integrations/openai-agents",
+              "integrations/vercel-ai",
+              "integrations/langchain",
+              "integrations/langgraph"
+            ]
+          },
+          {
+            "group": "Connections",
+            "icon": "plug",
+            "expanded": true,
+            "pages": [
+              "connections/mcp",
+              "connections/webhooks"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "openapi": "https://api.uselemma.ai/openapi.json"
+      }
+    ]
+  },
+  "redirects": [
+    {
+      "source": "/getting-started/minimum-viable-trace",
+      "destination": "/reference/trace-contract"
+    },
+    {
+      "source": "/tracing/instrumentation",
+      "destination": "/tracing/instrumentation/setup"
+    },
+    {
+      "source": "/tracing/troubleshooting/common-problems",
+      "destination": "/tracing/troubleshooting/common-issues"
+    },
+    {
+      "source": "/tracing/wrapping-your-agent",
+      "destination": "/tracing/overview"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/overview",
+      "destination": "/tracing/instrumentation/setup"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/setup",
+      "destination": "/tracing/instrumentation/setup"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/trace-root-usage",
+      "destination": "/tracing/instrumentation/traces"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/step-usage",
+      "destination": "/tracing/instrumentation/spans"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/tool-call-usage",
+      "destination": "/tracing/instrumentation/tool-calls"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/run-usage",
+      "destination": "/tracing/instrumentation/traces"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/typescript/setup",
+      "destination": "/tracing/instrumentation/setup"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/typescript/run-usage",
+      "destination": "/tracing/instrumentation/traces"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/typescript/step-usage",
+      "destination": "/tracing/instrumentation/spans"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/typescript/tool-call-usage",
+      "destination": "/tracing/instrumentation/tool-calls"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/python/setup",
+      "destination": "/tracing/instrumentation/setup"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/python/run-usage",
+      "destination": "/tracing/instrumentation/traces"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/python/step-usage",
+      "destination": "/tracing/instrumentation/spans"
+    },
+    {
+      "source": "/tracing/custom-instrumentation/python/tool-call-usage",
+      "destination": "/tracing/instrumentation/tool-calls"
+    },
+    {
+      "source": "/tracing/manual-instrumentation",
+      "destination": "/tracing/instrumentation/setup"
+    },
+    {
+      "source": "/tracing/patterns/threads",
+      "destination": "/tracing/instrumentation/context"
+    },
+    {
+      "source": "/tracing/patterns/custom-attributes",
+      "destination": "/tracing/instrumentation/context"
+    },
+    {
+      "source": "/recipes/async-agent",
+      "destination": "/tracing/instrumentation/traces"
+    },
+    {
+      "source": "/recipes/streaming-sse",
+      "destination": "/tracing/instrumentation/traces"
+    },
+    {
+      "source": "/recipes/tool-calling-agent",
+      "destination": "/tracing/instrumentation/tool-calls"
+    },
+    {
+      "source": "/recipes/multi-step-agent",
+      "destination": "/tracing/instrumentation/traces"
+    },
+    {
+      "source": "/recipes/context-manager",
+      "destination": "/tracing/instrumentation/context"
+    },
+    {
+      "source": "/recipes/recording-metric-events",
+      "destination": "/connections/webhooks"
+    },
+    {
+      "source": "/mcp/overview",
+      "destination": "/connections/mcp"
+    },
+    {
+      "source": "/mcp/reference",
+      "destination": "/connections/mcp"
+    }
+  ]
+}

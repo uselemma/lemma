@@ -1,0 +1,140 @@
+---
+title: "LangGraph"
+description: "Record LangGraph graph runs with Lemma callback handlers"
+---
+
+LangGraph uses LangChain's callback system, so Lemma's LangGraph integration is
+a LangChain callback handler with LangGraph defaults. It creates one Lemma trace
+for each graph invocation, records graph nodes as child spans, records model
+calls as generations, records tools as tool calls, and preserves parent run IDs
+so nested nodes stay nested correctly.
+
+You do not need to wrap graph calls in `lemma.trace()`. Pass the callback
+handler through the graph invoke config.
+
+## TypeScript
+
+Install LangGraph and the Lemma SDK:
+
+```bash
+npm install @uselemma/tracing @langchain/langgraph
+```
+
+Pass `langGraph()` in the graph invoke config:
+
+```typescript
+import { StateGraph, START, END } from "@langchain/langgraph";
+import { langGraph } from "@uselemma/tracing";
+
+type GraphState = {
+  input: string;
+  output?: string;
+};
+
+const graph = new StateGraph<GraphState>()
+  .addNode("answer", async (state) => ({
+    output: `You said: ${state.input}`,
+  }))
+  .addEdge(START, "answer")
+  .addEdge("answer", END)
+  .compile();
+
+export async function callGraph(userMessage: string) {
+  const result = await graph.invoke(
+    { input: userMessage },
+    {
+      callbacks: [
+        langGraph({
+          apiKey: process.env.LEMMA_API_KEY,
+          projectId: process.env.LEMMA_PROJECT_ID,
+          agentName: "support-graph",
+        }),
+      ],
+    },
+  );
+
+  return result.output;
+}
+```
+
+## Python
+
+Install the optional extra:
+
+```bash
+pip install "uselemma-tracing[langgraph]" langgraph
+```
+
+Pass `langgraph()` in the graph invoke config:
+
+```python
+import os
+from typing_extensions import TypedDict
+from langgraph.graph import END, START, StateGraph
+from uselemma_tracing import langgraph
+
+
+class GraphState(TypedDict):
+    input: str
+    output: str
+
+
+def answer(state: GraphState):
+    return {"output": f"You said: {state['input']}"}
+
+
+graph = (
+    StateGraph(GraphState)
+    .add_node("answer", answer)
+    .add_edge(START, "answer")
+    .add_edge("answer", END)
+    .compile()
+)
+
+
+def call_graph(user_message: str):
+    result = graph.invoke(
+        {"input": user_message},
+        {
+            "callbacks": [
+                langgraph(
+                    api_key=os.environ["LEMMA_API_KEY"],
+                    project_id=os.environ["LEMMA_PROJECT_ID"],
+                    agent_name="support-graph",
+                )
+            ]
+        },
+    )
+    return result["output"]
+```
+
+## What Lemma records
+
+| LangGraph callback | Lemma record |
+| --- | --- |
+| Root graph run | One Lemma trace named from `agentName` or the graph run name |
+| Graph node | Child span with node input, output, timing, and parent ID |
+| LLM or chat model | Generation with messages, output text, model, timing, and parent ID |
+| Tool call | Tool span with input, output or error, timing, and parent ID |
+| Retriever | Span with query input, output, timing, and parent ID |
+
+Use `langGraph({ recordInputs: false, recordOutputs: false })` in TypeScript or
+`langgraph(record_inputs=False, record_outputs=False)` in Python to avoid
+sending prompts, tool inputs, tool outputs, or model output text.
+
+## Debugging
+
+Enable debug mode while developing to confirm that spans arrive live and parent
+IDs are attached:
+
+```typescript
+import { enableDebugMode } from "@uselemma/tracing";
+
+enableDebugMode();
+```
+
+```python
+from uselemma_tracing import enable_debug_mode
+
+enable_debug_mode()
+```

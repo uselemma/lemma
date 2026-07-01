@@ -1,0 +1,52 @@
+name: Publish @uselemma/tracing (npm)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/ts/tracing/package.json"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # required for npm trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+          cache: pnpm
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./packages/ts/tracing/package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Package version: $VERSION"
+
+      - name: Check if already published
+        id: check
+        run: |
+          if npm view "@uselemma/tracing@${{ steps.version.outputs.version }}" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "Version ${{ steps.version.outputs.version }} is already on npm; skipping publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "Version ${{ steps.version.outputs.version }} is new; will publish."
+          fi
+
+      - name: Install dependencies
+        if: steps.check.outputs.published == 'false'
+        run: pnpm install --frozen-lockfile
+
+      - name: Publish
+        if: steps.check.outputs.published == 'false'
+        run: NODE_AUTH_TOKEN="" pnpm publish --access public --no-git-checks
+        working-directory: packages/ts/tracing

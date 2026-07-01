@@ -1,0 +1,51 @@
+name: Publish uselemma-tracing (PyPI)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/py/tracing/pyproject.toml"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # required for PyPI trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: false
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(grep -m1 '^version' packages/py/tracing/pyproject.toml | sed -E 's/version *= *"([^"]+)".*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Package version: $VERSION"
+
+      - name: Check if already published
+        id: check
+        run: |
+          if curl -sfL "https://pypi.org/pypi/uselemma-tracing/${{ steps.version.outputs.version }}/json" -o /dev/null; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "Version ${{ steps.version.outputs.version }} is already on PyPI; skipping publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "Version ${{ steps.version.outputs.version }} is new; will publish."
+          fi
+
+      - name: Build
+        if: steps.check.outputs.published == 'false'
+        run: uv build --out-dir dist
+        working-directory: packages/py/tracing
+
+      - name: Publish
+        if: steps.check.outputs.published == 'false'
+        run: uv publish dist/*
+        working-directory: packages/py/tracing

@@ -1,0 +1,156 @@
+---
+title: "Debug mode"
+description: "Use SDK runtime logs to debug trace delivery and trace shape"
+---
+
+Debug mode prints SDK logs from the same runtime where your agent runs. Use it when a trace is missing, delayed, attached incorrectly, or missing child work.
+
+It helps answer four questions:
+
+1. Did this code path create a Lemma trace?
+2. Did the SDK send a payload to `POST /traces/ingest`?
+3. Did the ingest request succeed or fail?
+4. How many child spans did the SDK include?
+
+## Enable it
+
+Enable debug mode before creating the Lemma client.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import { enableDebugMode, Lemma } from "@uselemma/tracing";
+
+    enableDebugMode();
+
+    const lemma = new Lemma({
+      apiKey: process.env.LEMMA_API_KEY,
+      projectId: process.env.LEMMA_PROJECT_ID,
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from uselemma_tracing import Lemma, enable_debug_mode
+
+    enable_debug_mode()
+
+    lemma = Lemma()
+    ```
+  </Tab>
+</Tabs>
+
+You can also enable it without code:
+
+```bash
+export LEMMA_DEBUG="true"
+```
+
+## Run a smoke test
+
+Run one minimal trace from the same runtime that serves production traffic:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    await lemma.trace({ name: "smoke-test", input: "hello" }, async () => "ok");
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    lemma.trace("smoke-test", lambda trace: "ok", input="hello")
+    ```
+  </Tab>
+</Tabs>
+
+For a successful trace, look for this sequence:
+
+```text
+[LEMMA:client] trace started
+[LEMMA:client] sending trace
+[LEMMA:client] trace sent
+```
+
+If the trace uses a handle, you should see `trace handle created`, then `sending trace` when the handle flushes or ends.
+
+## Read the logs
+
+Use the first missing log line to narrow the problem.
+
+| What you see | What it means | What to check |
+| --- | --- | --- |
+| No Lemma logs | Debug mode is not enabled in this process, or this code path is not running | Set `LEMMA_DEBUG=true` in the runtime that serves traffic |
+| `trace started`, but no `sending trace` | The callback did not finish, or the trace handle was never flushed/ended | Await `lemma.trace(...)`, call `trace.end(...)`, and check thrown errors |
+| `sending trace`, then `trace ingest failed` | The SDK reached the endpoint, but ingest rejected the request | Check status code, API key, project ID, `baseUrl`, and network policy |
+| `trace sent`, but the dashboard looks wrong | Delivery worked; the issue is likely trace shape | Compare `spanCount` (`span_count` in Python), tool/generation calls, and the [trace contract](/reference/trace-contract) |
+
+## Debug common issues
+
+### Missing traces
+
+Start with the smoke test. If it logs `trace sent`, credentials and networking are working; move to the real request path and confirm that path also logs `trace started`.
+
+If it logs `trace ingest failed`, check:
+
+- `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` are from the same project.
+- `baseUrl` / `base_url` points at a server that implements `POST /traces/ingest`.
+- Your runtime can make outbound HTTPS requests.
+
+### Missing tools or generations
+
+Look at the `spanCount` (`span_count` in Python) in the `sending trace` log. If the count is lower than expected, the SDK never recorded those children.
+
+Common fixes:
+
+- Put `recordTool()` / `recordGeneration()` or `record_tool()` / `record_generation()` inside the `lemma.trace()` callback.
+- For work under a parent span, record it on the span handle in TypeScript or pass `parent_id` from the parent handle in Python before calling `span.end(...)`.
+- For detached helpers, pass `traceId` and `parentSpanId` where needed.
+
+### Flat or incorrectly nested traces
+
+If a parent span exists but its children appear as siblings, debug the order of calls:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const retrieve = trace.startSpan({ name: "retrieve-context" });
+    retrieve.recordTool({ name: "search_docs", output: docs });
+    retrieve.end({ output: { count: docs.length } });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    retrieve = trace.start_span(name="retrieve-context")
+    tool = trace.start_tool(name="search_docs", parent_id=retrieve.id)
+    tool.end(output=docs)
+    retrieve.end(output={"count": len(docs)})
+    ```
+  </Tab>
+</Tabs>
+
+The child call should happen before `retrieve.end(...)`. In TypeScript, make it from the parent span handle. In Python, pass the parent handle's `id` as `parent_id` when starting the child.
+
+### Serverless or streaming handlers
+
+Debug mode should show `trace sent` before the function exits. If not, make sure the handler awaits the trace:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    return await lemma.trace({ name: "support-agent", input }, async (trace) => {
+      return runAgent(input, trace);
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    return await lemma.async_trace(
+        "support-agent",
+        lambda trace: run_agent(input, trace),
+        input=input,
+    )
+    ```
+  </Tab>
+</Tabs>
+
+For trace handles, call and await `trace.end(...)` from the terminal callback or finalization path.

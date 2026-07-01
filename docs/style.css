@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+
+@font-face {
+  font-family: 'Britti Sans';
+  src: url('/fonts/britti-sans-regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Britti Sans';
+  src: url('/fonts/britti-sans-medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Britti Sans';
+  src: url('/fonts/britti-sans-semibold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Sidebar group labels + page eyebrows → mono caps (Lemma signature) */
+.sidebar-title,
+.eyebrow {
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.02em !important;
+  font-weight: 400 !important;
+  font-size: 0.75rem !important;
+}
+
+/* Navbar text link ("Talk to us") → mono caps, navy. Apply to span children too. */
+header a[href*="cal.com"],
+header a[href*="cal.com"] * {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.02em !important;
+  font-size: 0.75rem !important; /* text-xs */
+  font-weight: 400 !important;
+  color: #1D1956 !important; /* text-primary-dark */
+}
+
+.dark header a[href*="cal.com"],
+.dark header a[href*="cal.com"] * {
+  color: #755CFE !important; /* dark:text-primary-light */
+}
+
+/* "Talk to us" box → match Dashboard shape (the styled box is the <li>, not the <a>).
+   Keep native Mintlify padding + its own border/light background; only colors differ. */
+header li:has(> a[href*="cal.com"]) {
+  border-radius: 0 !important;
+}
+
+/* Navbar primary CTA ("Dashboard") → square, navy bg, mono caps white text */
+#topbar-cta-button a {
+  background-color: #1D1956 !important;
+  border-radius: 0 !important;
+}
+
+#topbar-cta-button a,
+#topbar-cta-button a * {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.02em !important;
+  font-size: 0.75rem !important; /* text-xs */
+  font-weight: 400 !important;
+}
+
+#topbar-cta-button a span {
+  color: #FFFFFF !important;
+}
+
+/* Typography: body text + headings letter-spacing */
+body {
+  letter-spacing: 0.02em !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: 0.02em !important;
+}

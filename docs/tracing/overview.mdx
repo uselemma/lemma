@@ -1,0 +1,46 @@
+---
+title: "Overview"
+description: "How tracing works in Lemma and where to start"
+---
+
+Every agent execution becomes a **trace**: a complete record of what happened, how long it took, and where it failed. The Lemma SDK emits the trace shape Lemma reads.
+
+<Note>
+  **One agent execution = one trace.** The trace has a single root span; LLM calls, tool calls, and app logic are child spans. See the [trace contract](/reference/trace-contract).
+</Note>
+
+## The model
+
+A trace is a tree of spans:
+
+```text
+support-agent              <- trace root (input, output)
+|- draft-reply             <- generation (model, content)
+|- search_docs             <- tool call (args, result)
+`- final-answer            <- generation
+```
+
+- [Traces](/tracing/instrumentation/traces) - the root span for one execution.
+- [Generations](/tracing/instrumentation/generations) - LLM calls.
+- [Tool calls](/tracing/instrumentation/tool-calls) - tool invocations.
+- [Spans](/tracing/instrumentation/spans) - retrieval, ranking, app logic.
+- [Threads & context](/tracing/instrumentation/context) - conversations, users, metadata.
+
+## Pick your path
+
+<CardGroup cols={1}>
+  <Card title="Instrument with the SDK" icon="wrench" href="/tracing/instrumentation/setup">
+    Install the Lemma SDK, then add traces, generations, tool calls, and spans.
+  </Card>
+</CardGroup>
+
+## How Lemma reads your traces
+
+Lemma is an opinionated sink: it reads a specific trace shape to power input/output display, model visibility, timing, tool visibility, threads, and automated issue detection. The [trace contract](/reference/trace-contract) documents exactly what it reads and how each SDK helper maps to it.
+
+## Next steps
+
+- [Setup](/tracing/instrumentation/setup) - install the SDK and point it at Lemma.
+- [Trace contract](/reference/trace-contract) - the exact shape Lemma reads.
+- [Good trace vs bad trace](/reference/good-vs-bad-traces) - conformant vs malformed traces.
+- [Troubleshooting](/tracing/troubleshooting/common-issues) - fix missing spans, flat traces, and delayed exports.

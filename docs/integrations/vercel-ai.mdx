@@ -1,0 +1,141 @@
+---
+title: "Vercel AI SDK"
+description: "Record Vercel AI SDK model calls and tool executions with Lemma"
+---
+
+Use `vercelAI()` when your app calls `generateText`, `streamText`, or an AI SDK agent. The integration supports AI SDK v7 and v6. It creates one Lemma trace for each AI SDK run, extracts the prompt or messages as trace input, and records model calls and tool executions as child spans.
+
+## Install
+
+```bash
+npm install @uselemma/tracing ai zod
+```
+
+## AI SDK v7
+
+Create the Lemma telemetry integration once, then pass it to the AI SDK `telemetry.integrations` option. Use `telemetry.functionId` for the agent name.
+
+```typescript
+import { generateText, tool } from "ai";
+import { z } from "zod";
+import { vercelAI } from "@uselemma/tracing";
+
+const lemmaTelemetry = vercelAI({
+  apiKey: process.env.LEMMA_API_KEY,
+  projectId: process.env.LEMMA_PROJECT_ID,
+});
+
+const result = await generateText({
+  model,
+  prompt: userMessage,
+  tools: {
+    searchDocs: tool({
+      inputSchema: z.object({
+        query: z.string(),
+      }),
+      execute: async ({ query }) => searchDocs(query),
+    }),
+  },
+  telemetry: {
+    functionId: "support-agent",
+    metadata: {
+      threadId: conversationId,
+      userId: user.id,
+    },
+    integrations: [lemmaTelemetry],
+  },
+});
+
+return result.text;
+```
+
+## AI SDK v6
+
+For AI SDK v6, pass the same helper through `experimental_telemetry.integrations`. Use `experimental_telemetry.functionId` for the agent name.
+
+```typescript
+import { generateText, tool } from "ai";
+import { z } from "zod";
+import { vercelAI } from "@uselemma/tracing";
+
+const lemmaTelemetry = vercelAI({
+  apiKey: process.env.LEMMA_API_KEY,
+  projectId: process.env.LEMMA_PROJECT_ID,
+});
+
+const result = await generateText({
+  model,
+  prompt: userMessage,
+  tools: {
+    searchDocs: tool({
+      inputSchema: z.object({
+        query: z.string(),
+      }),
+      execute: async ({ query }) => searchDocs(query),
+    }),
+  },
+  experimental_telemetry: {
+    functionId: "support-agent",
+    metadata: {
+      threadId: conversationId,
+      userId: user.id,
+    },
+    integrations: [lemmaTelemetry],
+  },
+});
+
+return result.text;
+```
+
+## Streaming
+
+Use the same integration with `streamText`.
+
+```typescript
+import { streamText } from "ai";
+import { vercelAI } from "@uselemma/tracing";
+
+const lemmaTelemetry = vercelAI({
+  apiKey: process.env.LEMMA_API_KEY,
+  projectId: process.env.LEMMA_PROJECT_ID,
+});
+
+const result = streamText({
+  model,
+  prompt: userMessage,
+  telemetry: {
+    functionId: "support-agent",
+    integrations: [lemmaTelemetry],
+  },
+});
+
+for await (const _part of result.fullStream) {
+  // stream to your response
+}
+```
+
+## What Lemma records
+
+| AI SDK event | Lemma record |
+| --- | --- |
+| Model call | Generation with model, provider, messages, output text, and duration |
+| Tool execution | Tool call with name, input, output or error, and duration |
+
+AI SDK v7 provides model and tool durations directly. AI SDK v6 provides tool execution durations; model-call durations are inferred from start and finish timestamps when the AI SDK does not provide an explicit duration.
+
+Use `telemetry.functionId` / `experimental_telemetry.functionId` for the agent name, or set it on the integration with `vercelAI({ agentName: "support-agent" })`.
+
+For advanced cases, you can still attach to an existing trace by passing `vercelAI({ trace })` or by calling AI SDK inside a `lemma.trace()` callback. If you use the callback form of `lemma.trace()`, the callback owns trace closure. If you pass a trace handle to `vercelAI({ trace })`, the integration closes it automatically at the end of the AI SDK operation.
+
+Use `recordInputs: false` or `recordOutputs: false` to avoid sending prompts, tool inputs, tool outputs, or model output text.
+
+```typescript
+telemetry: {
+  integrations: [
+    vercelAI({
+      recordInputs: false,
+      recordOutputs: false,
+    }),
+  ],
+}
+```

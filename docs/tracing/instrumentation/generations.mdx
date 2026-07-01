@@ -1,0 +1,163 @@
+---
+title: "Generations"
+description: "Capture LLM calls with model, prompt, completion, and timing"
+---
+
+A **generation** is a single LLM call inside a trace. Record it with `trace.recordGeneration()` / `trace.record_generation()` after the model call completes.
+
+## Record a generation
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    await lemma.trace({ name: "support-agent", input: userMessage }, async (trace) => {
+      const response = await callModel(messages);
+
+      trace.recordGeneration({
+        name: "draft-reply",
+        input: messages,
+        output: response.text,
+        model: "gpt-4o",
+        llmInputMessages: [{ role: "user", content: userMessage }],
+        llmInvocationParameters: { temperature: 0.2 },
+      });
+
+      return response.text;
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    def run(trace):
+        response = call_model(messages)
+
+        trace.record_generation(
+            name="draft-reply",
+            input=messages,
+            output=response.text,
+            model="gpt-4o",
+            llm_input_messages=[{"role": "user", "content": user_message}],
+            llm_invocation_parameters={"temperature": 0.2},
+        )
+
+        return response.text
+
+    lemma.trace("support-agent", run, input=user_message)
+    ```
+  </Tab>
+</Tabs>
+
+## Measure a live generation
+
+Use `startGeneration()` / `start_generation()` when you want a handle before the model call finishes. End it only after the provider returns or fails.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const generation = trace.startGeneration({
+      name: "draft-reply",
+      input: messages,
+      model: "gpt-4o",
+    });
+
+    try {
+      const response = await callModel(messages);
+      generation.end({
+        output: response.text,
+        durationMs: response.durationMs,
+      });
+      return response.text;
+    } catch (error) {
+      generation.end({ error });
+      throw error;
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    generation = trace.start_generation(
+        name="draft-reply",
+        input=messages,
+        model="gpt-4o",
+    )
+
+    try:
+        response = call_model(messages)
+        generation.end(
+            output=response.text,
+            duration_ms=response.duration_ms,
+        )
+        return response.text
+    except Exception as error:
+        generation.end(error=error)
+        raise
+    ```
+  </Tab>
+</Tabs>
+
+## What the SDK records
+
+| Field | Attribute keys |
+| --- | --- |
+| Generation kind | Lemma generation marker |
+| Prompt / input | `input.value` |
+| Completion / output | `output.value` |
+| Model | `gen_ai.request.model`, `ai.model.id` |
+| Contract props | Native props such as `llmInputMessages`, `llmInvocationParameters`, and `llmPromptTemplate`; raw `attributes` for escape-hatch keys |
+
+See [Native contract props](/reference/trace-contract#native-contract-props) for the full list of supported SDK props and the attributes they emit.
+
+## Errors
+
+If a model call fails, record a failed generation before rethrowing:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    try {
+      const response = await callModel(messages);
+      trace.recordGeneration({ name: "draft-reply", input: messages, output: response.text });
+      return response.text;
+    } catch (error) {
+      trace.recordGeneration({
+        name: "draft-reply",
+        input: messages,
+        status: "ERROR",
+        error,
+      });
+      throw error;
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    try:
+        response = call_model(messages)
+        trace.record_generation(
+            name="draft-reply",
+            input=messages,
+            output=response.text,
+        )
+        return response.text
+    except Exception as error:
+        trace.record_generation(
+            name="draft-reply",
+            input=messages,
+            status="ERROR",
+            error=error,
+        )
+        raise
+    ```
+  </Tab>
+</Tabs>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Tool calls" icon="wrench" href="/tracing/instrumentation/tool-calls">
+    Record tool arguments and results.
+  </Card>
+  <Card title="Spans" icon="box" href="/tracing/instrumentation/spans">
+    Trace retrieval, ranking, and app logic.
+  </Card>
+</CardGroup>

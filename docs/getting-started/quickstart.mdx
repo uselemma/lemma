@@ -1,0 +1,149 @@
+---
+title: "Quickstart"
+description: "Send your first useful agent trace to Lemma"
+---
+
+Get one complete, well-shaped trace into Lemma. The SDK sends JSON directly to the Lemma API.
+
+<Note>
+  Remember the one rule: one agent execution = one trace. Record model calls, tool calls, retrieval, and app logic inside that trace.
+</Note>
+
+## What you are building
+
+```text
+support-agent              <- trace root (input, output)
+|- draft-reply             <- generation (model, content)
+`- search_docs             <- tool call (args, result)
+```
+
+## Steps
+
+<Steps>
+  <Step title="Install the SDK">
+    <Tabs>
+      <Tab title="TypeScript">
+        ```bash
+        npm install @uselemma/tracing
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```bash
+        pip install uselemma-tracing
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Set environment variables">
+    Find these in [Lemma project settings](https://platform.uselemma.ai).
+
+    ```bash
+    export LEMMA_API_KEY="lma_..."
+    export LEMMA_PROJECT_ID="proj_..."
+    ```
+  </Step>
+
+  <Step title="Trace one agent execution">
+    Create a client, open a trace, then record one-off generation and tool events inside the trace callback.
+
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript
+        import { Lemma } from "@uselemma/tracing";
+
+        const lemma = new Lemma();
+
+        const answer = await lemma.trace(
+          {
+            name: "support-agent",
+            input: userMessage,
+            threadId: conversationId,
+            userId: user.id,
+          },
+          async (trace) => {
+            const docs = await searchDocs(userMessage);
+            trace.recordTool({
+              name: "search_docs",
+              input: { query: userMessage },
+              output: docs,
+            });
+
+            const response = await callModel(userMessage, docs);
+            trace.recordGeneration({
+              name: "draft-reply",
+              input: response.messages,
+              output: response.text,
+              model: "gpt-4o",
+            });
+
+            return response.text;
+          },
+        );
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        from uselemma_tracing import Lemma
+
+        lemma = Lemma()
+
+        def run(trace):
+            docs = search_docs(user_message)
+            trace.record_tool(
+                name="search_docs",
+                input={"query": user_message},
+                output=docs,
+            )
+
+            response = call_model(user_message, docs)
+            trace.record_generation(
+                name="draft-reply",
+                input=response.messages,
+                output=response.text,
+                model="gpt-4o",
+            )
+
+            return response.text
+
+        answer = lemma.trace(
+            "support-agent",
+            run,
+            input=user_message,
+            thread_id=conversation_id,
+            user_id=user.id,
+        )
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Verify in Lemma">
+    Open the [Lemma dashboard](https://platform.uselemma.ai) -> **Traces**. Within seconds you should see:
+
+    - One trace for the whole execution.
+    - The root trace with input and output.
+    - A nested generation with model metadata.
+    - A nested tool call with arguments and result.
+  </Step>
+</Steps>
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Trace contract" icon="file-check" href="/reference/trace-contract">
+    The exact shape Lemma reads.
+  </Card>
+  <Card title="Concepts" icon="book" href="/getting-started/concepts">
+    Traces, spans, generations, and threads.
+  </Card>
+  <Card title="Threads & context" icon="users" href="/tracing/instrumentation/context">
+    Group conversations and attach users.
+  </Card>
+  <Card title="Instrument an agent" icon="workflow" href="/tracing/instrumentation/instrument-an-agent">
+    Build up a full trace with generations, tools, spans, and errors.
+  </Card>
+  <Card title="Vercel AI SDK" icon="sparkles" href="/integrations/vercel-ai">
+    Record AI SDK model calls and tool executions.
+  </Card>
+</CardGroup>

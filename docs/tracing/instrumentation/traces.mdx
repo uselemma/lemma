@@ -1,0 +1,227 @@
+---
+title: "Traces"
+description: "Wrap one agent execution in one trace with input and output"
+---
+
+A **trace** is one end-to-end agent execution, from the user's input to the final response. Everything your agent does inside that execution (LLM calls, tool calls, retrieval, app logic) is recorded as child work inside the trace.
+
+<Note>
+  **One agent execution = one trace.** Use `lemma.trace()` as the boundary around the run.
+</Note>
+
+## The root trace
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import { Lemma } from "@uselemma/tracing";
+
+    const lemma = new Lemma();
+
+    const answer = await lemma.trace(
+      {
+        name: "support-agent",
+        input: userMessage,
+      },
+      async (trace) => {
+        const answer = await runAgent(userMessage, trace);
+        return answer;
+      },
+    );
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from uselemma_tracing import Lemma
+
+    lemma = Lemma()
+
+    async def run(trace):
+        answer = await run_agent(user_message, trace)
+        return answer
+
+    answer = await lemma.async_trace(
+        "support-agent",
+        run,
+        input=user_message,
+    )
+    ```
+  </Tab>
+</Tabs>
+
+The SDK records the trace input, the returned value as output, and the trace name as the agent name.
+
+## Trace handles and span handles
+
+Use the callback form when one function owns the whole run. In TypeScript, use a trace handle when work is coordinated across several helpers and you want to pass IDs around explicitly. In Python, keep the root trace in `lemma.trace()` / `lemma.async_trace()` and use span, tool, or generation handles inside the callback.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const trace = lemma.trace({
+      name: "support-agent",
+      input: userMessage,
+      threadId,
+      userId,
+    });
+
+    const span = trace.startSpan("retrieve-context");
+    const docs = await searchDocs(userMessage);
+    span.recordTool({
+      name: "search_docs",
+      input: { query: userMessage },
+      output: docs,
+    });
+    span.end({ output: { count: docs.length } });
+
+    await trace.end({ output: "Here is what I found...", durationMs: 1234 });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    def run(trace):
+        span = trace.start_span(name="retrieve-context")
+        docs = search_docs(user_message)
+        tool = trace.start_tool(
+            name="search_docs",
+            input={"query": user_message},
+            parent_id=span.id,
+        )
+        tool.end(output=docs)
+        span.end(output={"count": len(docs)})
+        trace.output("Here is what I found...")
+
+    lemma.trace(
+        "support-agent",
+        run,
+        input=user_message,
+        thread_id=thread_id,
+        user_id=user_id,
+        duration_ms=1234,
+    )
+    ```
+  </Tab>
+</Tabs>
+
+The TypeScript trace handle has a stable `trace.id`. Calls are flushed to Lemma as trace snapshots, and `trace.end({ output, durationMs })` performs a final flush. Callback traces in both SDKs measure total trace duration automatically; pass `durationMs` / `duration_ms` only when you already measured it.
+
+## Record by ID
+
+Helpers can attach work to a trace when they only have IDs from the caller. This detached helper API is TypeScript-specific.
+
+```typescript
+const trace = lemma.trace();
+
+const span = lemma.startSpan({
+  traceId: trace.id,
+});
+
+lemma.recordTool({
+  traceId: trace.id,
+  parentSpanId: span.id,
+  name: "tool call",
+});
+
+await trace.flush();
+```
+
+Detached handle calls require `traceId`. If a detached span, generation, or tool belongs under a parent span, pass `parentSpanId`; calls that cannot attach safely warn and no-op.
+
+## Override output or record errors
+
+Return values are captured automatically. Use `trace.output()` only when the recorded output should differ from the return value.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    await lemma.trace({ name: "support-agent", input: userMessage }, async (trace) => {
+      try {
+        const response = await runAgent(userMessage);
+        trace.output(response.text);
+        return response;
+      } catch (error) {
+        trace.fail(error);
+        throw error;
+      }
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    def run(trace):
+        try:
+            response = run_agent(user_message)
+            trace.output(response.text)
+            return response
+        except Exception as error:
+            trace.fail(error)
+            raise
+
+    lemma.trace("support-agent", run, input=user_message)
+    ```
+  </Tab>
+</Tabs>
+
+If the callback throws, the SDK records the trace as failed, sends it to Lemma, and rethrows the original error.
+
+## Pass trace context to helpers
+
+Pass the trace context into nested helper functions that need to record child work:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import type { TraceContext } from "@uselemma/tracing";
+
+    function recordToolResult(trace: TraceContext, result: unknown) {
+      trace.recordTool({
+        name: "search_docs",
+        output: result,
+      });
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from uselemma_tracing import TraceContext
+
+    def record_tool_result(trace: TraceContext, result):
+        trace.record_tool(
+            name="search_docs",
+            output=result,
+        )
+    ```
+  </Tab>
+</Tabs>
+
+Avoid relying on ambient trace state. A process can coordinate multiple traces at once, so helpers should receive the trace or span handle they need explicitly.
+
+## Add the work inside
+
+- [Generations](/tracing/instrumentation/generations) for LLM calls (model, prompt, completion).
+- [Tool calls](/tracing/instrumentation/tool-calls) for tool invocations (name, args, result).
+- [Spans](/tracing/instrumentation/spans) for everything else (retrieval, ranking, app logic).
+
+```text
+support-agent              <- trace root (input, output)
+|- draft-reply             <- generation
+|- search_docs             <- tool call
+`- final-answer            <- generation
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Generations" icon="sparkles" href="/tracing/instrumentation/generations">
+    Capture LLM calls with model, prompt, completion, and timing.
+  </Card>
+  <Card title="Tool calls" icon="wrench" href="/tracing/instrumentation/tool-calls">
+    Record tool arguments and results.
+  </Card>
+  <Card title="Threads & context" icon="users" href="/tracing/instrumentation/context">
+    Group conversations and attach users.
+  </Card>
+  <Card title="Trace contract" icon="file-check" href="/reference/trace-contract">
+    The exact shape Lemma reads.
+  </Card>
+</CardGroup>

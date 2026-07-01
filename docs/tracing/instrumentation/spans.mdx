@@ -1,0 +1,151 @@
+---
+title: "Spans"
+description: "Trace retrieval, ranking, and app logic as child spans"
+---
+
+A **span** is a unit of work inside a trace that is not an LLM call or a tool call: retrieval, reranking, planning, validation, parsing, a database query, or any app operation you want to see and time.
+
+## Record a completed span
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const ranked = await rerank(candidates);
+
+    trace.recordSpan({
+      name: "rerank-results",
+      input: { candidates: candidates.length },
+      output: { kept: ranked.length },
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    ranked = rerank(candidates)
+
+    trace.record_span(
+        name="rerank-results",
+        input={"candidates": len(candidates)},
+        output={"kept": len(ranked)},
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Measure a live span
+
+Use `startSpan()` / `start_span()` when you want the SDK to measure duration:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const span = trace.startSpan({
+      name: "retrieve-context",
+      input: query,
+    });
+
+    try {
+      const docs = await retrieve(query);
+      span.end({ output: docs, durationMs: 250 });
+      return docs;
+    } catch (error) {
+      span.end({ status: "ERROR", error });
+      throw error;
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    span = trace.start_span(
+        name="retrieve-context",
+        input=query,
+    )
+
+    try:
+        docs = retrieve(query)
+        span.end(output=docs, duration_ms=250)
+        return docs
+    except Exception as error:
+        span.end(status="ERROR", error=error)
+        raise
+    ```
+  </Tab>
+</Tabs>
+
+The shorter handle form is useful when you also want to attach child work to the span:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const span = trace.startSpan("retrieve-context");
+
+    const docs = await searchDocs(query);
+    span.recordTool({
+      name: "search_docs",
+      input: { query },
+      output: docs,
+    });
+
+    span.end({ output: { count: docs.length }, durationMs: 250 });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    span = trace.start_span(name="retrieve-context")
+
+    docs = search_docs(query)
+    tool = trace.start_tool(
+        name="search_docs",
+        input={"query": query},
+        parent_id=span.id,
+    )
+    tool.end(output=docs)
+
+    span.end(output={"count": len(docs)}, duration_ms=250)
+    ```
+  </Tab>
+</Tabs>
+
+Pass `durationMs` / `duration_ms` on `trace.recordSpan(...)` / `trace.record_span(...)`, `trace.recordGeneration(...)` / `trace.record_generation(...)`, `trace.recordTool(...)` / `trace.record_tool(...)`, or span `end(...)` when you already measured the operation. If you omit child duration, Lemma splits the parent span's remaining unclaimed duration equally across siblings that also omitted duration. For handle spans, duration is only finalized when the handle ends.
+
+The same handle pattern exists for typed children: use `trace.startTool(...)` / `trace.start_tool(...)` for live tool calls and `trace.startGeneration(...)` / `trace.start_generation(...)` for live model calls.
+
+Pass contract fields as native props such as `embeddingModelName` and `rerankerOutputDocuments`. The full supported list is in [Native contract props](/reference/trace-contract#native-contract-props). Use `attributes` only when you need to send raw span attributes that do not yet have a native SDK prop.
+
+## Attach by trace ID
+
+If a helper receives only IDs, create the span from the client. This detached helper API is TypeScript-specific:
+
+```typescript
+const span = lemma.startSpan({
+  traceId,
+  parentSpanId,
+  name: "rerank-results",
+});
+
+span.end({ output: { kept: ranked.length } });
+```
+
+`traceId` is required for detached spans. When the detached span has a parent, use `parentSpanId`; missing IDs warn and no-op.
+
+## Nesting spans
+
+Spans, generations, and tools recorded during `lemma.trace()` become children of that trace. Calls made on a span handle become children of that span.
+
+```text
+support-agent              <- trace root
+`- retrieve-context        <- span
+   |- search_docs          <- tool call
+   `- draft-reply          <- generation
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Threads & context" icon="users" href="/tracing/instrumentation/context">
+    Group conversations and attach users.
+  </Card>
+  <Card title="Trace contract" icon="file-check" href="/reference/trace-contract">
+    The exact shape Lemma reads.
+  </Card>
+</CardGroup>

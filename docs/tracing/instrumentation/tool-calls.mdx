@@ -1,0 +1,202 @@
+---
+title: "Tool calls"
+description: "Record tool invocations as child spans with arguments and results"
+---
+
+A **tool call** is a single tool invocation inside a trace. Record it with `trace.recordTool()` / `trace.record_tool()` after the tool returns.
+
+## Record a tool call
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    await lemma.trace({ name: "support-agent", input: userMessage }, async (trace) => {
+      const docs = await searchDocs(userMessage);
+
+      trace.recordTool({
+        name: "search_docs",
+        input: { query: userMessage },
+        output: docs,
+        durationMs: 25,
+        toolParameters: { query: "string" },
+      });
+
+      return answerFromDocs(docs);
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    def run(trace):
+        docs = search_docs(user_message)
+
+        trace.record_tool(
+            name="search_docs",
+            input={"query": user_message},
+            output=docs,
+            duration_ms=25,
+            tool_parameters={"query": "string"},
+        )
+
+        return answer_from_docs(docs)
+
+    lemma.trace("support-agent", run, input=user_message)
+    ```
+  </Tab>
+</Tabs>
+
+If the tool belongs under a measured parent span, record it as a child of that span:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const span = trace.startSpan("retrieve-context");
+    const docs = await searchDocs(userMessage);
+
+    span.recordTool({
+      name: "search_docs",
+      input: { query: userMessage },
+      output: docs,
+      durationMs: 25,
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    span = trace.start_span(name="retrieve-context")
+    docs = search_docs(user_message)
+
+    tool = trace.start_tool(
+        name="search_docs",
+        input={"query": user_message},
+        parent_id=span.id,
+    )
+    tool.end(output=docs, duration_ms=25)
+    ```
+  </Tab>
+</Tabs>
+
+If the helper only has IDs, attach the tool from the client. This detached helper API is TypeScript-specific:
+
+```typescript
+lemma.recordTool({
+  traceId,
+  parentSpanId: spanId,
+  name: "search_docs",
+  input: { query },
+  output: docs,
+  durationMs: 25,
+});
+```
+
+`traceId` is required for detached tools. When the tool belongs under a span, `parentSpanId` is required; missing IDs warn and no-op.
+Pass `durationMs` when you already measured the tool call. If you omit it, Lemma splits the parent span's remaining unclaimed duration equally across siblings that also omitted duration.
+
+## Measure a live tool call
+
+Use `startTool()` / `start_tool()` when you want a handle before the tool finishes. End it only after the tool returns or fails.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const tool = trace.startTool({
+      name: "search_docs",
+      input: { query },
+    });
+
+    try {
+      const docs = await searchDocs(query);
+      tool.end({ output: docs, durationMs: 25 });
+      return docs;
+    } catch (error) {
+      tool.end({ error });
+      throw error;
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    tool = trace.start_tool(
+        name="search_docs",
+        input={"query": query},
+    )
+
+    try:
+        docs = search_docs(query)
+        tool.end(output=docs, duration_ms=25)
+        return docs
+    except Exception as error:
+        tool.end(error=error)
+        raise
+    ```
+  </Tab>
+</Tabs>
+
+## What the SDK records
+
+| Field | Attribute keys |
+| --- | --- |
+| Tool kind | Lemma tool marker |
+| Tool name | Span name and `tool.name` |
+| Arguments | `input.value`, `ai.toolCall.args` |
+| Result | `output.value`, `ai.toolCall.result` |
+| Contract props | Native props such as `toolDescription` and `toolParameters`; raw `attributes` for escape-hatch keys |
+
+See [Native contract props](/reference/trace-contract#native-contract-props) for the full list of supported SDK props and the attributes they emit.
+
+## Record failures
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    try {
+      const customer = await lookupCustomer(customerId);
+      trace.recordTool({ name: "lookup_customer", input: { customerId }, output: customer });
+      return customer;
+    } catch (error) {
+      trace.recordTool({
+        name: "lookup_customer",
+        input: { customerId },
+        status: "ERROR",
+        error,
+      });
+      throw error;
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    try:
+        customer = lookup_customer(customer_id)
+        trace.record_tool(
+            name="lookup_customer",
+            input={"customer_id": customer_id},
+            output=customer,
+        )
+        return customer
+    except Exception as error:
+        trace.record_tool(
+            name="lookup_customer",
+            input={"customer_id": customer_id},
+            status="ERROR",
+            error=error,
+        )
+        raise
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  Capture arguments and results only when safe. Redact secrets, credentials, and sensitive user data before passing them to traced tools.
+</Warning>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Spans" icon="box" href="/tracing/instrumentation/spans">
+    Trace retrieval, ranking, and app logic.
+  </Card>
+  <Card title="Threads & context" icon="users" href="/tracing/instrumentation/context">
+    Group conversations and attach users.
+  </Card>
+</CardGroup>

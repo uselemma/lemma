@@ -1,0 +1,43 @@
+[project]
+name = "uselemma-tracing"
+version = "7.1.0"
+description = "HTTP tracing SDK for Lemma"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+keywords = ["tracing", "observability", "monitoring", "llm", "sdk"]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
+openai-agents = ["openai-agents>=0.17.0; python_version >= '3.10'"]
+langchain = ["langchain>=0.3.0"]
+langgraph = ["langchain>=0.3.0", "langgraph>=0.2.0"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src/uselemma_tracing"]
+omit = []
+
+[project.urls]
+Homepage = "https://github.com/uselemma/lemma/tree/main/packages/py/tracing#readme"
+Repository = "https://github.com/uselemma/lemma"
+Issues = "https://github.com/uselemma/lemma/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.0.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/uselemma_tracing"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/", "LICENSE", "README.md"]

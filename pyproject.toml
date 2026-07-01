@@ -1,0 +1,11 @@
+[project]
+name = "lemma-tracing-monorepo"
+version = "0.0.0"
+description = "Monorepo root – not published"
+requires-python = ">=3.9"
+
+[tool.uv.workspace]
+members = ["packages/py/tracing"]
+
+[tool.uv.sources]
+uselemma-tracing = { workspace = true }

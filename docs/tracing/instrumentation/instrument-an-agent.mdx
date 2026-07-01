@@ -1,0 +1,366 @@
+---
+title: "Instrument an agent"
+description: "Build a complete Lemma trace one piece at a time"
+---
+
+This guide starts with an untraced support agent and adds Lemma SDK calls step by step. Each step adds one visible part of the trace.
+
+The per-primitive pages go deeper on each piece: [Traces](/tracing/instrumentation/traces), [Generations](/tracing/instrumentation/generations), [Tool calls](/tracing/instrumentation/tool-calls), [Spans](/tracing/instrumentation/spans), and [Threads & context](/tracing/instrumentation/context).
+
+<Note>
+  The rule is simple: one agent execution = one `lemma.trace()` call. Record model calls, tool calls, and app work inside that trace.
+</Note>
+
+## What you'll build
+
+```text
+support-agent                  <- trace root (input, output, agent name, thread, user)
+|- retrieve-context            <- span (retrieval work)
+|- search_docs                 <- tool call (query, docs)
+|- lookup_order                <- tool call (user ID, order)
+`- answer                      <- generation (model, prompt, completion)
+```
+
+## Before you start
+
+The examples assume you already have an agent shaped roughly like this:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    async function handleSupportRequest(req: {
+      message: string;
+      conversationId: string;
+      userId: string;
+    }): Promise<string> {
+      const docs = await searchDocs(req.message);
+      const order = await lookupOrder(req.userId);
+      const messages = buildPrompt(req.message, docs, order);
+      const response = await callModel(messages);
+
+      return response.text;
+    }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    def handle_support_request(message: str, conversation_id: str, user_id: str) -> str:
+        docs = search_docs(message)
+        order = lookup_order(user_id)
+        messages = build_prompt(message, docs, order)
+        response = call_model(messages)
+
+        return response.text
+    ```
+  </Tab>
+</Tabs>
+
+## Steps
+
+<Steps>
+  <Step title="Install the SDK">
+    <Tabs>
+      <Tab title="TypeScript">
+        ```bash
+        npm install @uselemma/tracing
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```bash
+        pip install uselemma-tracing
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Create one Lemma client">
+    The SDK reads `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` from the environment.
+
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript
+        import { Lemma } from "@uselemma/tracing";
+
+        export const lemma = new Lemma();
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        from uselemma_tracing import Lemma
+
+        lemma = Lemma()
+        ```
+      </Tab>
+    </Tabs>
+
+    The SDK sends to `https://api.uselemma.ai/traces/ingest` by default. Pass `baseUrl` / `base_url` only for staging or self-hosted deployments.
+  </Step>
+
+  <Step title="Wrap the whole agent run in a trace">
+    Start with the root boundary. The returned value becomes the trace output.
+
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript
+        import { lemma } from "./lemma";
+
+        return lemma.trace(
+          {
+            name: "support-agent",
+            input: req.message,
+            threadId: req.conversationId,
+            userId: req.userId,
+          },
+          async (trace) => {
+            const docs = await searchDocs(req.message);
+            const order = await lookupOrder(req.userId);
+            const messages = buildPrompt(req.message, docs, order);
+            const response = await callModel(messages);
+
+            return response.text;
+          },
+        );
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        from .lemma import lemma
+
+        def run(trace):
+            docs = search_docs(message)
+            order = lookup_order(user_id)
+            messages = build_prompt(message, docs, order)
+            response = call_model(messages)
+
+            return response.text
+
+        return lemma.trace(
+            "support-agent",
+            run,
+            input=message,
+            thread_id=conversation_id,
+            user_id=user_id,
+        )
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Add a span around retrieval work">
+    Use a span for app work that is not itself a model call or tool call.
+
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript
+        const retrieve = trace.startSpan({
+          name: "retrieve-context",
+          input: { query: req.message },
+        });
+
+        const docs = await searchDocs(req.message);
+
+        retrieve.end({
+          output: { count: docs.length },
+          durationMs: 120,
+        });
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        retrieve = trace.start_span(
+            name="retrieve-context",
+            input={"query": message},
+        )
+
+        docs = search_docs(message)
+
+        retrieve.end(
+            output={"count": len(docs)},
+            duration_ms=120,
+        )
+        ```
+      </Tab>
+    </Tabs>
+
+    Pass `durationMs` / `duration_ms` when you already measured the retrieval time. If you omit it, the SDK records timestamps and Lemma can allocate missing child durations from the parent.
+  </Step>
+
+  <Step title="Record each tool call">
+    Record tools after they return so you can include both arguments and results.
+
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript
+        trace.recordTool({
+          name: "search_docs",
+          input: { query: req.message },
+          output: docs,
+          durationMs: 45,
+          toolParameters: { query: "string" },
+        });
+
+        const order = await lookupOrder(req.userId);
+        trace.recordTool({
+          name: "lookup_order",
+          input: { userId: req.userId },
+          output: order,
+          durationMs: 30,
+        });
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        trace.record_tool(
+            name="search_docs",
+            input={"query": message},
+            output=docs,
+            duration_ms=45,
+            tool_parameters={"query": "string"},
+        )
+
+        order = lookup_order(user_id)
+        trace.record_tool(
+            name="lookup_order",
+            input={"user_id": user_id},
+            output=order,
+            duration_ms=30,
+        )
+        ```
+      </Tab>
+    </Tabs>
+
+    Use stable, boring names like `search_docs`, `lookup_order`, and `rerank_results`. They make traces easier to scan.
+  </Step>
+
+  <Step title="Record the model call as a generation">
+    Generations are for LLM calls. Include the model, prompt/input, output, and timing when available.
+
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript
+        const messages = buildPrompt(req.message, docs, order);
+        const response = await callModel(messages);
+
+        trace.recordGeneration({
+          name: "answer",
+          model: response.model,
+          input: messages,
+          output: response.text,
+          durationMs: response.durationMs,
+        });
+
+        return response.text;
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        messages = build_prompt(message, docs, order)
+        response = call_model(messages)
+
+        trace.record_generation(
+            name="answer",
+            model=response.model,
+            input=messages,
+            output=response.text,
+            duration_ms=response.duration_ms,
+        )
+
+        return response.text
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Record root trace duration when the run is done">
+    Callback traces are measured automatically when the callback returns. For trace handles, record root duration when you call `trace.end(...)`.
+
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript
+        const trace = lemma.trace({ name: "support-agent", input: req.message });
+        const response = await runAgent(trace);
+
+        await trace.end({
+          output: response.text,
+          durationMs: totalDurationMs,
+        });
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        # Callback traces are measured automatically.
+        # Pass duration_ms only when you already have an external measurement.
+        return lemma.trace(
+            "support-agent",
+            run,
+            input=message,
+            duration_ms=total_duration_ms,
+        )
+        ```
+      </Tab>
+    </Tabs>
+
+    For open handles, leave duration blank until the work is actually finished. The SDK cannot know the final elapsed time until `span.end(...)`, `trace.end(...)`, or the callback returns.
+  </Step>
+
+  <Step title="Mark failures where you catch them">
+    `lemma.trace()` records uncaught errors on the root trace. If you catch a tool or model error before re-raising, record that child failure too.
+
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript
+        try {
+          const order = await lookupOrder(req.userId);
+          trace.recordTool({
+            name: "lookup_order",
+            input: { userId: req.userId },
+            output: order,
+          });
+        } catch (error) {
+          trace.recordTool({
+            name: "lookup_order",
+            input: { userId: req.userId },
+            error,
+          });
+          throw error;
+        }
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        try:
+            order = lookup_order(user_id)
+            trace.record_tool(
+                name="lookup_order",
+                input={"user_id": user_id},
+                output=order,
+            )
+        except Exception as error:
+            trace.record_tool(
+                name="lookup_order",
+                input={"user_id": user_id},
+                error=error,
+            )
+            raise
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+## Go deeper
+
+<CardGroup cols={2}>
+  <Card title="Trace contract" icon="file-check" href="/reference/trace-contract">
+    The exact fields and native SDK props Lemma reads.
+  </Card>
+  <Card title="Vercel AI SDK" icon="sparkles" href="/integrations/vercel-ai">
+    Record AI SDK model calls and tool executions automatically.
+  </Card>
+  <Card title="Tool calls" icon="wrench" href="/tracing/instrumentation/tool-calls">
+    Capture tool arguments, results, and failures.
+  </Card>
+  <Card title="Troubleshooting" icon="circle-help" href="/tracing/troubleshooting/common-issues">
+    Fix missing traces, empty outputs, and shape issues.
+  </Card>
+</CardGroup>

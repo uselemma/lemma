@@ -1,0 +1,112 @@
+---
+title: "Webhooks"
+description: "Receive signed HTTP POST requests when incidents are detected, analyzed, or resolved"
+---
+
+Webhooks let you react to incident events in real time. When something happens in Lemma — a new incident, a completed RCA, a resolution — Lemma POSTs a signed JSON payload to your endpoint. Use this to trigger your own agents, send alerts, or update external systems.
+
+## Events
+
+| Event | When it fires |
+|-------|---------------|
+| `incident.created` | A new incident has been detected by a monitor |
+| `incident.analyzed` | RCA is complete — includes root cause and suggested fix |
+| `incident.resolved` | The incident has been marked as resolved |
+| `incident.dismissed` | The incident has been dismissed |
+
+## Setup
+
+<Steps>
+  <Step title="Add a webhook endpoint">
+    In your project, go to **Settings → Developer → Webhooks** and click **Add endpoint**.
+
+    Enter a publicly accessible HTTPS URL and select the events you want to receive.
+  </Step>
+
+  <Step title="Save your signing secret">
+    After creating the endpoint, Lemma shows your signing secret **once**. Copy it immediately and store it securely — you won't be able to retrieve it again.
+
+    If you lose it, you can regenerate a new secret from the endpoint's edit dialog.
+  </Step>
+
+  <Step title="Verify signatures">
+    Every request includes an `X-Lemma-Signature` header containing `sha256=<hex>`. Verify it before processing the payload to ensure the request came from Lemma.
+
+    <Tabs>
+      <Tab title="Node.js">
+        ```typescript
+        import { createHmac } from 'crypto';
+
+        function verifyLemmaSignature(
+          rawBody: string,
+          secret: string,
+          signature: string // X-Lemma-Signature header
+        ): boolean {
+          const expected = 'sha256=' + createHmac('sha256', secret)
+            .update(rawBody)
+            .digest('hex');
+          return expected === signature;
+        }
+        ```
+      </Tab>
+
+      <Tab title="Python">
+        ```python
+        import hmac, hashlib
+
+        def verify_lemma_signature(
+            raw_body: bytes,
+            secret: str,
+            signature: str,  # X-Lemma-Signature header
+        ) -> bool:
+            expected = 'sha256=' + hmac.new(
+                secret.encode(), raw_body, hashlib.sha256
+            ).hexdigest()
+            return hmac.compare_digest(expected, signature)
+        ```
+      </Tab>
+    </Tabs>
+
+    <Warning>
+      Always use the **raw request body** for signature verification. Parsing and re-serializing the JSON will change whitespace and break the signature check.
+    </Warning>
+  </Step>
+</Steps>
+
+## Payload shape
+
+All events share a common envelope:
+
+```json
+{
+  "event": "incident.analyzed",
+  "timestamp": "2025-04-07T12:00:00.000Z",
+  "projectId": "39e9c46a-...",
+  "incident": {
+    "id": "abc123",
+    "status": "unresolved",
+    "metricName": "tool_call_success_rate",
+    "rootCause": "OpenAI tool call parsing fails when response contains nested JSON strings",
+    "createdAt": "2025-04-07T11:58:00.000Z"
+  }
+}
+```
+
+The `incident` object is present on all event types. The `rootCause` field is only populated on `incident.analyzed`.
+
+## Delivery and retries
+
+Lemma considers a delivery successful if your endpoint responds with a `2xx` status within **10 seconds**. Failed deliveries are retried with exponential backoff.
+
+You can view the full delivery history — including request bodies, response codes, and latency — for each endpoint in **Settings → Developer → Webhooks → Delivery log**.
+
+## Testing
+
+Use the **Send test ping** button (paper plane icon) next to any endpoint to send a synthetic `incident.analyzed` payload. This is useful for verifying your endpoint is reachable and your signature verification is working before you receive real events.
+
+## Security checklist
+
+- Always verify the `X-Lemma-Signature` header before processing
+- Use HTTPS endpoints only
+- Store your signing secret in an environment variable, never in source code
+- Return `2xx` quickly — offload any slow processing to a background job to avoid timeouts

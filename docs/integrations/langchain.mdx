@@ -1,0 +1,109 @@
+---
+title: "LangChain"
+description: "Record LangChain runs with Lemma callback handlers"
+---
+
+Use Lemma's LangChain integration when your app runs chains, chat models,
+retrievers, tools, or agents through LangChain callbacks. The integration
+creates one Lemma trace for the root run, records LLM calls as generations,
+tools as tool calls, retrievers as spans, and nested
+chains as child spans.
+
+You do not need to wrap LangChain calls in `lemma.trace()`. Pass the callback
+handler through LangChain's `callbacks` option.
+
+## TypeScript
+
+Install LangChain and the Lemma SDK:
+
+```bash
+npm install @uselemma/tracing @langchain/core @langchain/openai
+```
+
+Pass `langChain()` as a callback handler:
+
+```typescript
+import { ChatOpenAI } from "@langchain/openai";
+import { HumanMessage } from "@langchain/core/messages";
+import { langChain } from "@uselemma/tracing";
+
+const model = new ChatOpenAI({
+  model: "gpt-4o",
+  callbacks: [
+    langChain({
+      apiKey: process.env.LEMMA_API_KEY,
+      projectId: process.env.LEMMA_PROJECT_ID,
+      agentName: "support-agent",
+    }),
+  ],
+});
+
+export async function callAgent(userMessage: string) {
+  const response = await model.invoke([new HumanMessage(userMessage)]);
+  return response.content;
+}
+```
+
+## Python
+
+Install the optional extra:
+
+```bash
+pip install "uselemma-tracing[langchain]" langchain-openai
+```
+
+Pass `langchain()` as a callback handler:
+
+```python
+import os
+
+from langchain_openai import ChatOpenAI
+from uselemma_tracing import langchain
+
+model = ChatOpenAI(
+    model="gpt-4o",
+    callbacks=[
+        langchain(
+            api_key=os.environ["LEMMA_API_KEY"],
+            project_id=os.environ["LEMMA_PROJECT_ID"],
+            agent_name="support-agent",
+        )
+    ],
+)
+
+
+def call_agent(user_message: str):
+    response = model.invoke(user_message)
+    return response.content
+```
+
+## What Lemma records
+
+| LangChain callback | Lemma record |
+| --- | --- |
+| Root chain start/end | One Lemma trace named from `agentName` or the LangChain run name |
+| LLM or chat model start/end | Generation with input messages, output text, model, timing, and parent ID |
+| Tool start/end | Tool call with name, input, output or error, timing, and parent ID |
+| Retriever start/end | Span with query input, output, timing, and parent ID |
+| Nested chain start/end | Child span preserving LangChain parent run IDs |
+
+Use `langChain({ recordInputs: false, recordOutputs: false })` in TypeScript or
+`langchain(record_inputs=False, record_outputs=False)` in Python to avoid
+sending prompts, tool inputs, tool outputs, or model output text.
+
+## Debugging
+
+Enable debug mode while developing to confirm that spans arrive live and stay
+nested under the expected parent:
+
+```typescript
+import { enableDebugMode } from "@uselemma/tracing";
+
+enableDebugMode();
+```
+
+```python
+from uselemma_tracing import enable_debug_mode
+
+enable_debug_mode()
+```
