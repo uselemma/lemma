@@ -10,7 +10,7 @@
 
 ## Installation
 
-### skills CLI
+### Vercel Skills CLI
 
 ```bash
 npx skills add uselemma/lemma --skill "skills/lemma-tracing"
