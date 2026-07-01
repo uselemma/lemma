@@ -1,9 +1,9 @@
 ---
-title: "Agent skill"
-description: "Install the Lemma agent skill with the Skills CLI"
+title: "Lemma tracing skill"
+description: "Install the Lemma tracing skill with the Skills CLI"
 ---
 
-Use the Lemma agent skill when you want a coding agent to install the SDK, detect your framework, and add tracing for you.
+Use the Lemma tracing skill when you want a coding agent to install the SDK, detect your framework, and add tracing for you.
 
 The skill lives in the public Lemma developer repo:
 
@@ -34,7 +34,7 @@ npx skills add uselemma/lemma --skill "skills/lemma-tracing" --target claude
 After installing the skill, paste this into your coding agent:
 
 ```text
-Use the Lemma AI skill to add tracing to this application.
+Use the Lemma tracing skill to add tracing to this application.
 ```
 
 The skill covers manual SDK tracing, Vercel AI SDK, OpenAI Agents SDK, LangChain, LangGraph, Langfuse side-by-side installs, trace handles, debug mode, and common tracing issues.

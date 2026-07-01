@@ -12,7 +12,7 @@ skills for integrating Lemma tracing into AI applications.
 | [`docs/`](docs) | Mintlify documentation source for [docs.uselemma.ai](https://docs.uselemma.ai). |
 | [`packages/ts/tracing`](packages/ts/tracing) | TypeScript SDK: `@uselemma/tracing`. |
 | [`packages/py/tracing`](packages/py/tracing) | Python SDK: `uselemma-tracing`. |
-| [`skills/lemma-tracing`](skills/lemma-tracing) | Agent skill for adding Lemma tracing to codebases. |
+| [`skills/lemma-tracing`](skills/lemma-tracing) | Lemma tracing skill for adding tracing to codebases. |
 
 ## Install
 
