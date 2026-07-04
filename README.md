@@ -2,9 +2,7 @@
 
 <h1 align="center">Lemma</h1>
 
-<p align="center">Developer Resources</p>
-
-Public developer resources for Lemma AI observability.
+<p align="center"><strong>Developer Resources</strong></p>
 
 This repository contains the user-facing SDKs, documentation source, and agent
 skills for integrating Lemma tracing into AI applications.
