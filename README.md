@@ -4,44 +4,62 @@
 
 <p align="center"><strong>Developer Resources</strong></p>
 
-This repository contains the user-facing SDKs, documentation source, and agent
-skills for integrating Lemma tracing into AI applications.
+<p align="center">
+  SDKs, documentation, and agent skills for adding Lemma tracing to AI applications.
+</p>
 
-## What is here
+## Start Here
 
-| Path | Contents |
+| Resource | Use it for |
 | --- | --- |
-| [`docs/`](docs) | Mintlify documentation source for [docs.uselemma.ai](https://docs.uselemma.ai). |
-| [`packages/ts/tracing`](packages/ts/tracing) | TypeScript SDK: `@uselemma/tracing`. |
-| [`packages/py/tracing`](packages/py/tracing) | Python SDK: `uselemma-tracing`. |
-| [`skills/lemma-tracing`](skills/lemma-tracing) | Lemma tracing skill for adding tracing to codebases. |
+| [Quickstart](https://docs.uselemma.ai/getting-started/quickstart) | Send your first useful trace to Lemma. |
+| [Trace contract](https://docs.uselemma.ai/reference/trace-contract) | Learn the trace shape Lemma expects. |
+| [TypeScript SDK](packages/ts/tracing) | Instrument Node and TypeScript applications. |
+| [Python SDK](packages/py/tracing) | Instrument Python applications. |
+| [Lemma tracing skill](skills/lemma-tracing) | Let a coding agent add tracing for you. |
 
 ## Install
+
+TypeScript:
 
 ```bash
 npm install @uselemma/tracing
 ```
 
+Python:
+
 ```bash
 pip install uselemma-tracing
 ```
 
-Both SDKs read credentials from environment variables by default:
+Both SDKs read Lemma credentials from environment variables by default:
 
 ```bash
 export LEMMA_API_KEY=...
 export LEMMA_PROJECT_ID=...
 ```
 
-## Documentation
+## Integrations
 
-- [Quickstart](https://docs.uselemma.ai/getting-started/quickstart)
-- [Tracing overview](https://docs.uselemma.ai/tracing/overview)
-- [Trace contract](https://docs.uselemma.ai/reference/trace-contract)
-- [Vercel AI SDK](https://docs.uselemma.ai/integrations/vercel-ai)
-- [OpenAI Agents SDK](https://docs.uselemma.ai/integrations/openai-agents)
-- [LangChain](https://docs.uselemma.ai/integrations/langchain)
-- [LangGraph](https://docs.uselemma.ai/integrations/langgraph)
+Lemma includes first-party tracing helpers for common agent stacks:
+
+| Integration | Guide |
+| --- | --- |
+| Vercel AI SDK | [docs](https://docs.uselemma.ai/integrations/vercel-ai) |
+| OpenAI Agents SDK | [docs](https://docs.uselemma.ai/integrations/openai-agents) |
+| LangChain | [docs](https://docs.uselemma.ai/integrations/langchain) |
+| LangGraph | [docs](https://docs.uselemma.ai/integrations/langgraph) |
+
+For manual instrumentation, start with the [tracing overview](https://docs.uselemma.ai/tracing/overview).
+
+## Repository Layout
+
+| Path | Contents |
+| --- | --- |
+| [`docs/`](docs) | Mintlify documentation source for [docs.uselemma.ai](https://docs.uselemma.ai). |
+| [`packages/ts/tracing`](packages/ts/tracing) | TypeScript SDK package: `@uselemma/tracing`. |
+| [`packages/py/tracing`](packages/py/tracing) | Python SDK package: `uselemma-tracing`. |
+| [`skills/lemma-tracing`](skills/lemma-tracing) | Lemma tracing skill for coding agents. |
 
 ## Development
 
