@@ -5,7 +5,7 @@
 <p align="center"><strong>Developer Resources</strong></p>
 
 <p align="center">
-  SDKs, documentation, and agent skills for adding Lemma tracing to AI applications.
+  SDKs, documentation, and agent skills for setting up Lemma.
 </p>
 
 ## Start Here
