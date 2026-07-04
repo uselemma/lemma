@@ -1,5 +1,7 @@
 # Lemma
 
+![Lemma Developer Resources](assets/hero.png)
+
 Public developer resources for Lemma AI observability.
 
 This repository contains the user-facing SDKs, documentation source, and agent
