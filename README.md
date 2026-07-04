@@ -1,6 +1,8 @@
-# Lemma
-
 ![Lemma Developer Resources](assets/hero.png)
+
+<h1 align="center">Lemma</h1>
+
+<p align="center">Developer Resources</p>
 
 Public developer resources for Lemma AI observability.
 
