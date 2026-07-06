@@ -245,6 +245,53 @@ describe("Lemma", () => {
     expect(body.trace.spans[1]).not.toHaveProperty("duration_ms");
   });
 
+  it("does not send a trace handle until it is ended", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const trace = lemma.trace({ name: "support-agent" });
+    const span = trace.startSpan("parent span");
+    span.recordTool("tool call");
+    span.end();
+
+    // Recording spans must not stream partial snapshots; nothing is sent until
+    // the trace is explicitly ended.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await trace.end({ output: "done" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.id).toBe(trace.id);
+    expect(body.trace.output).toBe("done");
+    expect(body.trace.spans).toHaveLength(2);
+  });
+
+  it("does not resend a trace when end() is called more than once", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const trace = lemma.trace({ name: "support-agent" });
+    trace.startSpan("parent span").end();
+
+    await trace.end({ output: "done" });
+    await trace.end({ output: "ignored" });
+
+    // A second end() is a no-op: the append-only ingest API would otherwise
+    // duplicate every span on the re-send.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.output).toBe("done");
+  });
+
   it("supports client-level detached observations by trace id", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const lemma = new Lemma({

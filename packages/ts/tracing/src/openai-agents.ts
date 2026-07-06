@@ -214,8 +214,22 @@ export function openAIAgents(
     });
   }
 
-  async function forEachTrace(fn: (trace: StoredTrace) => MaybePromise<void>) {
-    await Promise.all(Array.from(traces.values(), fn));
+  // Deliver a trace exactly once and drop it, so a later shutdown/forceFlush (or
+  // a duplicate onTraceEnd) can't re-send a completed trace and duplicate its
+  // spans. Sending happens only here, via the handle's terminal end().
+  async function finalizeTrace(traceId: string, stored: StoredTrace) {
+    traces.delete(traceId);
+    if (stored.ended) return;
+    stored.ended = true;
+    await stored.handle.end();
+  }
+
+  async function finalizeAll() {
+    await Promise.all(
+      Array.from(traces.entries(), ([traceId, stored]) =>
+        finalizeTrace(traceId, stored),
+      ),
+    );
   }
 
   return {
@@ -223,10 +237,8 @@ export function openAIAgents(
       ensureTrace(trace);
     },
     onTraceEnd: async (trace) => {
-      const stored = ensureTrace(trace);
-      if (stored.ended) return;
-      stored.ended = true;
-      await stored.handle.end();
+      const stored = traces.get(trace.traceId) ?? ensureTrace(trace);
+      await finalizeTrace(trace.traceId, stored);
     },
     onSpanStart: async (span) => {
       const handle = startSpan(span);
@@ -235,11 +247,13 @@ export function openAIAgents(
     onSpanEnd: async (span) => {
       endSpan(span);
     },
+    // Shutdown/forceFlush finalize any still-open traces (a one-time terminal
+    // send for traces that never received onTraceEnd), then drop them.
     shutdown: async () => {
-      await forEachTrace((trace) => trace.handle.flush());
+      await finalizeAll();
     },
     forceFlush: async () => {
-      await forEachTrace((trace) => trace.handle.flush());
+      await finalizeAll();
     },
   };
 }

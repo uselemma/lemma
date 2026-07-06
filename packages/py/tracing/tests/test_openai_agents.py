@@ -129,6 +129,76 @@ def test_openai_agents_records_generations_and_function_children():
     assert trace["spans"][1]["ended_at"] == "2026-06-29T10:00:00.090Z"
 
 
+def test_openai_agents_sends_once_and_does_not_resend_on_shutdown():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+
+    processor.on_trace_start(FakeTrace(trace_id="trace_once", name="agent"))
+    processor.on_span_start(
+        FakeSpan(
+            trace_id="trace_once",
+            span_id="span_gen",
+            span_data={"type": "generation", "model": "gpt-4o"},
+        )
+    )
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_once",
+            span_id="span_gen",
+            span_data={
+                "type": "generation",
+                "model": "gpt-4o",
+                "output": [{"role": "assistant", "content": "hi"}],
+            },
+        )
+    )
+    processor.on_trace_end(FakeTrace(trace_id="trace_once", name="agent"))
+
+    assert len(calls) == 1
+
+    # A shutdown/force_flush after the trace already ended must not re-send it,
+    # which would duplicate every span in the append-only ingest store.
+    processor.force_flush()
+    processor.shutdown()
+
+    assert len(calls) == 1
+
+
+def test_openai_agents_force_flush_sends_open_trace_once():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+
+    processor.on_trace_start(FakeTrace(trace_id="trace_open", name="agent"))
+    processor.on_span_start(
+        FakeSpan(
+            trace_id="trace_open",
+            span_id="span_gen",
+            span_data={"type": "generation", "model": "gpt-4o"},
+        )
+    )
+
+    # A trace that never receives on_trace_end is finalized once on shutdown...
+    processor.force_flush()
+    assert len(calls) == 1
+
+    # ...and a late on_trace_end (or a second flush) does not resend it.
+    processor.on_trace_end(FakeTrace(trace_id="trace_open", name="agent"))
+    processor.force_flush()
+    assert len(calls) == 1
+
+
 def test_openai_agents_debug_logs_live_child_parent(capsys):
     def transport(_url, _headers, _body):
         return 201, "{}"

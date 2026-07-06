@@ -142,13 +142,13 @@ class LemmaOpenAIAgentsProcessor:
     def on_trace_end(self, trace: Any) -> None:
         with self._lock:
             trace_id = _get(trace, "trace_id")
-            stored = self._ensure_trace(trace)
-            if stored.ended:
+            stored = self._traces.get(trace_id)
+            # Look up (don't ensure) so a trace already finalized by
+            # force_flush/shutdown isn't recreated and sent a second time,
+            # which would duplicate its spans in the append-only ingest store.
+            if stored is None:
                 return
-            stored.ended = True
-            self.lemma._send(stored.context, stored.started_at, _now())
-            if trace_id in self._traces:
-                del self._traces[trace_id]
+            self._finalize(trace_id, stored)
 
     def on_span_start(self, span: Any) -> None:
         with self._lock:
@@ -168,9 +168,18 @@ class LemmaOpenAIAgentsProcessor:
         self.force_flush()
 
     def force_flush(self) -> None:
+        # Finalize any still-open traces exactly once (a one-time terminal send
+        # for traces that never received on_trace_end), then drop them so a
+        # later on_trace_end or force_flush can't resend and duplicate spans.
         with self._lock:
-            for stored in list(self._traces.values()):
-                self.lemma._send(stored.context, stored.started_at, _now())
+            for trace_id, stored in list(self._traces.items()):
+                self._finalize(trace_id, stored)
+
+    def _finalize(self, trace_id: str, stored: _StoredTrace) -> None:
+        if not stored.ended:
+            stored.ended = True
+            self.lemma._send(stored.context, stored.started_at, _now())
+        self._traces.pop(trace_id, None)
 
     def _ensure_trace(self, trace: Any) -> _StoredTrace:
         trace_id = _get(trace, "trace_id")

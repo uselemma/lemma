@@ -133,6 +133,41 @@ describe("openAIAgents", () => {
     ).toBe(40);
   });
 
+  it("sends each trace once and does not resend on shutdown after it ends", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await processor.onTraceStart({ traceId: "trace_once", name: "agent" });
+    await processor.onSpanStart({
+      traceId: "trace_once",
+      spanId: "span_gen",
+      spanData: { type: "generation", model: "gpt-4o" },
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_once",
+      spanId: "span_gen",
+      spanData: {
+        type: "generation",
+        model: "gpt-4o",
+        output: [{ role: "assistant", content: "hi" }],
+      },
+    });
+    await processor.onTraceEnd({ traceId: "trace_once", name: "agent" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // A shutdown/forceFlush after the trace already ended must not re-send it,
+    // which would duplicate every span in the append-only ingest store.
+    await processor.forceFlush();
+    await processor.shutdown();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("logs OpenAI Agents spans as they start and end in debug mode", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
