@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 230 230" width="230" height="230" role="img" aria-label="Harmograph rosette drawing in and slowly spinning">
+<!-- Baked from src/components/heroLines/HarmographFigure.tsx: 60 pentagons over 360deg R=38 (:15-18,32-41); draw-in keyframes 600ms ease-out, stagger 20ms (:200-209,240-242 - lemma-harmograph-draw); spin = idle hover rate 14deg/s (:20) as a continuous 25.714s linear loop. stroke #755CFE 0.15 (:232-233). Reduced motion: drawn rosette, no spin. -->
+<style>
+  .hl { stroke-dashoffset: 100; opacity: 0; animation: hg-draw 600ms ease-out both; }
+  @keyframes hg-draw {
+    from { stroke-dashoffset: 100; opacity: 0; }
+    to   { stroke-dashoffset: 0;   opacity: 0.6; }
+  }
+  .spin {
+    transform-origin: 50px 50px;
+    animation: hg-spin 25.714s linear infinite; /* 360deg / 14deg-per-s (HarmographFigure.tsx:20) */
+  }
+  @keyframes hg-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .hl { animation: none; stroke-dashoffset: 0; opacity: 0.6; }
+    .spin { animation: none; }
+  }
+</style>
+<!-- window chrome: hero-widgets/page.tsx:30-72 -->
+<rect x="0.25" y="0.25" width="229.5" height="5.5" fill="none" stroke="#755CFE" stroke-width="0.5"/>
+<rect x="0.25" y="5.75" width="229.5" height="224" fill="none" stroke="#755CFE" stroke-width="0.5"/>
+<text x="8" y="20.5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="8" letter-spacing="0.4" fill="#755CFE">LEM. 1.3</text>
+<svg x="21" y="24" width="188" height="188" viewBox="0 0 100 100">
+<g class="spin" fill="none" stroke="#755CFE" stroke-width="0.15" stroke-dasharray="100">
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(0.00 50 50)" style="animation-delay:0ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(6.10 50 50)" style="animation-delay:20ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(12.20 50 50)" style="animation-delay:40ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(18.31 50 50)" style="animation-delay:60ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(24.41 50 50)" style="animation-delay:80ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(30.51 50 50)" style="animation-delay:100ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(36.61 50 50)" style="animation-delay:120ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(42.71 50 50)" style="animation-delay:140ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(48.81 50 50)" style="animation-delay:160ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(54.92 50 50)" style="animation-delay:180ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(61.02 50 50)" style="animation-delay:200ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(67.12 50 50)" style="animation-delay:220ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(73.22 50 50)" style="animation-delay:240ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(79.32 50 50)" style="animation-delay:260ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(85.42 50 50)" style="animation-delay:280ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(91.53 50 50)" style="animation-delay:300ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(97.63 50 50)" style="animation-delay:320ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(103.73 50 50)" style="animation-delay:340ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(109.83 50 50)" style="animation-delay:360ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(115.93 50 50)" style="animation-delay:380ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(122.03 50 50)" style="animation-delay:400ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(128.14 50 50)" style="animation-delay:420ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(134.24 50 50)" style="animation-delay:440ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(140.34 50 50)" style="animation-delay:460ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(146.44 50 50)" style="animation-delay:480ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(152.54 50 50)" style="animation-delay:500ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(158.64 50 50)" style="animation-delay:520ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(164.75 50 50)" style="animation-delay:540ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(170.85 50 50)" style="animation-delay:560ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(176.95 50 50)" style="animation-delay:580ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(183.05 50 50)" style="animation-delay:600ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(189.15 50 50)" style="animation-delay:620ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(195.25 50 50)" style="animation-delay:640ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(201.36 50 50)" style="animation-delay:660ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(207.46 50 50)" style="animation-delay:680ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(213.56 50 50)" style="animation-delay:700ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(219.66 50 50)" style="animation-delay:720ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(225.76 50 50)" style="animation-delay:740ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(231.86 50 50)" style="animation-delay:760ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(237.97 50 50)" style="animation-delay:780ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(244.07 50 50)" style="animation-delay:800ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(250.17 50 50)" style="animation-delay:820ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(256.27 50 50)" style="animation-delay:840ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(262.37 50 50)" style="animation-delay:860ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(268.47 50 50)" style="animation-delay:880ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(274.58 50 50)" style="animation-delay:900ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(280.68 50 50)" style="animation-delay:920ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(286.78 50 50)" style="animation-delay:940ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(292.88 50 50)" style="animation-delay:960ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(298.98 50 50)" style="animation-delay:980ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(305.08 50 50)" style="animation-delay:1000ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(311.19 50 50)" style="animation-delay:1020ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(317.29 50 50)" style="animation-delay:1040ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(323.39 50 50)" style="animation-delay:1060ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(329.49 50 50)" style="animation-delay:1080ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(335.59 50 50)" style="animation-delay:1100ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(341.69 50 50)" style="animation-delay:1120ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(347.80 50 50)" style="animation-delay:1140ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(353.90 50 50)" style="animation-delay:1160ms"/>
+<path class="hl" d="M 50.00,12.00 L 86.14,38.26 L 72.34,80.74 L 27.66,80.74 L 13.86,38.26 Z" transform="rotate(360.00 50 50)" style="animation-delay:1180ms"/>
+</g>
+</svg>
+</svg>

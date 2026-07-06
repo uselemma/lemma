@@ -1,4 +1,8 @@
-![Lemma Developer Resources](assets/hero.png)
+<p align="center">
+  <img src="assets/automata-transparent.svg" alt="LEM 2.3 - Rule 30 cellular automaton revealing row by row" width="312" />
+  &nbsp;&nbsp;
+  <img src="assets/harmograph-transparent.svg" alt="LEM 1.3 - harmograph rosette drawing itself in" width="276" />
+</p>
 
 <h1 align="center">Lemma</h1>
 
