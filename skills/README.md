@@ -13,13 +13,13 @@
 ### Skills CLI
 
 ```bash
-npx skills add uselemma/lemma --skill "skills/lemma-tracing"
+npx skills add uselemma/lemma --skill "lemma-tracing"
 ```
 
 ### Cursor
 
 ```bash
-npx skills add uselemma/lemma --skill "skills/lemma-tracing" --target cursor
+npx skills add uselemma/lemma --skill "lemma-tracing" --target cursor
 ```
 
 Or install manually into your project's `.cursor/rules/` directory:
@@ -33,7 +33,7 @@ curl -o .cursor/rules/lemma-tracing.md \
 ### Claude Code
 
 ```bash
-npx skills add uselemma/lemma --skill "skills/lemma-tracing" --target claude
+npx skills add uselemma/lemma --skill "lemma-tracing" --target claude
 ```
 
 ## Usage
