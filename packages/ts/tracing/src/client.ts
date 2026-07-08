@@ -1,4 +1,13 @@
-import { lemmaDebug } from "./debug-mode";
+import {
+  apiKeySuffix,
+  buildConfigWarnings,
+  EXPECTED_INGEST_SUCCESS_STATUS,
+  ingestFailureHint,
+  INGEST_PATH,
+  pickResponseHeaders,
+  sleep,
+} from "./debug-delivery";
+import { isDebugModeEnabled, isDebugVerifyEnabled, lemmaDebug } from "./debug-mode";
 
 export type JsonValue =
   | string
@@ -13,6 +22,29 @@ export type LemmaClientOptions = {
   projectId?: string;
   baseUrl?: string;
   fetch?: typeof fetch;
+};
+
+export type DebugSmokeTestResult = {
+  ok: boolean;
+  config: {
+    baseUrl: string;
+    projectId: string;
+    apiKeySuffix: string;
+    ingestPath: string;
+    expectedSuccessStatus: number;
+    warnings: string[];
+  };
+  ingest?: {
+    status: number;
+    traceId: string;
+    projectId: string;
+    url: string;
+    responseHeaders: Record<string, string>;
+    warnings: string[];
+  };
+  hasReadyBefore?: boolean;
+  hasReadyAfter?: boolean;
+  hints: string[];
 };
 
 export type TraceOptions = {
@@ -785,6 +817,7 @@ export class Lemma {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly traces = new Map<string, TraceHandle>();
+  private configLogged = false;
 
   constructor(options: LemmaClientOptions = {}) {
     this.apiKey = required(
@@ -800,6 +833,122 @@ export class Lemma {
       "",
     );
     this.fetchImpl = options.fetch ?? fetch;
+    this.logInitConfigOnce();
+  }
+
+  /**
+   * Run a one-call delivery diagnostic: config check, has-ready snapshot,
+   * minimal ingest, and post-ingest visibility poll.
+   *
+   * `hasReadyBefore` / `hasReadyAfter` reflect whether the project has any
+   * ready traces (not whether this specific smoke trace is queryable yet).
+   */
+  async debugSmokeTest(): Promise<DebugSmokeTestResult> {
+    const configWarnings = buildConfigWarnings(this.baseUrl, this.projectId);
+    const hints = [...configWarnings];
+    const config = {
+      baseUrl: this.baseUrl,
+      projectId: this.projectId,
+      apiKeySuffix: apiKeySuffix(this.apiKey),
+      ingestPath: INGEST_PATH,
+      expectedSuccessStatus: EXPECTED_INGEST_SUCCESS_STATUS,
+      warnings: configWarnings,
+    };
+
+    const hasReadyBefore = await this.fetchHasReadyTraces();
+    if (hasReadyBefore === null) {
+      hints.push("has-ready check failed before ingest (status/network)");
+    }
+
+    const traceId = crypto.randomUUID();
+    const context = new TraceContext({
+      id: traceId,
+      name: "lemma-debug-smoke-test",
+      input: "smoke-test",
+    });
+    context.output("ok");
+    const startedAt = new Date();
+    const payload = context.toPayload(
+      this.projectId,
+      startedAt,
+      new Date(),
+      false,
+    );
+    const body = JSON.stringify(payload);
+    const url = `${this.baseUrl}${INGEST_PATH}`;
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+    } catch {
+      hints.push("ingest request failed (network error)");
+      return {
+        ok: false,
+        config,
+        hasReadyBefore: hasReadyBefore ?? undefined,
+        hints,
+      };
+    }
+
+    const responseHeaders = pickResponseHeaders(response.headers);
+    const ingestWarnings: string[] = [];
+    if (response.status !== EXPECTED_INGEST_SUCCESS_STATUS) {
+      ingestWarnings.push(
+        `expected status ${EXPECTED_INGEST_SUCCESS_STATUS}, got ${response.status}`,
+      );
+      const hint = ingestFailureHint(response.status);
+      if (hint) hints.push(hint);
+    }
+    if (!responseHeaders["cf-ray"]) {
+      hints.push("missing cf-ray response header (may not be Lemma production)");
+    }
+
+    const ingest = {
+      status: response.status,
+      traceId,
+      projectId: this.projectId,
+      url,
+      responseHeaders,
+      warnings: ingestWarnings,
+    };
+
+    if (!response.ok) {
+      hints.push(`ingest failed with status ${response.status}`);
+      return {
+        ok: false,
+        config,
+        ingest,
+        hasReadyBefore: hasReadyBefore ?? undefined,
+        hints,
+      };
+    }
+
+    const hasReadyAfter = await this.pollHasReadyTraces();
+    if (hasReadyAfter === null) {
+      hints.push("has-ready check failed after ingest (status/network)");
+    } else if (!hasReadyAfter) {
+      hints.push(
+        "ingest returned 201 but has_ready_traces=false — may be processing lag or downstream issue",
+      );
+    }
+
+    return {
+      ok:
+        response.status === EXPECTED_INGEST_SUCCESS_STATUS &&
+        hasReadyAfter === true,
+      config,
+      ingest,
+      hasReadyBefore: hasReadyBefore ?? undefined,
+      hasReadyAfter: hasReadyAfter ?? undefined,
+      hints,
+    };
   }
 
   trace(): TraceHandle;
@@ -1049,6 +1198,67 @@ export class Lemma {
     return trace;
   }
 
+  private logInitConfigOnce(): void {
+    if (!isDebugModeEnabled() || this.configLogged) return;
+    this.configLogged = true;
+    const warnings = buildConfigWarnings(this.baseUrl, this.projectId);
+    lemmaDebug("client", "initialized", {
+      baseUrl: this.baseUrl,
+      projectId: this.projectId,
+      apiKey: apiKeySuffix(this.apiKey),
+      ingestPath: INGEST_PATH,
+      expectedSuccessStatus: EXPECTED_INGEST_SUCCESS_STATUS,
+      ...(warnings.length ? { warnings } : {}),
+    });
+  }
+
+  private async fetchHasReadyTraces(): Promise<boolean | null> {
+    const url = `${this.baseUrl}/traces/has-ready?project_id=${encodeURIComponent(this.projectId)}`;
+    try {
+      const response = await this.fetchImpl(url, {
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+      });
+      if (!response.ok) return null;
+      const data = (await response.json()) as {
+        has_ready_traces?: boolean;
+        hasReadyTraces?: boolean;
+      };
+      return Boolean(data.has_ready_traces ?? data.hasReadyTraces);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Poll immediately; if false, wait briefly and retry once. */
+  private async pollHasReadyTraces(): Promise<boolean | null> {
+    const first = await this.fetchHasReadyTraces();
+    if (first !== false) return first;
+    await sleep(5000);
+    return this.fetchHasReadyTraces();
+  }
+
+  private async verifyIngestDelivery(): Promise<void> {
+    const result = await this.pollHasReadyTraces();
+    if (result === null) {
+      lemmaDebug(
+        "verify",
+        "ingest accepted (201), has-ready check failed (status/network)",
+      );
+      return;
+    }
+    if (result) {
+      lemmaDebug(
+        "verify",
+        "ingest accepted (201), traces visible in dashboard",
+      );
+      return;
+    }
+    lemmaDebug(
+      "verify",
+      "ingest accepted (201), but has_ready_traces=false — may be processing lag or downstream issue",
+    );
+  }
+
   private async flushTrace(
     context: TraceContext,
     startedAt: Date,
@@ -1061,11 +1271,15 @@ export class Lemma {
       endedAt,
       replace,
     );
-    const url = `${this.baseUrl}/traces/ingest`;
+    const body = JSON.stringify(payload);
+    const url = `${this.baseUrl}${INGEST_PATH}`;
     lemmaDebug("client", "sending trace", {
       traceId: payload.trace.id,
       name: payload.trace.name,
       spanCount: payload.trace.spans.length,
+      projectId: payload.project_id,
+      bodyBytes: new TextEncoder().encode(body).length,
+      requestedAt: new Date().toISOString(),
       url,
       replace,
     });
@@ -1075,23 +1289,43 @@ export class Lemma {
         Authorization: `Bearer ${this.apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body,
     });
 
+    const responseHeaders = pickResponseHeaders(response.headers);
+
     if (!response.ok) {
-      const body = await response.text().catch(() => "");
+      const responseBody = await response.text().catch(() => "");
+      const hint = ingestFailureHint(response.status);
       lemmaDebug("client", "trace ingest failed", {
         traceId: payload.trace.id,
+        projectId: payload.project_id,
         status: response.status,
-        body,
+        body: responseBody,
+        ...responseHeaders,
+        ...(hint ? { hint } : {}),
       });
       throw new Error(
-        `@uselemma/tracing: failed to ingest trace (${response.status})${body ? `: ${body}` : ""}`,
+        `@uselemma/tracing: failed to ingest trace (${response.status})${responseBody ? `: ${responseBody}` : ""}`,
+      );
+    }
+
+    const sentWarnings: string[] = [];
+    if (response.status !== EXPECTED_INGEST_SUCCESS_STATUS) {
+      sentWarnings.push(
+        `expected status ${EXPECTED_INGEST_SUCCESS_STATUS}, got ${response.status} (wrong endpoint?)`,
       );
     }
     lemmaDebug("client", "trace sent", {
       traceId: payload.trace.id,
+      projectId: payload.project_id,
       status: response.status,
+      ...responseHeaders,
+      ...(sentWarnings.length ? { warnings: sentWarnings } : {}),
     });
+
+    if (isDebugModeEnabled() && isDebugVerifyEnabled()) {
+      await this.verifyIngestDelivery();
+    }
   }
 }

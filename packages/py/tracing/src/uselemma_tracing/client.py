@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -10,7 +11,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Literal, TypeVar
 
-from .debug_mode import _lemma_debug
+from .debug_delivery import (
+    EXPECTED_INGEST_SUCCESS_STATUS,
+    INGEST_PATH,
+    api_key_suffix,
+    build_config_warnings,
+    ingest_failure_hint,
+    pick_response_headers,
+)
+from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_enabled
 
 T = TypeVar("T")
 SpanType = Literal["span", "generation", "tool"]
@@ -738,8 +747,13 @@ class Lemma:
         api_key: str | None = None,
         project_id: str | None = None,
         base_url: str = "https://api.uselemma.ai",
-        transport: Callable[[str, dict[str, str], bytes], tuple[int, str]]
-        | None = None,
+        transport: (
+            Callable[
+                [str, dict[str, str], bytes],
+                tuple[int, str] | tuple[int, str, dict[str, str]],
+            ]
+            | None
+        ) = None,
     ) -> None:
         self.api_key = api_key or os.environ.get("LEMMA_API_KEY")
         self.project_id = project_id or os.environ.get("LEMMA_PROJECT_ID")
@@ -748,7 +762,111 @@ class Lemma:
         if not self.project_id:
             raise ValueError("uselemma-tracing: Missing LEMMA_PROJECT_ID")
         self.base_url = base_url.rstrip("/")
-        self.transport = transport or self._urllib_transport
+        self._last_response_headers: dict[str, str] = {}
+        self._config_logged = False
+        self.transport = self._wrap_transport(transport or self._urllib_transport)
+        self._log_init_config_once()
+
+    def debug_smoke_test(self) -> dict[str, Any]:
+        """Run a one-call delivery diagnostic.
+
+        ``hasReadyBefore`` / ``hasReadyAfter`` reflect whether the project has
+        any ready traces (not whether this specific smoke trace is queryable).
+        """
+        config_warnings = build_config_warnings(self.base_url, self.project_id or "")
+        hints = list(config_warnings)
+        config = {
+            "baseUrl": self.base_url,
+            "projectId": self.project_id,
+            "apiKeySuffix": api_key_suffix(self.api_key or ""),
+            "ingestPath": INGEST_PATH,
+            "expectedSuccessStatus": EXPECTED_INGEST_SUCCESS_STATUS,
+            "warnings": config_warnings,
+        }
+
+        has_ready_before = self._fetch_has_ready_traces()
+        if has_ready_before is None:
+            hints.append("has-ready check failed before ingest (status/network)")
+
+        trace_id = str(uuid.uuid4())
+        ctx = TraceContext(
+            id=trace_id,
+            name="lemma-debug-smoke-test",
+            input="smoke-test",
+        )
+        ctx.output("ok")
+        started_at = _now()
+        payload = ctx.payload(self.project_id or "", started_at, _now(), False)
+        body = json.dumps(payload, default=str).encode()
+        url = f"{self.base_url}{INGEST_PATH}"
+
+        try:
+            status, _text = self.transport(
+                url,
+                {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                body,
+            )
+        except OSError:
+            hints.append("ingest request failed (network error)")
+            return {
+                "ok": False,
+                "config": config,
+                "hasReadyBefore": has_ready_before,
+                "hints": hints,
+            }
+
+        response_headers = pick_response_headers(self._last_response_headers)
+        ingest_warnings: list[str] = []
+        if status != EXPECTED_INGEST_SUCCESS_STATUS:
+            ingest_warnings.append(
+                f"expected status {EXPECTED_INGEST_SUCCESS_STATUS}, got {status}"
+            )
+            hint = ingest_failure_hint(status)
+            if hint:
+                hints.append(hint)
+        if "cf-ray" not in response_headers:
+            hints.append(
+                "missing cf-ray response header (may not be Lemma production)"
+            )
+
+        ingest = {
+            "status": status,
+            "traceId": trace_id,
+            "projectId": self.project_id,
+            "url": url,
+            "responseHeaders": response_headers,
+            "warnings": ingest_warnings,
+        }
+
+        if status < 200 or status >= 300:
+            hints.append(f"ingest failed with status {status}")
+            return {
+                "ok": False,
+                "config": config,
+                "ingest": ingest,
+                "hasReadyBefore": has_ready_before,
+                "hints": hints,
+            }
+
+        has_ready_after = self._poll_has_ready_traces()
+        if has_ready_after is None:
+            hints.append("has-ready check failed after ingest (status/network)")
+        elif not has_ready_after:
+            hints.append(
+                "ingest returned 201 but has_ready_traces=false — may be processing lag or downstream issue"
+            )
+
+        return {
+            "ok": status == EXPECTED_INGEST_SUCCESS_STATUS and has_ready_after is True,
+            "config": config,
+            "ingest": ingest,
+            "hasReadyBefore": has_ready_before,
+            "hasReadyAfter": has_ready_after,
+            "hints": hints,
+        }
 
     def trace(
         self,
@@ -856,13 +974,16 @@ class Lemma:
     ) -> None:
         payload = ctx.payload(self.project_id or "", started_at, ended_at, replace)
         body = json.dumps(payload, default=str).encode()
-        url = f"{self.base_url}/traces/ingest"
+        url = f"{self.base_url}{INGEST_PATH}"
         _lemma_debug(
             "client",
             "sending trace",
             trace_id=payload["trace"]["id"],
             name=payload["trace"]["name"],
             span_count=len(payload["trace"]["spans"]),
+            project_id=payload["project_id"],
+            body_bytes=len(body),
+            requested_at=_iso(_now()),
             replace=replace,
             url=url,
         )
@@ -874,20 +995,145 @@ class Lemma:
             },
             body,
         )
+        response_headers = pick_response_headers(self._last_response_headers)
         if status < 200 or status >= 300:
-            _lemma_debug("client", "trace ingest failed", status=status, body=text)
+            hint = ingest_failure_hint(status)
+            _lemma_debug(
+                "client",
+                "trace ingest failed",
+                trace_id=payload["trace"]["id"],
+                project_id=payload["project_id"],
+                status=status,
+                body=text,
+                **response_headers,
+                **({"hint": hint} if hint else {}),
+            )
             raise RuntimeError(
                 f"uselemma-tracing: failed to ingest trace ({status}): {text}"
             )
-        _lemma_debug("client", "trace sent", status=status)
+
+        sent_warnings: list[str] = []
+        if status != EXPECTED_INGEST_SUCCESS_STATUS:
+            sent_warnings.append(
+                f"expected status {EXPECTED_INGEST_SUCCESS_STATUS}, got {status} (wrong endpoint?)"
+            )
+        _lemma_debug(
+            "client",
+            "trace sent",
+            trace_id=payload["trace"]["id"],
+            project_id=payload["project_id"],
+            status=status,
+            **response_headers,
+            **({"warnings": sent_warnings} if sent_warnings else {}),
+        )
+        if is_debug_mode_enabled() and is_debug_verify_enabled():
+            self._verify_ingest_delivery()
+
+    def _log_init_config_once(self) -> None:
+        if not is_debug_mode_enabled() or self._config_logged:
+            return
+        self._config_logged = True
+        warnings = build_config_warnings(self.base_url, self.project_id or "")
+        _lemma_debug(
+            "client",
+            "initialized",
+            baseUrl=self.base_url,
+            projectId=self.project_id,
+            apiKey=api_key_suffix(self.api_key or ""),
+            ingestPath=INGEST_PATH,
+            expectedSuccessStatus=EXPECTED_INGEST_SUCCESS_STATUS,
+            **({"warnings": warnings} if warnings else {}),
+        )
+
+    def _wrap_transport(
+        self,
+        transport: Callable[
+            [str, dict[str, str], bytes],
+            tuple[int, str] | tuple[int, str, dict[str, str]],
+        ],
+    ) -> Callable[[str, dict[str, str], bytes], tuple[int, str]]:
+        def wrapped(
+            url: str, headers: dict[str, str], body: bytes
+        ) -> tuple[int, str]:
+            result = transport(url, headers, body)
+            if len(result) >= 3:
+                self._last_response_headers = dict(result[2])
+                return result[0], result[1]
+            self._last_response_headers = {}
+            return result
+
+        return wrapped
+
+    def _fetch_has_ready_traces(self) -> bool | None:
+        url = (
+            f"{self.base_url}/traces/has-ready"
+            f"?project_id={urllib.request.quote(self.project_id or '')}"
+        )
+        try:
+            status, text, _headers = self._urllib_get(
+                url,
+                {"Authorization": f"Bearer {self.api_key}"},
+            )
+            if status < 200 or status >= 300:
+                return None
+            data = json.loads(text)
+            return bool(data.get("has_ready_traces", data.get("hasReadyTraces")))
+        except (OSError, json.JSONDecodeError, ValueError):
+            return None
+
+    def _poll_has_ready_traces(self) -> bool | None:
+        """Poll immediately; if false, wait briefly and retry once."""
+        first = self._fetch_has_ready_traces()
+        if first is not False:
+            return first
+        time.sleep(5)
+        return self._fetch_has_ready_traces()
+
+    def _verify_ingest_delivery(self) -> None:
+        result = self._poll_has_ready_traces()
+        if result is None:
+            _lemma_debug(
+                "verify",
+                "ingest accepted (201), has-ready check failed (status/network)",
+            )
+            return
+        if result:
+            _lemma_debug(
+                "verify",
+                "ingest accepted (201), traces visible in dashboard",
+            )
+            return
+        _lemma_debug(
+            "verify",
+            "ingest accepted (201), but has_ready_traces=false — may be processing lag or downstream issue",
+        )
 
     @staticmethod
     def _urllib_transport(
         url: str, headers: dict[str, str], body: bytes
-    ) -> tuple[int, str]:
+    ) -> tuple[int, str, dict[str, str]]:
         request = urllib.request.Request(url, data=body, headers=headers, method="POST")
         try:
             with urllib.request.urlopen(request) as response:
-                return response.status, response.read().decode()
+                return (
+                    response.status,
+                    response.read().decode(),
+                    dict(response.headers),
+                )
         except urllib.error.HTTPError as error:
-            return error.code, error.read().decode()
+            return error.code, error.read().decode(), dict(error.headers)
+
+    @staticmethod
+    def _urllib_get(
+        url: str, headers: dict[str, str]
+    ) -> tuple[int, str, dict[str, str]]:
+        request = urllib.request.Request(url, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(request) as response:
+                return (
+                    response.status,
+                    response.read().decode(),
+                    dict(response.headers),
+                )
+        except urllib.error.HTTPError as error:
+            return error.code, error.read().decode(), dict(error.headers)

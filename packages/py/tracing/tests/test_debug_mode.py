@@ -56,3 +56,10 @@ class TestDebugMode:
         _lemma_debug("client", "trace started", run_id="abc")
         out = capsys.readouterr().out
         assert out == ""
+
+    def test_debug_verify_enabled_via_env(self):
+        os.environ["LEMMA_DEBUG_VERIFY"] = "true"
+        from uselemma_tracing.debug_mode import is_debug_verify_enabled
+
+        assert is_debug_verify_enabled() is True
+        os.environ.pop("LEMMA_DEBUG_VERIFY", None)

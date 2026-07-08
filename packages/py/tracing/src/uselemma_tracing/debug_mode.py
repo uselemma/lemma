@@ -19,6 +19,10 @@ def is_debug_mode_enabled() -> bool:
     return _debug_mode_enabled or os.environ.get("LEMMA_DEBUG") == "true"
 
 
+def is_debug_verify_enabled() -> bool:
+    return os.environ.get("LEMMA_DEBUG_VERIFY") == "true"
+
+
 def _lemma_debug(prefix: str, msg: str, **data: object) -> None:
     if not is_debug_mode_enabled():
         return

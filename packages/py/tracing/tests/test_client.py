@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 
 import pytest
@@ -376,3 +377,119 @@ async def test_lemma_async_trace_posts_completed_trace():
     assert calls[0]["trace"]["name"] == "async-agent"
     assert calls[0]["trace"]["output"] == "hello"
     assert calls[0]["trace"]["spans"][0]["type"] == "generation"
+
+
+def test_debug_mode_logs_init_config_once(capsys):
+    enable_debug_mode()
+    try:
+        lemma = Lemma(
+            api_key="sk_test_12345678",
+            project_id=PROJECT_ID,
+            base_url="http://localhost:8000",
+            transport=lambda *_args: (201, "{}"),
+        )
+        # Different instance still logs (per-instance banner).
+        Lemma(
+            api_key="sk_test_12345678",
+            project_id=PROJECT_ID,
+            transport=lambda *_args: (201, "{}"),
+        )
+        # Same instance does not re-log.
+        lemma._log_init_config_once()
+        output = capsys.readouterr().out
+        assert output.count("[LEMMA:client] initialized") == 2
+        assert "http://localhost:8000" in output
+        assert "...5678" in output
+    finally:
+        disable_debug_mode()
+
+
+def test_debug_smoke_test_returns_structured_diagnostics(monkeypatch):
+    calls = {"has_ready": 0, "ingest": 0}
+
+    def transport(url, headers, body):
+        calls["ingest"] += 1
+        assert url.endswith("/traces/ingest")
+        return 201, "{}", {"cf-ray": "ray-smoke", "server": "cloudflare"}
+
+    def fake_get(url, headers):
+        calls["has_ready"] += 1
+        # First post-ingest poll is false so smoke waits and retries.
+        ready = calls["has_ready"] != 2
+        return 200, json.dumps({"has_ready_traces": ready}), {}
+
+    monkeypatch.setattr(Lemma, "_urllib_get", staticmethod(fake_get))
+    monkeypatch.setattr("uselemma_tracing.client.time.sleep", lambda _seconds: None)
+
+    lemma = Lemma(
+        api_key="sk_test_12345678",
+        project_id=PROJECT_ID,
+        base_url="https://api.example.test",
+        transport=transport,
+    )
+    result = lemma.debug_smoke_test()
+
+    assert result["ok"] is True
+    assert result["config"]["apiKeySuffix"] == "...5678"
+    assert result["ingest"]["status"] == 201
+    assert result["ingest"]["responseHeaders"]["cf-ray"] == "ray-smoke"
+    assert calls["ingest"] == 1
+    assert calls["has_ready"] == 3
+
+
+def test_debug_smoke_test_not_ok_when_has_ready_fails(monkeypatch):
+    def transport(url, headers, body):
+        return 201, "{}", {"cf-ray": "ray-smoke"}
+
+    def fake_get(url, headers):
+        return 503, "nope", {}
+
+    monkeypatch.setattr(Lemma, "_urllib_get", staticmethod(fake_get))
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    result = lemma.debug_smoke_test()
+    assert result["ok"] is False
+    assert "has-ready check failed after ingest (status/network)" in result["hints"]
+
+
+def test_debug_verify_polls_only_when_debug_mode_enabled(monkeypatch, capsys):
+    enable_debug_mode()
+    os.environ["LEMMA_DEBUG_VERIFY"] = "true"
+    calls = {"has_ready": 0}
+
+    def transport(url, headers, body):
+        return 201, "{}"
+
+    def fake_get(url, headers):
+        calls["has_ready"] += 1
+        return 200, '{"has_ready_traces": true}', {}
+
+    monkeypatch.setattr(Lemma, "_urllib_get", staticmethod(fake_get))
+    try:
+        lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+        lemma.trace("verify-path", lambda _trace: "ok")
+        assert calls["has_ready"] == 1
+        assert "traces visible in dashboard" in capsys.readouterr().out
+    finally:
+        disable_debug_mode()
+        os.environ.pop("LEMMA_DEBUG_VERIFY", None)
+
+
+def test_debug_verify_alone_does_not_poll(monkeypatch):
+    os.environ["LEMMA_DEBUG_VERIFY"] = "true"
+    calls = {"has_ready": 0}
+
+    def transport(url, headers, body):
+        return 201, "{}"
+
+    def fake_get(url, headers):
+        calls["has_ready"] += 1
+        return 200, '{"has_ready_traces": true}', {}
+
+    monkeypatch.setattr(Lemma, "_urllib_get", staticmethod(fake_get))
+    try:
+        lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+        lemma.trace("no-verify", lambda _trace: "ok")
+        assert calls["has_ready"] == 0
+    finally:
+        os.environ.pop("LEMMA_DEBUG_VERIFY", None)
