@@ -43,8 +43,10 @@ Enable debug mode before creating the Lemma client.
 You can also enable it without code:
 
 ```bash
-export LEMMA_DEBUG="true"
+export LEMMA_DEBUG=1
 ```
+
+`LEMMA_DEBUG=true` is also accepted for backwards compatibility.
 
 After init, debug mode prints a one-time config banner:
 
@@ -115,9 +117,11 @@ If the trace uses a handle, you should see `trace handle created`, then `sending
 After a successful 201, optionally poll the API to confirm the project has ready traces. This requires **both** debug mode and verify:
 
 ```bash
-export LEMMA_DEBUG="true"
-export LEMMA_DEBUG_VERIFY="true"
+export LEMMA_DEBUG=1
+export LEMMA_DEBUG_VERIFY=1
 ```
+
+`true` is also accepted for both flags.
 
 With both enabled, the SDK calls `GET /traces/has-ready?project_id=...` after ingest (polls immediately, then waits briefly and retries once if still false) and logs one of:
 
@@ -149,7 +153,7 @@ Use the first missing log line to narrow the problem.
 
 | What you see | What it means | What to check |
 | --- | --- | --- |
-| No Lemma logs | Debug mode is not enabled in this process, or this code path is not running | Set `LEMMA_DEBUG=true` in the runtime that serves traffic |
+| No Lemma logs | Debug mode is not enabled in this process, or this code path is not running | Set `LEMMA_DEBUG=1` in the runtime that serves traffic |
 | `trace started`, but no `sending trace` | The callback did not finish, or the trace handle was never flushed/ended | Await `lemma.trace(...)`, call `trace.end(...)`, and check thrown errors |
 | `sending trace`, then `trace ingest failed` | The SDK reached the endpoint, but ingest rejected the request | Check status code, `hint` field, API key, project ID, `baseUrl`, and network policy |
 | `trace sent`, but the dashboard looks wrong | Delivery worked; the issue is likely trace shape | Compare `spanCount` (`span_count` in Python), tool/generation calls, and the [trace contract](/reference/trace-contract) |

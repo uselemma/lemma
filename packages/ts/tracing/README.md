@@ -325,7 +325,7 @@ import { enableDebugMode } from "@uselemma/tracing";
 enableDebugMode();
 ```
 
-You can also set `LEMMA_DEBUG=true`. Use this when validating that spans arrive
+You can also set `LEMMA_DEBUG=1` (`true` also works). Use this when validating that spans arrive
 in the expected order, parent IDs are attached, and the SDK is sending to the
 right URL.
 

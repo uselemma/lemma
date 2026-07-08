@@ -36,8 +36,10 @@ lemma = Lemma()
 Environment:
 
 ```bash
-LEMMA_DEBUG=true
+LEMMA_DEBUG=1
 ```
+
+`LEMMA_DEBUG=true` is also accepted for backwards compatibility.
 
 Make sure the variable is set in the same runtime that serves traffic. In Next.js, serverless, workers, queues, and job processors, local shell variables often do not apply to the deployed process.
 

@@ -31,12 +31,16 @@ class TestDebugMode:
         disable_debug_mode()
         assert is_debug_mode_enabled() is False
 
-    def test_env_var_activates(self):
+    def test_env_var_1_activates(self):
+        os.environ["LEMMA_DEBUG"] = "1"
+        assert is_debug_mode_enabled() is True
+
+    def test_env_var_true_activates(self):
         os.environ["LEMMA_DEBUG"] = "true"
         assert is_debug_mode_enabled() is True
 
     def test_env_var_other_value_does_not_activate(self):
-        os.environ["LEMMA_DEBUG"] = "1"
+        os.environ["LEMMA_DEBUG"] = "yes"
         assert is_debug_mode_enabled() is False
 
     def test_lemma_debug_logs_when_enabled(self, capsys):
@@ -57,9 +61,23 @@ class TestDebugMode:
         out = capsys.readouterr().out
         assert out == ""
 
-    def test_debug_verify_enabled_via_env(self):
+    def test_debug_verify_enabled_via_1(self):
+        os.environ["LEMMA_DEBUG_VERIFY"] = "1"
+        from uselemma_tracing.debug_mode import is_debug_verify_enabled
+
+        assert is_debug_verify_enabled() is True
+        os.environ.pop("LEMMA_DEBUG_VERIFY", None)
+
+    def test_debug_verify_enabled_via_true(self):
         os.environ["LEMMA_DEBUG_VERIFY"] = "true"
         from uselemma_tracing.debug_mode import is_debug_verify_enabled
 
         assert is_debug_verify_enabled() is True
+        os.environ.pop("LEMMA_DEBUG_VERIFY", None)
+
+    def test_debug_verify_other_value_does_not_activate(self):
+        os.environ["LEMMA_DEBUG_VERIFY"] = "yes"
+        from uselemma_tracing.debug_mode import is_debug_verify_enabled
+
+        assert is_debug_verify_enabled() is False
         os.environ.pop("LEMMA_DEBUG_VERIFY", None)
