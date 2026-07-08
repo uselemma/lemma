@@ -741,16 +741,19 @@ class TraceContext:
 
 
 class Lemma:
-    _config_logged = False
-
     def __init__(
         self,
         *,
         api_key: str | None = None,
         project_id: str | None = None,
         base_url: str = "https://api.uselemma.ai",
-        transport: Callable[[str, dict[str, str], bytes], tuple[int, str]]
-        | None = None,
+        transport: (
+            Callable[
+                [str, dict[str, str], bytes],
+                tuple[int, str] | tuple[int, str, dict[str, str]],
+            ]
+            | None
+        ) = None,
     ) -> None:
         self.api_key = api_key or os.environ.get("LEMMA_API_KEY")
         self.project_id = project_id or os.environ.get("LEMMA_PROJECT_ID")
@@ -760,10 +763,16 @@ class Lemma:
             raise ValueError("uselemma-tracing: Missing LEMMA_PROJECT_ID")
         self.base_url = base_url.rstrip("/")
         self._last_response_headers: dict[str, str] = {}
+        self._config_logged = False
         self.transport = self._wrap_transport(transport or self._urllib_transport)
         self._log_init_config_once()
 
     def debug_smoke_test(self) -> dict[str, Any]:
+        """Run a one-call delivery diagnostic.
+
+        ``hasReadyBefore`` / ``hasReadyAfter`` reflect whether the project has
+        any ready traces (not whether this specific smoke trace is queryable).
+        """
         config_warnings = build_config_warnings(self.base_url, self.project_id or "")
         hints = list(config_warnings)
         config = {
@@ -842,8 +851,7 @@ class Lemma:
                 "hints": hints,
             }
 
-        time.sleep(5)
-        has_ready_after = self._fetch_has_ready_traces()
+        has_ready_after = self._poll_has_ready_traces()
         if has_ready_after is None:
             hints.append("has-ready check failed after ingest (status/network)")
         elif not has_ready_after:
@@ -852,7 +860,7 @@ class Lemma:
             )
 
         return {
-            "ok": status == EXPECTED_INGEST_SUCCESS_STATUS and has_ready_after is not False,
+            "ok": status == EXPECTED_INGEST_SUCCESS_STATUS and has_ready_after is True,
             "config": config,
             "ingest": ingest,
             "hasReadyBefore": has_ready_before,
@@ -1018,28 +1026,31 @@ class Lemma:
             **response_headers,
             **({"warnings": sent_warnings} if sent_warnings else {}),
         )
-        if is_debug_verify_enabled():
+        if is_debug_mode_enabled() and is_debug_verify_enabled():
             self._verify_ingest_delivery()
 
     def _log_init_config_once(self) -> None:
-        if not is_debug_mode_enabled() or Lemma._config_logged:
+        if not is_debug_mode_enabled() or self._config_logged:
             return
-        Lemma._config_logged = True
+        self._config_logged = True
         warnings = build_config_warnings(self.base_url, self.project_id or "")
         _lemma_debug(
             "client",
             "initialized",
-            base_url=self.base_url,
-            project_id=self.project_id,
-            api_key=api_key_suffix(self.api_key or ""),
-            ingest_path=INGEST_PATH,
-            expected_success_status=EXPECTED_INGEST_SUCCESS_STATUS,
+            baseUrl=self.base_url,
+            projectId=self.project_id,
+            apiKey=api_key_suffix(self.api_key or ""),
+            ingestPath=INGEST_PATH,
+            expectedSuccessStatus=EXPECTED_INGEST_SUCCESS_STATUS,
             **({"warnings": warnings} if warnings else {}),
         )
 
     def _wrap_transport(
         self,
-        transport: Callable[[str, dict[str, str], bytes], tuple[int, str]],
+        transport: Callable[
+            [str, dict[str, str], bytes],
+            tuple[int, str] | tuple[int, str, dict[str, str]],
+        ],
     ) -> Callable[[str, dict[str, str], bytes], tuple[int, str]]:
         def wrapped(
             url: str, headers: dict[str, str], body: bytes
@@ -1059,7 +1070,7 @@ class Lemma:
             f"?project_id={urllib.request.quote(self.project_id or '')}"
         )
         try:
-            status, text, headers = self._urllib_get(
+            status, text, _headers = self._urllib_get(
                 url,
                 {"Authorization": f"Bearer {self.api_key}"},
             )
@@ -1070,30 +1081,23 @@ class Lemma:
         except (OSError, json.JSONDecodeError, ValueError):
             return None
 
-    def _verify_ingest_delivery(self) -> None:
+    def _poll_has_ready_traces(self) -> bool | None:
+        """Poll immediately; if false, wait briefly and retry once."""
         first = self._fetch_has_ready_traces()
-        if first is None:
-            _lemma_debug(
-                "verify",
-                "ingest accepted (201), has-ready check failed (status/network)",
-            )
-            return
-        if first:
-            _lemma_debug(
-                "verify",
-                "ingest accepted (201), traces visible in dashboard",
-            )
-            return
-
+        if first is not False:
+            return first
         time.sleep(5)
-        second = self._fetch_has_ready_traces()
-        if second is None:
+        return self._fetch_has_ready_traces()
+
+    def _verify_ingest_delivery(self) -> None:
+        result = self._poll_has_ready_traces()
+        if result is None:
             _lemma_debug(
                 "verify",
                 "ingest accepted (201), has-ready check failed (status/network)",
             )
             return
-        if second:
+        if result:
             _lemma_debug(
                 "verify",
                 "ingest accepted (201), traces visible in dashboard",

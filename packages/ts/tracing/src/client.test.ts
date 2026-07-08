@@ -695,18 +695,20 @@ describe("Lemma", () => {
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     enableDebugMode();
     try {
-      (Lemma as unknown as { configLogged: boolean }).configLogged = false;
-      new Lemma({
+      const lemma = new Lemma({
         apiKey: "sk_test_12345678",
         projectId: "10000000-0000-0000-0000-000000000001",
         baseUrl: "http://localhost:8000",
       });
+      // Second construct on a different instance still logs (per-instance banner).
       new Lemma({
         apiKey: "sk_test_12345678",
         projectId: "10000000-0000-0000-0000-000000000001",
       });
+      // Same instance does not re-log.
+      (lemma as unknown as { logInitConfigOnce: () => void }).logInitConfigOnce();
 
-      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledTimes(2);
       expect(spy.mock.calls[0]?.[1]).toMatchObject({
         baseUrl: "http://localhost:8000",
         projectId: "10000000-0000-0000-0000-000000000001",
@@ -719,7 +721,6 @@ describe("Lemma", () => {
       });
     } finally {
       disableDebugMode();
-      (Lemma as unknown as { configLogged: boolean }).configLogged = false;
       spy.mockRestore();
     }
   });
@@ -762,10 +763,14 @@ describe("Lemma", () => {
 
   it("debugSmokeTest returns structured delivery diagnostics", async () => {
     vi.useFakeTimers();
+    let hasReadyCalls = 0;
     const fetchMock = vi.fn(async (url: string | URL | Request) => {
       const href = typeof url === "string" ? url : url.toString();
       if (href.includes("/traces/has-ready")) {
-        return new Response(JSON.stringify({ has_ready_traces: true }), {
+        hasReadyCalls += 1;
+        // First post-ingest poll is false so smoke waits and retries.
+        const ready = hasReadyCalls !== 2;
+        return new Response(JSON.stringify({ has_ready_traces: ready }), {
           status: 200,
         });
       }
@@ -798,6 +803,103 @@ describe("Lemma", () => {
     });
     expect(result.hasReadyBefore).toBe(true);
     expect(result.hasReadyAfter).toBe(true);
+    expect(hasReadyCalls).toBe(3); // before + false after + retry
     vi.useRealTimers();
+  });
+
+  it("debugSmokeTest is not ok when has-ready check fails after ingest", async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const href = typeof url === "string" ? url : url.toString();
+      if (href.includes("/traces/has-ready")) {
+        return new Response("nope", { status: 503 });
+      }
+      return new Response("{}", {
+        status: 201,
+        headers: { "cf-ray": "ray-smoke" },
+      });
+    });
+    const lemma = new Lemma({
+      apiKey: "sk_test_12345678",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const result = await lemma.debugSmokeTest();
+    expect(result.ok).toBe(false);
+    expect(result.hints).toEqual(
+      expect.arrayContaining([
+        "has-ready check failed after ingest (status/network)",
+      ]),
+    );
+  });
+
+  it("LEMMA_DEBUG_VERIFY polls has-ready only when debug mode is also on", async () => {
+    vi.useFakeTimers();
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    enableDebugMode();
+    process.env["LEMMA_DEBUG_VERIFY"] = "true";
+
+    let hasReadyCalls = 0;
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const href = typeof url === "string" ? url : url.toString();
+      if (href.includes("/traces/has-ready")) {
+        hasReadyCalls += 1;
+        return new Response(JSON.stringify({ has_ready_traces: true }), {
+          status: 200,
+        });
+      }
+      return new Response("{}", { status: 201 });
+    });
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    try {
+      const pending = lemma.trace({ name: "verify-path" }, async () => "ok");
+      await vi.runAllTimersAsync();
+      await pending;
+      expect(hasReadyCalls).toBe(1);
+      expect(
+        spy.mock.calls.some((call) =>
+          String(call[0]).includes("traces visible in dashboard"),
+        ),
+      ).toBe(true);
+    } finally {
+      disableDebugMode();
+      delete process.env["LEMMA_DEBUG_VERIFY"];
+      spy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("LEMMA_DEBUG_VERIFY alone does not poll has-ready", async () => {
+    process.env["LEMMA_DEBUG_VERIFY"] = "true";
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const href = typeof url === "string" ? url : url.toString();
+      if (href.includes("/traces/has-ready")) {
+        throw new Error("should not poll without debug mode");
+      }
+      return new Response("{}", { status: 201 });
+    });
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    try {
+      await lemma.trace({ name: "no-verify" }, async () => "ok");
+      expect(
+        fetchMock.mock.calls.every((call) => {
+          const href =
+            typeof call[0] === "string" ? call[0] : String(call[0]);
+          return !href.includes("/traces/has-ready");
+        }),
+      ).toBe(true);
+    } finally {
+      delete process.env["LEMMA_DEBUG_VERIFY"];
+    }
   });
 });

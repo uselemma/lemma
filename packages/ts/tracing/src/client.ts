@@ -812,13 +812,12 @@ export class TraceHandle extends TraceContext {
 }
 
 export class Lemma {
-  private static configLogged = false;
-
   private readonly apiKey: string;
   private readonly projectId: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly traces = new Map<string, TraceHandle>();
+  private configLogged = false;
 
   constructor(options: LemmaClientOptions = {}) {
     this.apiKey = required(
@@ -839,7 +838,10 @@ export class Lemma {
 
   /**
    * Run a one-call delivery diagnostic: config check, has-ready snapshot,
-   * minimal ingest, and optional post-ingest visibility poll.
+   * minimal ingest, and post-ingest visibility poll.
+   *
+   * `hasReadyBefore` / `hasReadyAfter` reflect whether the project has any
+   * ready traces (not whether this specific smoke trace is queryable yet).
    */
   async debugSmokeTest(): Promise<DebugSmokeTestResult> {
     const configWarnings = buildConfigWarnings(this.baseUrl, this.projectId);
@@ -928,8 +930,7 @@ export class Lemma {
       };
     }
 
-    await sleep(5000);
-    const hasReadyAfter = await this.fetchHasReadyTraces();
+    const hasReadyAfter = await this.pollHasReadyTraces();
     if (hasReadyAfter === null) {
       hints.push("has-ready check failed after ingest (status/network)");
     } else if (!hasReadyAfter) {
@@ -941,7 +942,7 @@ export class Lemma {
     return {
       ok:
         response.status === EXPECTED_INGEST_SUCCESS_STATUS &&
-        hasReadyAfter !== false,
+        hasReadyAfter === true,
       config,
       ingest,
       hasReadyBefore: hasReadyBefore ?? undefined,
@@ -1198,8 +1199,8 @@ export class Lemma {
   }
 
   private logInitConfigOnce(): void {
-    if (!isDebugModeEnabled() || Lemma.configLogged) return;
-    Lemma.configLogged = true;
+    if (!isDebugModeEnabled() || this.configLogged) return;
+    this.configLogged = true;
     const warnings = buildConfigWarnings(this.baseUrl, this.projectId);
     lemmaDebug("client", "initialized", {
       baseUrl: this.baseUrl,
@@ -1228,35 +1229,24 @@ export class Lemma {
     }
   }
 
-  private async verifyIngestDelivery(): Promise<void> {
-    const check = async () => this.fetchHasReadyTraces();
-
-    const first = await check();
-    if (first === null) {
-      lemmaDebug(
-        "verify",
-        "ingest accepted (201), has-ready check failed (status/network)",
-      );
-      return;
-    }
-    if (first) {
-      lemmaDebug(
-        "verify",
-        "ingest accepted (201), traces visible in dashboard",
-      );
-      return;
-    }
-
+  /** Poll immediately; if false, wait briefly and retry once. */
+  private async pollHasReadyTraces(): Promise<boolean | null> {
+    const first = await this.fetchHasReadyTraces();
+    if (first !== false) return first;
     await sleep(5000);
-    const second = await check();
-    if (second === null) {
+    return this.fetchHasReadyTraces();
+  }
+
+  private async verifyIngestDelivery(): Promise<void> {
+    const result = await this.pollHasReadyTraces();
+    if (result === null) {
       lemmaDebug(
         "verify",
         "ingest accepted (201), has-ready check failed (status/network)",
       );
       return;
     }
-    if (second) {
+    if (result) {
       lemmaDebug(
         "verify",
         "ingest accepted (201), traces visible in dashboard",
@@ -1334,7 +1324,7 @@ export class Lemma {
       ...(sentWarnings.length ? { warnings: sentWarnings } : {}),
     });
 
-    if (isDebugVerifyEnabled()) {
+    if (isDebugModeEnabled() && isDebugVerifyEnabled()) {
       await this.verifyIngestDelivery();
     }
   }
