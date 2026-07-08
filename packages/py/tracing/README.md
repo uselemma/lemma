@@ -254,7 +254,7 @@ from uselemma_tracing import enable_debug_mode
 enable_debug_mode()
 ```
 
-You can also set `LEMMA_DEBUG=true`. Use this when validating that spans are
+You can also set `LEMMA_DEBUG=1` (`true` also works). Use this when validating that spans are
 created in the expected order and the SDK is sending to the intended URL.
 
 ## License

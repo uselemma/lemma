@@ -48,7 +48,7 @@ This page is organized by **symptom**. Most issues are trace-shape problems: the
 - Confirm your runtime can reach `https://api.uselemma.ai`.
 - Pass `baseUrl` / `base_url` only when using a self-hosted or staging endpoint.
 
-**Debug with Debug mode:** enable `LEMMA_DEBUG=true` and run the smoke test again. If you do not see SDK logs, the traced code path is not running in that process. If you see an ingest failure, check the status code, credentials, project ID, and `baseUrl`.
+**Debug with Debug mode:** enable `LEMMA_DEBUG=1` and run the smoke test again. If you do not see SDK logs, the traced code path is not running in that process. If you see an ingest failure, check the status code, credentials, project ID, and `baseUrl`.
 
 ## Every span appears as a separate trace
 

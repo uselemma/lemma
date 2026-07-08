@@ -1,5 +1,11 @@
 let debugModeEnabled = false;
 
+/** Accepts `"1"` (preferred) and `"true"` (backwards compatible). Case-sensitive. */
+function isEnvFlagEnabled(name: string): boolean {
+  const value = process.env[name];
+  return value === "1" || value === "true";
+}
+
 export function enableDebugMode(): void {
   debugModeEnabled = true;
 }
@@ -9,11 +15,11 @@ export function disableDebugMode(): void {
 }
 
 export function isDebugModeEnabled(): boolean {
-  return debugModeEnabled || process.env["LEMMA_DEBUG"] === "true";
+  return debugModeEnabled || isEnvFlagEnabled("LEMMA_DEBUG");
 }
 
 export function isDebugVerifyEnabled(): boolean {
-  return process.env["LEMMA_DEBUG_VERIFY"] === "true";
+  return isEnvFlagEnabled("LEMMA_DEBUG_VERIFY");
 }
 
 export function lemmaDebug(prefix: string, msg: string, data?: Record<string, unknown>): void {

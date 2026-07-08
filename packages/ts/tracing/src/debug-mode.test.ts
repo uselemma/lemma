@@ -35,19 +35,34 @@ describe("debug-mode", () => {
     expect(isDebugModeEnabled()).toBe(false);
   });
 
-  it("LEMMA_DEBUG=true env var activates it", () => {
+  it("LEMMA_DEBUG=1 env var activates it", () => {
+    process.env["LEMMA_DEBUG"] = "1";
+    expect(isDebugModeEnabled()).toBe(true);
+  });
+
+  it("LEMMA_DEBUG=true env var activates it (backwards compatible)", () => {
     process.env["LEMMA_DEBUG"] = "true";
     expect(isDebugModeEnabled()).toBe(true);
   });
 
   it("LEMMA_DEBUG with other value does not activate", () => {
-    process.env["LEMMA_DEBUG"] = "1";
+    process.env["LEMMA_DEBUG"] = "yes";
     expect(isDebugModeEnabled()).toBe(false);
   });
 
-  it("LEMMA_DEBUG_VERIFY=true activates verify mode", () => {
+  it("LEMMA_DEBUG_VERIFY=1 activates verify mode", () => {
+    process.env["LEMMA_DEBUG_VERIFY"] = "1";
+    expect(isDebugVerifyEnabled()).toBe(true);
+  });
+
+  it("LEMMA_DEBUG_VERIFY=true activates verify mode (backwards compatible)", () => {
     process.env["LEMMA_DEBUG_VERIFY"] = "true";
     expect(isDebugVerifyEnabled()).toBe(true);
+  });
+
+  it("LEMMA_DEBUG_VERIFY with other value does not activate", () => {
+    process.env["LEMMA_DEBUG_VERIFY"] = "yes";
+    expect(isDebugVerifyEnabled()).toBe(false);
   });
 
   it("lemmaDebug logs when enabled", () => {

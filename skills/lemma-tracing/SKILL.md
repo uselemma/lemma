@@ -124,8 +124,10 @@ const lemma = new Lemma();
 or:
 
 ```bash
-LEMMA_DEBUG=true
+LEMMA_DEBUG=1
 ```
+
+(`LEMMA_DEBUG=true` also works.)
 
 Expected successful sequence:
 
