@@ -8,6 +8,7 @@ from .debug_mode import (
     disable_debug_mode,
     enable_debug_mode,
     is_debug_mode_enabled,
+    is_debug_verify_enabled,
 )
 from .openai_agents import (
     LemmaOpenAIAgentsProcessor,
@@ -27,6 +28,7 @@ __all__ = [
     "enable_debug_mode",
     "disable_debug_mode",
     "is_debug_mode_enabled",
+    "is_debug_verify_enabled",
     "LemmaOpenAIAgentsProcessor",
     "openai_agents",
     "instrument_openai_agents",

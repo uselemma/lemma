@@ -46,9 +46,41 @@ You can also enable it without code:
 export LEMMA_DEBUG="true"
 ```
 
+After init, debug mode prints a one-time config banner:
+
+```text
+[LEMMA:client] initialized
+  baseUrl: https://api.uselemma.ai
+  projectId: <your-project-id>
+  apiKey: <your-api-key>
+  ingestPath: /traces/ingest
+  expectedSuccessStatus: 201
+```
+
+If `baseUrl` is not production, `projectId` is not a valid UUID, or the ingest path differs, the banner includes `warnings`.
+
 ## Run a smoke test
 
-Run one minimal trace from the same runtime that serves production traffic:
+Use `debugSmokeTest()` for a one-call delivery checklist you can paste into support:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const result = await lemma.debugSmokeTest();
+    console.log(result);
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    result = lemma.debug_smoke_test()
+    print(result)
+    ```
+  </Tab>
+</Tabs>
+
+The result includes config warnings, ingest status, response headers (`cf-ray`, `server`), and optional `hasReadyBefore` / `hasReadyAfter` snapshots.
+
+You can also run one minimal trace manually from the same runtime that serves production traffic:
 
 <Tabs>
   <Tab title="TypeScript">
@@ -66,12 +98,47 @@ Run one minimal trace from the same runtime that serves production traffic:
 For a successful trace, look for this sequence:
 
 ```text
+[LEMMA:client] initialized
 [LEMMA:client] trace started
 [LEMMA:client] sending trace
 [LEMMA:client] trace sent
 ```
 
+`sending trace` now includes `projectId`, `bodyBytes`, and `requestedAt`. `trace sent` includes response headers (`cf-ray`, `server`, `date`) and warns when `status !== 201`.
+
 If the trace uses a handle, you should see `trace handle created`, then `sending trace` when the handle flushes or ends.
+
+## Verify dashboard visibility
+
+After a successful 201, optionally poll the API to confirm traces are visible:
+
+```bash
+export LEMMA_DEBUG_VERIFY="true"
+```
+
+With verify enabled, the SDK calls `GET /traces/has-ready?project_id=...` after ingest and logs one of:
+
+```text
+[LEMMA:verify] ingest accepted (201), traces visible in dashboard
+[LEMMA:verify] ingest accepted (201), but has_ready_traces=false — may be processing lag or downstream issue
+[LEMMA:verify] ingest accepted (201), has-ready check failed (status/network)
+```
+
+## Confirming delivery reached Lemma
+
+| SDK log | Server-side (Dash0) | Meaning |
+| --- | --- | --- |
+| `trace sent` status 201 | `otlp.ingest.received` → `enqueued` | Full success |
+| `trace sent` status 201 | No `otlp.ingest.*` logs | Not hitting Lemma production — wrong URL or proxy |
+| `trace sent` status 200 | — | Wrong endpoint (`/otel/v1/traces` or mock) |
+| `trace sent` status 201 | `received` but no `enqueued` | Worker-side failure after accept |
+| `trace sent` status 201 | `enqueued` but `has_ready=false` | Downstream pipeline lag or failure |
+
+Support bundle to request from customers:
+
+- `projectId`, `traceId`, ingest `url`, HTTP `status`
+- Response headers (`cf-ray`, `server`, `date`)
+- Timestamp from `requestedAt` in the `sending trace` log
 
 ## Read the logs
 
@@ -81,7 +148,7 @@ Use the first missing log line to narrow the problem.
 | --- | --- | --- |
 | No Lemma logs | Debug mode is not enabled in this process, or this code path is not running | Set `LEMMA_DEBUG=true` in the runtime that serves traffic |
 | `trace started`, but no `sending trace` | The callback did not finish, or the trace handle was never flushed/ended | Await `lemma.trace(...)`, call `trace.end(...)`, and check thrown errors |
-| `sending trace`, then `trace ingest failed` | The SDK reached the endpoint, but ingest rejected the request | Check status code, API key, project ID, `baseUrl`, and network policy |
+| `sending trace`, then `trace ingest failed` | The SDK reached the endpoint, but ingest rejected the request | Check status code, `hint` field, API key, project ID, `baseUrl`, and network policy |
 | `trace sent`, but the dashboard looks wrong | Delivery worked; the issue is likely trace shape | Compare `spanCount` (`span_count` in Python), tool/generation calls, and the [trace contract](/reference/trace-contract) |
 
 ## Debug common issues
@@ -95,6 +162,7 @@ If it logs `trace ingest failed`, check:
 - `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` are from the same project.
 - `baseUrl` / `base_url` points at a server that implements `POST /traces/ingest`.
 - Your runtime can make outbound HTTPS requests.
+- The `hint` field on `trace ingest failed` (401 → API key, 403 → project mismatch, 429 → rate limit, 404 → wrong host).
 
 ### Missing tools or generations
 

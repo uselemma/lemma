@@ -376,3 +376,58 @@ async def test_lemma_async_trace_posts_completed_trace():
     assert calls[0]["trace"]["name"] == "async-agent"
     assert calls[0]["trace"]["output"] == "hello"
     assert calls[0]["trace"]["spans"][0]["type"] == "generation"
+
+
+def test_debug_mode_logs_init_config_once(capsys):
+    Lemma._config_logged = False
+    enable_debug_mode()
+    try:
+        Lemma(
+            api_key="sk_test_12345678",
+            project_id=PROJECT_ID,
+            base_url="http://localhost:8000",
+            transport=lambda *_args: (201, "{}"),
+        )
+        Lemma(
+            api_key="sk_test_12345678",
+            project_id=PROJECT_ID,
+            transport=lambda *_args: (201, "{}"),
+        )
+        output = capsys.readouterr().out
+        assert output.count("[LEMMA:client] initialized") == 1
+        assert "http://localhost:8000" in output
+        assert "...5678" in output
+    finally:
+        disable_debug_mode()
+        Lemma._config_logged = False
+
+
+def test_debug_smoke_test_returns_structured_diagnostics(monkeypatch):
+    calls = {"has_ready": 0, "ingest": 0}
+
+    def transport(url, headers, body):
+        calls["ingest"] += 1
+        assert url.endswith("/traces/ingest")
+        return 201, "{}", {"cf-ray": "ray-smoke", "server": "cloudflare"}
+
+    def fake_get(url, headers):
+        calls["has_ready"] += 1
+        return 200, '{"has_ready_traces": true}', {}
+
+    monkeypatch.setattr(Lemma, "_urllib_get", staticmethod(fake_get))
+    monkeypatch.setattr("uselemma_tracing.client.time.sleep", lambda _seconds: None)
+
+    lemma = Lemma(
+        api_key="sk_test_12345678",
+        project_id=PROJECT_ID,
+        base_url="https://api.example.test",
+        transport=transport,
+    )
+    result = lemma.debug_smoke_test()
+
+    assert result["ok"] is True
+    assert result["config"]["apiKeySuffix"] == "...5678"
+    assert result["ingest"]["status"] == 201
+    assert result["ingest"]["responseHeaders"]["cf-ray"] == "ray-smoke"
+    assert calls["ingest"] == 1
+    assert calls["has_ready"] == 2

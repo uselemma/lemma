@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  enableDebugMode,
   disableDebugMode,
+  enableDebugMode,
   isDebugModeEnabled,
+  isDebugVerifyEnabled,
   lemmaDebug,
 } from "./debug-mode";
 
@@ -10,11 +11,13 @@ describe("debug-mode", () => {
   beforeEach(() => {
     disableDebugMode();
     delete process.env["LEMMA_DEBUG"];
+    delete process.env["LEMMA_DEBUG_VERIFY"];
   });
 
   afterEach(() => {
     disableDebugMode();
     delete process.env["LEMMA_DEBUG"];
+    delete process.env["LEMMA_DEBUG_VERIFY"];
   });
 
   it("is disabled by default", () => {
@@ -40,6 +43,11 @@ describe("debug-mode", () => {
   it("LEMMA_DEBUG with other value does not activate", () => {
     process.env["LEMMA_DEBUG"] = "1";
     expect(isDebugModeEnabled()).toBe(false);
+  });
+
+  it("LEMMA_DEBUG_VERIFY=true activates verify mode", () => {
+    process.env["LEMMA_DEBUG_VERIFY"] = "true";
+    expect(isDebugVerifyEnabled()).toBe(true);
   });
 
   it("lemmaDebug logs when enabled", () => {

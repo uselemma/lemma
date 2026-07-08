@@ -12,6 +12,10 @@ export function isDebugModeEnabled(): boolean {
   return debugModeEnabled || process.env["LEMMA_DEBUG"] === "true";
 }
 
+export function isDebugVerifyEnabled(): boolean {
+  return process.env["LEMMA_DEBUG_VERIFY"] === "true";
+}
+
 export function lemmaDebug(prefix: string, msg: string, data?: Record<string, unknown>): void {
   if (!isDebugModeEnabled()) return;
   if (data !== undefined) {

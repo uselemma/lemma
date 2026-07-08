@@ -690,4 +690,114 @@ describe("Lemma", () => {
       spy.mockRestore();
     }
   });
+
+  it("logs init config once when debug mode is enabled", () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    enableDebugMode();
+    try {
+      (Lemma as unknown as { configLogged: boolean }).configLogged = false;
+      new Lemma({
+        apiKey: "sk_test_12345678",
+        projectId: "10000000-0000-0000-0000-000000000001",
+        baseUrl: "http://localhost:8000",
+      });
+      new Lemma({
+        apiKey: "sk_test_12345678",
+        projectId: "10000000-0000-0000-0000-000000000001",
+      });
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0]?.[1]).toMatchObject({
+        baseUrl: "http://localhost:8000",
+        projectId: "10000000-0000-0000-0000-000000000001",
+        apiKey: "...5678",
+        ingestPath: "/traces/ingest",
+        expectedSuccessStatus: 201,
+        warnings: expect.arrayContaining([
+          "baseUrl is not production (https://api.uselemma.ai)",
+        ]),
+      });
+    } finally {
+      disableDebugMode();
+      (Lemma as unknown as { configLogged: boolean }).configLogged = false;
+      spy.mockRestore();
+    }
+  });
+
+  it("logs ingest failure hints and response headers in debug mode", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    enableDebugMode();
+    const fetchMock = vi.fn(async () =>
+      new Response("rate limited", {
+        status: 429,
+        headers: { "cf-ray": "ray-429", server: "cloudflare" },
+      }),
+    );
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    try {
+      await expect(
+        lemma.trace({ name: "support-agent" }, async () => "ok"),
+      ).rejects.toThrow("failed to ingest trace (429)");
+
+      const failedLog = spy.mock.calls.find((call) =>
+        String(call[0]).includes("trace ingest failed"),
+      );
+      expect(failedLog?.[1]).toMatchObject({
+        status: 429,
+        hint: "ingest rate limit exceeded; retry with backoff",
+        "cf-ray": "ray-429",
+        server: "cloudflare",
+        projectId: "10000000-0000-0000-0000-000000000001",
+      });
+    } finally {
+      disableDebugMode();
+      spy.mockRestore();
+    }
+  });
+
+  it("debugSmokeTest returns structured delivery diagnostics", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const href = typeof url === "string" ? url : url.toString();
+      if (href.includes("/traces/has-ready")) {
+        return new Response(JSON.stringify({ has_ready_traces: true }), {
+          status: 200,
+        });
+      }
+      return new Response("{}", {
+        status: 201,
+        headers: { "cf-ray": "ray-smoke", server: "cloudflare" },
+      });
+    });
+    const lemma = new Lemma({
+      apiKey: "sk_test_12345678",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      baseUrl: "https://api.example.test",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const pending = lemma.debugSmokeTest();
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result.ok).toBe(true);
+    expect(result.config).toMatchObject({
+      baseUrl: "https://api.example.test",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      apiKeySuffix: "...5678",
+    });
+    expect(result.ingest).toMatchObject({
+      status: 201,
+      projectId: "10000000-0000-0000-0000-000000000001",
+      responseHeaders: { "cf-ray": "ray-smoke", server: "cloudflare" },
+    });
+    expect(result.hasReadyBefore).toBe(true);
+    expect(result.hasReadyAfter).toBe(true);
+    vi.useRealTimers();
+  });
 });

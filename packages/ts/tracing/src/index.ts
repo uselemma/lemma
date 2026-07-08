@@ -14,11 +14,13 @@ export {
   type ToolOptions,
   type TraceEndOptions,
   type TraceOptions,
+  type DebugSmokeTestResult,
 } from "./client";
 export {
   disableDebugMode,
   enableDebugMode,
   isDebugModeEnabled,
+  isDebugVerifyEnabled,
   lemmaDebug,
 } from "./debug-mode";
 export {
