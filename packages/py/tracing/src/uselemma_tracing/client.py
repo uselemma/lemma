@@ -14,9 +14,14 @@ from typing import Any, Callable, Literal, TypeVar
 from .debug_delivery import (
     EXPECTED_INGEST_SUCCESS_STATUS,
     INGEST_PATH,
+    INGEST_STATUS_PATH,
+    INGEST_STATUS_POLL_INTERVAL_SECONDS,
+    INGEST_STATUS_POLL_TIMEOUT_SECONDS,
     api_key_suffix,
     build_config_warnings,
     ingest_failure_hint,
+    is_successful_ingest_status,
+    parse_ingest_status,
     pick_response_headers,
 )
 from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_enabled
@@ -770,8 +775,8 @@ class Lemma:
     def debug_smoke_test(self) -> dict[str, Any]:
         """Run a one-call delivery diagnostic.
 
-        ``hasReadyBefore`` / ``hasReadyAfter`` reflect whether the project has
-        any ready traces (not whether this specific smoke trace is queryable).
+        Polls per-trace ``/traces/ingest-status`` after ingest (enqueued /
+        ingested / ready), not project-level has-ready.
         """
         config_warnings = build_config_warnings(self.base_url, self.project_id or "")
         hints = list(config_warnings)
@@ -783,10 +788,6 @@ class Lemma:
             "expectedSuccessStatus": EXPECTED_INGEST_SUCCESS_STATUS,
             "warnings": config_warnings,
         }
-
-        has_ready_before = self._fetch_has_ready_traces()
-        if has_ready_before is None:
-            hints.append("has-ready check failed before ingest (status/network)")
 
         trace_id = str(uuid.uuid4())
         ctx = TraceContext(
@@ -814,7 +815,6 @@ class Lemma:
             return {
                 "ok": False,
                 "config": config,
-                "hasReadyBefore": has_ready_before,
                 "hints": hints,
             }
 
@@ -847,24 +847,24 @@ class Lemma:
                 "ok": False,
                 "config": config,
                 "ingest": ingest,
-                "hasReadyBefore": has_ready_before,
                 "hints": hints,
             }
 
-        has_ready_after = self._poll_has_ready_traces()
-        if has_ready_after is None:
-            hints.append("has-ready check failed after ingest (status/network)")
-        elif not has_ready_after:
+        ingest_status = self._poll_ingest_status(trace_id)
+        if ingest_status is None:
+            hints.append("ingest-status check failed after ingest (status/network)")
+        elif not is_successful_ingest_status(ingest_status):
             hints.append(
-                "ingest returned 201 but has_ready_traces=false — may be processing lag or downstream issue"
+                "ingest returned 201 but ingest-status=not_found after "
+                f"{int(INGEST_STATUS_POLL_TIMEOUT_SECONDS)}s — may be processing lag or downstream issue"
             )
 
         return {
-            "ok": status == EXPECTED_INGEST_SUCCESS_STATUS and has_ready_after is True,
+            "ok": status == EXPECTED_INGEST_SUCCESS_STATUS
+            and is_successful_ingest_status(ingest_status),
             "config": config,
             "ingest": ingest,
-            "hasReadyBefore": has_ready_before,
-            "hasReadyAfter": has_ready_after,
+            "ingestStatus": ingest_status,
             "hints": hints,
         }
 
@@ -1027,7 +1027,9 @@ class Lemma:
             **({"warnings": sent_warnings} if sent_warnings else {}),
         )
         if is_debug_mode_enabled() and is_debug_verify_enabled():
-            self._verify_ingest_delivery()
+            otel_trace_id = payload["trace"].get("id")
+            if isinstance(otel_trace_id, str) and otel_trace_id:
+                self._verify_ingest_delivery(otel_trace_id)
 
     def _log_init_config_once(self) -> None:
         if not is_debug_mode_enabled() or self._config_logged:
@@ -1064,10 +1066,11 @@ class Lemma:
 
         return wrapped
 
-    def _fetch_has_ready_traces(self) -> bool | None:
+    def _fetch_ingest_status(self, otel_trace_id: str) -> str | None:
         url = (
-            f"{self.base_url}/traces/has-ready"
+            f"{self.base_url}{INGEST_STATUS_PATH}"
             f"?project_id={urllib.request.quote(self.project_id or '')}"
+            f"&otel_trace_id={urllib.request.quote(otel_trace_id)}"
         )
         try:
             status, text, _headers = self._urllib_get(
@@ -1077,35 +1080,43 @@ class Lemma:
             if status < 200 or status >= 300:
                 return None
             data = json.loads(text)
-            return bool(data.get("has_ready_traces", data.get("hasReadyTraces")))
+            return parse_ingest_status(data.get("status"))
         except (OSError, json.JSONDecodeError, ValueError):
             return None
 
-    def _poll_has_ready_traces(self) -> bool | None:
-        """Poll immediately; if false, wait briefly and retry once."""
-        first = self._fetch_has_ready_traces()
-        if first is not False:
-            return first
-        time.sleep(5)
-        return self._fetch_has_ready_traces()
+    def _poll_ingest_status(self, otel_trace_id: str) -> str | None:
+        """Poll immediately, then every 1s until success, hard failure, or 15s."""
+        deadline = time.monotonic() + INGEST_STATUS_POLL_TIMEOUT_SECONDS
+        while True:
+            status = self._fetch_ingest_status(otel_trace_id)
+            if status is None:
+                return None
+            if is_successful_ingest_status(status):
+                return status
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return status
+            time.sleep(min(INGEST_STATUS_POLL_INTERVAL_SECONDS, remaining))
 
-    def _verify_ingest_delivery(self) -> None:
-        result = self._poll_has_ready_traces()
+    def _verify_ingest_delivery(self, otel_trace_id: str) -> None:
+        result = self._poll_ingest_status(otel_trace_id)
         if result is None:
             _lemma_debug(
                 "verify",
-                "ingest accepted (201), has-ready check failed (status/network)",
+                "ingest accepted (201), ingest-status check failed (status/network)",
             )
             return
-        if result:
+        if is_successful_ingest_status(result):
+            label = "enqueued" if result == "enqueued" else f"visible ({result})"
             _lemma_debug(
                 "verify",
-                "ingest accepted (201), traces visible in dashboard",
+                f"ingest accepted (201), trace {label} (status={result})",
             )
             return
         _lemma_debug(
             "verify",
-            "ingest accepted (201), but has_ready_traces=false — may be processing lag or downstream issue",
+            "ingest accepted (201), ingest-status=not_found after "
+            f"{int(INGEST_STATUS_POLL_TIMEOUT_SECONDS)}s — may be processing lag or downstream issue",
         )
 
     @staticmethod

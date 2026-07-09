@@ -2,8 +2,14 @@ import {
   apiKeySuffix,
   buildConfigWarnings,
   EXPECTED_INGEST_SUCCESS_STATUS,
+  type IngestStatus,
   ingestFailureHint,
   INGEST_PATH,
+  INGEST_STATUS_PATH,
+  INGEST_STATUS_POLL_INTERVAL_MS,
+  INGEST_STATUS_POLL_TIMEOUT_MS,
+  isSuccessfulIngestStatus,
+  parseIngestStatus,
   pickResponseHeaders,
   sleep,
 } from "./debug-delivery";
@@ -42,8 +48,8 @@ export type DebugSmokeTestResult = {
     responseHeaders: Record<string, string>;
     warnings: string[];
   };
-  hasReadyBefore?: boolean;
-  hasReadyAfter?: boolean;
+  /** Per-trace ingest pipeline status after the smoke ingest. */
+  ingestStatus?: IngestStatus;
   hints: string[];
 };
 
@@ -837,11 +843,8 @@ export class Lemma {
   }
 
   /**
-   * Run a one-call delivery diagnostic: config check, has-ready snapshot,
-   * minimal ingest, and post-ingest visibility poll.
-   *
-   * `hasReadyBefore` / `hasReadyAfter` reflect whether the project has any
-   * ready traces (not whether this specific smoke trace is queryable yet).
+   * Run a one-call delivery diagnostic: config check, minimal ingest, and
+   * per-trace ingest-status poll (enqueued / ingested / ready).
    */
   async debugSmokeTest(): Promise<DebugSmokeTestResult> {
     const configWarnings = buildConfigWarnings(this.baseUrl, this.projectId);
@@ -854,11 +857,6 @@ export class Lemma {
       expectedSuccessStatus: EXPECTED_INGEST_SUCCESS_STATUS,
       warnings: configWarnings,
     };
-
-    const hasReadyBefore = await this.fetchHasReadyTraces();
-    if (hasReadyBefore === null) {
-      hints.push("has-ready check failed before ingest (status/network)");
-    }
 
     const traceId = crypto.randomUUID();
     const context = new TraceContext({
@@ -892,7 +890,6 @@ export class Lemma {
       return {
         ok: false,
         config,
-        hasReadyBefore: hasReadyBefore ?? undefined,
         hints,
       };
     }
@@ -925,28 +922,26 @@ export class Lemma {
         ok: false,
         config,
         ingest,
-        hasReadyBefore: hasReadyBefore ?? undefined,
         hints,
       };
     }
 
-    const hasReadyAfter = await this.pollHasReadyTraces();
-    if (hasReadyAfter === null) {
-      hints.push("has-ready check failed after ingest (status/network)");
-    } else if (!hasReadyAfter) {
+    const ingestStatus = await this.pollIngestStatus(traceId);
+    if (ingestStatus === null) {
+      hints.push("ingest-status check failed after ingest (status/network)");
+    } else if (!isSuccessfulIngestStatus(ingestStatus)) {
       hints.push(
-        "ingest returned 201 but has_ready_traces=false — may be processing lag or downstream issue",
+        `ingest returned 201 but ingest-status=not_found after ${INGEST_STATUS_POLL_TIMEOUT_MS / 1000}s — may be processing lag or downstream issue`,
       );
     }
 
     return {
       ok:
         response.status === EXPECTED_INGEST_SUCCESS_STATUS &&
-        hasReadyAfter === true,
+        isSuccessfulIngestStatus(ingestStatus),
       config,
       ingest,
-      hasReadyBefore: hasReadyBefore ?? undefined,
-      hasReadyAfter: hasReadyAfter ?? undefined,
+      ingestStatus: ingestStatus ?? undefined,
       hints,
     };
   }
@@ -1212,50 +1207,64 @@ export class Lemma {
     });
   }
 
-  private async fetchHasReadyTraces(): Promise<boolean | null> {
-    const url = `${this.baseUrl}/traces/has-ready?project_id=${encodeURIComponent(this.projectId)}`;
+  private async fetchIngestStatus(
+    otelTraceId: string,
+  ): Promise<IngestStatus | null> {
+    const url =
+      `${this.baseUrl}${INGEST_STATUS_PATH}` +
+      `?project_id=${encodeURIComponent(this.projectId)}` +
+      `&otel_trace_id=${encodeURIComponent(otelTraceId)}`;
     try {
       const response = await this.fetchImpl(url, {
         headers: { Authorization: `Bearer ${this.apiKey}` },
       });
       if (!response.ok) return null;
       const data = (await response.json()) as {
-        has_ready_traces?: boolean;
-        hasReadyTraces?: boolean;
+        status?: unknown;
       };
-      return Boolean(data.has_ready_traces ?? data.hasReadyTraces);
+      return parseIngestStatus(data.status);
     } catch {
       return null;
     }
   }
 
-  /** Poll immediately; if false, wait briefly and retry once. */
-  private async pollHasReadyTraces(): Promise<boolean | null> {
-    const first = await this.fetchHasReadyTraces();
-    if (first !== false) return first;
-    await sleep(5000);
-    return this.fetchHasReadyTraces();
+  /**
+   * Poll ingest-status immediately, then every 1s until success, hard failure,
+   * or the 15s timeout.
+   */
+  private async pollIngestStatus(
+    otelTraceId: string,
+  ): Promise<IngestStatus | null> {
+    const deadline = Date.now() + INGEST_STATUS_POLL_TIMEOUT_MS;
+    for (;;) {
+      const status = await this.fetchIngestStatus(otelTraceId);
+      if (status === null) return null;
+      if (isSuccessfulIngestStatus(status)) return status;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return status;
+      await sleep(Math.min(INGEST_STATUS_POLL_INTERVAL_MS, remaining));
+    }
   }
 
-  private async verifyIngestDelivery(): Promise<void> {
-    const result = await this.pollHasReadyTraces();
+  private async verifyIngestDelivery(otelTraceId: string): Promise<void> {
+    const result = await this.pollIngestStatus(otelTraceId);
     if (result === null) {
       lemmaDebug(
         "verify",
-        "ingest accepted (201), has-ready check failed (status/network)",
+        "ingest accepted (201), ingest-status check failed (status/network)",
       );
       return;
     }
-    if (result) {
+    if (isSuccessfulIngestStatus(result)) {
       lemmaDebug(
         "verify",
-        "ingest accepted (201), traces visible in dashboard",
+        `ingest accepted (201), trace ${result === "enqueued" ? "enqueued" : `visible (${result})`} (status=${result})`,
       );
       return;
     }
     lemmaDebug(
       "verify",
-      "ingest accepted (201), but has_ready_traces=false — may be processing lag or downstream issue",
+      `ingest accepted (201), ingest-status=not_found after ${INGEST_STATUS_POLL_TIMEOUT_MS / 1000}s — may be processing lag or downstream issue`,
     );
   }
 
@@ -1324,8 +1333,8 @@ export class Lemma {
       ...(sentWarnings.length ? { warnings: sentWarnings } : {}),
     });
 
-    if (isDebugModeEnabled() && isDebugVerifyEnabled()) {
-      await this.verifyIngestDelivery();
+    if (isDebugModeEnabled() && isDebugVerifyEnabled() && payload.trace.id) {
+      await this.verifyIngestDelivery(payload.trace.id);
     }
   }
 }

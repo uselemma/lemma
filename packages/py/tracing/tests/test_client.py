@@ -405,7 +405,7 @@ def test_debug_mode_logs_init_config_once(capsys):
 
 
 def test_debug_smoke_test_returns_structured_diagnostics(monkeypatch):
-    calls = {"has_ready": 0, "ingest": 0}
+    calls = {"status": 0, "ingest": 0}
 
     def transport(url, headers, body):
         calls["ingest"] += 1
@@ -413,10 +413,12 @@ def test_debug_smoke_test_returns_structured_diagnostics(monkeypatch):
         return 201, "{}", {"cf-ray": "ray-smoke", "server": "cloudflare"}
 
     def fake_get(url, headers):
-        calls["has_ready"] += 1
-        # First post-ingest poll is false so smoke waits and retries.
-        ready = calls["has_ready"] != 2
-        return 200, json.dumps({"has_ready_traces": ready}), {}
+        calls["status"] += 1
+        assert "/traces/ingest-status" in url
+        assert "otel_trace_id=" in url
+        # First poll is not_found so smoke waits and retries.
+        status = "not_found" if calls["status"] == 1 else "enqueued"
+        return 200, json.dumps({"status": status}), {}
 
     monkeypatch.setattr(Lemma, "_urllib_get", staticmethod(fake_get))
     monkeypatch.setattr("uselemma_tracing.client.time.sleep", lambda _seconds: None)
@@ -433,11 +435,12 @@ def test_debug_smoke_test_returns_structured_diagnostics(monkeypatch):
     assert result["config"]["apiKeySuffix"] == "...5678"
     assert result["ingest"]["status"] == 201
     assert result["ingest"]["responseHeaders"]["cf-ray"] == "ray-smoke"
+    assert result["ingestStatus"] == "enqueued"
     assert calls["ingest"] == 1
-    assert calls["has_ready"] == 3
+    assert calls["status"] == 2
 
 
-def test_debug_smoke_test_not_ok_when_has_ready_fails(monkeypatch):
+def test_debug_smoke_test_not_ok_when_ingest_status_fails(monkeypatch):
     def transport(url, headers, body):
         return 201, "{}", {"cf-ray": "ray-smoke"}
 
@@ -449,27 +452,60 @@ def test_debug_smoke_test_not_ok_when_has_ready_fails(monkeypatch):
     lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
     result = lemma.debug_smoke_test()
     assert result["ok"] is False
-    assert "has-ready check failed after ingest (status/network)" in result["hints"]
+    assert "ingest-status check failed after ingest (status/network)" in result["hints"]
 
 
 def test_debug_verify_polls_only_when_debug_mode_enabled(monkeypatch, capsys):
     enable_debug_mode()
     os.environ["LEMMA_DEBUG_VERIFY"] = "true"
-    calls = {"has_ready": 0}
+    calls = {"status": 0}
 
     def transport(url, headers, body):
         return 201, "{}"
 
     def fake_get(url, headers):
-        calls["has_ready"] += 1
-        return 200, '{"has_ready_traces": true}', {}
+        calls["status"] += 1
+        assert "/traces/ingest-status" in url
+        return 200, '{"status": "enqueued"}', {}
 
     monkeypatch.setattr(Lemma, "_urllib_get", staticmethod(fake_get))
     try:
         lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
         lemma.trace("verify-path", lambda _trace: "ok")
-        assert calls["has_ready"] == 1
-        assert "traces visible in dashboard" in capsys.readouterr().out
+        assert calls["status"] == 1
+        assert "trace enqueued (status=enqueued)" in capsys.readouterr().out
+    finally:
+        disable_debug_mode()
+        os.environ.pop("LEMMA_DEBUG_VERIFY", None)
+
+
+def test_debug_verify_retries_until_timeout(monkeypatch, capsys):
+    enable_debug_mode()
+    os.environ["LEMMA_DEBUG_VERIFY"] = "true"
+    calls = {"status": 0}
+    clock = {"now": 0.0}
+
+    def transport(url, headers, body):
+        return 201, "{}"
+
+    def fake_get(url, headers):
+        calls["status"] += 1
+        return 200, '{"status": "not_found"}', {}
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += seconds
+
+    monkeypatch.setattr(Lemma, "_urllib_get", staticmethod(fake_get))
+    monkeypatch.setattr("uselemma_tracing.client.time.monotonic", fake_monotonic)
+    monkeypatch.setattr("uselemma_tracing.client.time.sleep", fake_sleep)
+    try:
+        lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+        lemma.trace("verify-timeout", lambda _trace: "ok")
+        assert calls["status"] > 1
+        assert "ingest-status=not_found after 15s" in capsys.readouterr().out
     finally:
         disable_debug_mode()
         os.environ.pop("LEMMA_DEBUG_VERIFY", None)
@@ -477,19 +513,19 @@ def test_debug_verify_polls_only_when_debug_mode_enabled(monkeypatch, capsys):
 
 def test_debug_verify_alone_does_not_poll(monkeypatch):
     os.environ["LEMMA_DEBUG_VERIFY"] = "true"
-    calls = {"has_ready": 0}
+    calls = {"status": 0}
 
     def transport(url, headers, body):
         return 201, "{}"
 
     def fake_get(url, headers):
-        calls["has_ready"] += 1
-        return 200, '{"has_ready_traces": true}', {}
+        calls["status"] += 1
+        return 200, '{"status": "enqueued"}', {}
 
     monkeypatch.setattr(Lemma, "_urllib_get", staticmethod(fake_get))
     try:
         lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
         lemma.trace("no-verify", lambda _trace: "ok")
-        assert calls["has_ready"] == 0
+        assert calls["status"] == 0
     finally:
         os.environ.pop("LEMMA_DEBUG_VERIFY", None)

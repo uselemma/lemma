@@ -4,7 +4,25 @@ import re
 
 PRODUCTION_BASE_URL = "https://api.uselemma.ai"
 INGEST_PATH = "/traces/ingest"
+INGEST_STATUS_PATH = "/traces/ingest-status"
 EXPECTED_INGEST_SUCCESS_STATUS = 201
+
+# Poll interval / budget for LEMMA_DEBUG_VERIFY ingest-status checks.
+INGEST_STATUS_POLL_INTERVAL_SECONDS = 1.0
+INGEST_STATUS_POLL_TIMEOUT_SECONDS = 15.0
+
+IngestStatus = str  # "enqueued" | "ingested" | "ready" | "not_found"
+_SUCCESS_INGEST_STATUSES = frozenset({"enqueued", "ingested", "ready"})
+
+
+def is_successful_ingest_status(status: str | None) -> bool:
+    return status in _SUCCESS_INGEST_STATUSES
+
+
+def parse_ingest_status(value: object) -> str | None:
+    if value in {"enqueued", "ingested", "ready", "not_found"}:
+        return str(value)
+    return None
 
 _UUID_REGEX = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",

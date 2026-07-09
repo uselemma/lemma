@@ -1,6 +1,38 @@
 export const PRODUCTION_BASE_URL = "https://api.uselemma.ai";
 export const INGEST_PATH = "/traces/ingest";
+export const INGEST_STATUS_PATH = "/traces/ingest-status";
 export const EXPECTED_INGEST_SUCCESS_STATUS = 201;
+
+/** Poll interval for LEMMA_DEBUG_VERIFY ingest-status checks. */
+export const INGEST_STATUS_POLL_INTERVAL_MS = 1_000;
+/** Total wait budget for LEMMA_DEBUG_VERIFY ingest-status checks. */
+export const INGEST_STATUS_POLL_TIMEOUT_MS = 15_000;
+
+export type IngestStatus = "enqueued" | "ingested" | "ready" | "not_found";
+
+const SUCCESS_INGEST_STATUSES = new Set<IngestStatus>([
+  "enqueued",
+  "ingested",
+  "ready",
+]);
+
+export function isSuccessfulIngestStatus(
+  status: IngestStatus | null | undefined,
+): status is Exclude<IngestStatus, "not_found"> {
+  return status != null && SUCCESS_INGEST_STATUSES.has(status);
+}
+
+export function parseIngestStatus(value: unknown): IngestStatus | null {
+  if (
+    value === "enqueued" ||
+    value === "ingested" ||
+    value === "ready" ||
+    value === "not_found"
+  ) {
+    return value;
+  }
+  return null;
+}
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
