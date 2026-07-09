@@ -61,7 +61,7 @@ After init, debug mode prints a one-time config banner:
 
 If `baseUrl` is not production or `projectId` is not a valid UUID, the banner includes `warnings`.
 
-`hasReadyBefore` / `hasReadyAfter` (and verify logs) reflect whether the **project** has any ready traces — not whether this specific smoke ingest is queryable yet.
+Verify logs and `debugSmokeTest().ingestStatus` reflect whether **this specific trace** was enqueued / ingested / ready — not whether the project has any ready traces.
 
 ## Run a smoke test
 
@@ -82,7 +82,7 @@ Use `debugSmokeTest()` for a one-call delivery checklist you can paste into supp
   </Tab>
 </Tabs>
 
-The result includes config warnings, ingest status, response headers (`cf-ray`, `server`), and optional `hasReadyBefore` / `hasReadyAfter` snapshots.
+The result includes config warnings, ingest HTTP status, response headers (`cf-ray`, `server`), and per-trace `ingestStatus` (`enqueued` / `ingested` / `ready` / `not_found`).
 
 You can also run one minimal trace manually from the same runtime that serves production traffic:
 
@@ -112,9 +112,9 @@ For a successful trace, look for this sequence:
 
 If the trace uses a handle, you should see `trace handle created`, then `sending trace` when the handle flushes or ends.
 
-## Verify dashboard visibility
+## Verify ingest enqueue
 
-After a successful 201, optionally poll the API to confirm the project has ready traces. This requires **both** debug mode and verify:
+After a successful 201, optionally poll the API to confirm **this specific trace** was enqueued (or already ingested/ready). This requires **both** debug mode and verify:
 
 ```bash
 export LEMMA_DEBUG=1
@@ -123,13 +123,17 @@ export LEMMA_DEBUG_VERIFY=1
 
 `true` is also accepted for both flags.
 
-With both enabled, the SDK calls `GET /traces/has-ready?project_id=...` after ingest (polls immediately, then waits briefly and retries once if still false) and logs one of:
+With both enabled, the SDK calls `GET /traces/ingest-status?project_id=...&otel_trace_id=...` after ingest (polls immediately, then every 1s for up to 15s) and logs one of:
 
 ```text
-[LEMMA:verify] ingest accepted (201), traces visible in dashboard
-[LEMMA:verify] ingest accepted (201), but has_ready_traces=false — may be processing lag or downstream issue
-[LEMMA:verify] ingest accepted (201), has-ready check failed (status/network)
+[LEMMA:verify] ingest accepted (201), trace enqueued (status=enqueued)
+[LEMMA:verify] ingest accepted (201), trace visible (ingested) (status=ingested)
+[LEMMA:verify] ingest accepted (201), trace visible (ready) (status=ready)
+[LEMMA:verify] ingest accepted (201), ingest-status=not_found after 15s — may be processing lag or downstream issue
+[LEMMA:verify] ingest accepted (201), ingest-status check failed (status/network)
 ```
+
+`enqueued` means the OTLP worker accepted the payload and wrote it to the ingest queue — it does **not** require the dashboard to show the trace yet (useful during backlog).
 
 ## Confirming delivery reached Lemma
 
@@ -139,7 +143,8 @@ With both enabled, the SDK calls `GET /traces/has-ready?project_id=...` after in
 | `trace sent` status 201 | No `otlp.ingest.*` logs | Not hitting Lemma production — wrong URL or proxy |
 | `trace sent` status 200 | — | Wrong endpoint (`/otel/v1/traces` or mock) |
 | `trace sent` status 201 | `received` but no `enqueued` | Worker-side failure after accept |
-| `trace sent` status 201 | `enqueued` but `has_ready=false` | Downstream pipeline lag or failure |
+| `trace sent` status 201 + verify `status=enqueued` | `enqueued` | Accepted into ingest queue (may still be backlog) |
+| `trace sent` status 201 + verify `not_found` | missing enqueue index / CH row | Downstream lag or failure |
 
 Support bundle to request from customers:
 
