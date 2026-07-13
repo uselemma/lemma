@@ -62,7 +62,6 @@ export type TraceOptions = {
   metadata?: Record<string, unknown>;
   threadId?: string;
   userId?: string;
-  environment?: string;
 };
 
 export type TraceEndOptions = {
@@ -152,7 +151,6 @@ type SdkTracePayload = {
     metadata?: Record<string, unknown>;
     thread_id?: string;
     user_id?: string;
-    environment?: string;
     started_at: string;
     ended_at?: string | null;
     duration_ms?: number;
@@ -742,7 +740,6 @@ export class TraceContext {
         metadata: this.options.metadata,
         thread_id: this.options.threadId,
         user_id: this.options.userId,
-        environment: this.options.environment,
         started_at: startedAt.toISOString(),
         ended_at: endedAt.toISOString(),
         duration_ms: this.options.durationMs ?? elapsedMs(startedAt, endedAt),

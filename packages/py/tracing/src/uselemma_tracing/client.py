@@ -305,7 +305,6 @@ class TraceContext:
     metadata: dict[str, Any] | None = None
     thread_id: str | None = None
     user_id: str | None = None
-    environment: str | None = None
     duration_ms: int | None = None
     output_value: Any = None
     error: str | None = None
@@ -731,7 +730,6 @@ class TraceContext:
                 "metadata": self.metadata,
                 "thread_id": self.thread_id,
                 "user_id": self.user_id,
-                "environment": self.environment,
                 "started_at": _iso(started_at),
                 "ended_at": _iso(ended_at),
                 "duration_ms": self.duration_ms
@@ -877,7 +875,6 @@ class Lemma:
         thread_id: str | None = None,
         user_id: str | None = None,
         metadata: dict[str, Any] | None = None,
-        environment: str | None = None,
         duration_ms: int | None = None,
     ) -> T:
         ctx = TraceContext(
@@ -886,7 +883,6 @@ class Lemma:
             metadata=metadata,
             thread_id=thread_id,
             user_id=user_id,
-            environment=environment,
             duration_ms=duration_ms,
         )
         started_at = _now()
@@ -911,7 +907,6 @@ class Lemma:
         thread_id: str | None = None,
         user_id: str | None = None,
         metadata: dict[str, Any] | None = None,
-        environment: str | None = None,
         duration_ms: int | None = None,
     ) -> T:
         ctx = TraceContext(
@@ -920,7 +915,6 @@ class Lemma:
             metadata=metadata,
             thread_id=thread_id,
             user_id=user_id,
-            environment=environment,
             duration_ms=duration_ms,
         )
         started_at = _now()
