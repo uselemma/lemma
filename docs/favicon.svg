@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 195.95 161.14" fill="none">
+  <!--
+    Light/dark tab favicon. Mirrors the in-app dashboard logo (LemmaWordmark):
+    light mode uses the brand-accent indigo (#322c8a),
+    dark mode uses the same off-white as the dark wordmark (#f2f2f2).
+    Color is driven via currentColor so the prefers-color-scheme swap below
+    recolors every path at once.
+  -->
+  <style>
+    svg { color: #322c8a; }
+    @media (prefers-color-scheme: dark) {
+      svg { color: #f2f2f2; }
+    }
+  </style>
+  <defs>
+    <mask id="lemma-favicon-mask" width="195.95" height="122.77" x="0" y="0" maskUnits="userSpaceOnUse">
+      <path fill="#fff" d="M99.23 11.71 184.02 60.66c.7.4.7 1.05 0 1.45l-84.79 48.95c-.7.4-1.82.4-2.52 0L11.93 62.11c-.7-.4-.7-1.05 0-1.45l84.78-48.95c.7-.4 1.82-.4 2.52 0Z"/>
+    </mask>
+  </defs>
+  <path fill="currentColor" d="M183.1 110.54c.97.56.97 1.96 0 2.52l-82.94 47.89c-.97.56-2.18-.14-2.18-1.26v-47.05c0-.52-.28-1-.73-1.26L56.51 87.86c-.97-.56-.97-1.96 0-2.52l40.74-23.52c.45-.26 1-.26 1.45 0l84.4 48.73ZM87.13 117.22c.45.26.73.74.73 1.26v35.36c0 1.12-1.21 1.82-2.18 1.26l-72.83-42.05c-.97-.56-.97-1.96 0-2.52l30.63-17.68c.45-.26 1-.26 1.45 0l42.2 24.36Z"/>
+  <g mask="url(#lemma-favicon-mask)">
+    <path stroke="currentColor" stroke-width="22.81" d="M99.23 11.71 184.02 60.66c.7.4.7 1.05 0 1.45l-84.79 48.95c-.7.4-1.82.4-2.52 0L11.93 62.11c-.7-.4-.7-1.05 0-1.45l84.78-48.95c.7-.4 1.82-.4 2.52 0Z"/>
+  </g>
+</svg>
