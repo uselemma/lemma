@@ -6,7 +6,7 @@ description: "How tracing works in Lemma and where to start"
 Every agent execution becomes a **trace**: a complete record of what happened, how long it took, and where it failed. The Lemma SDK emits the trace shape Lemma reads.
 
 <Note>
-  **One agent execution = one trace.** The trace has a single root span; LLM calls, tool calls, and app logic are child spans. See the [trace contract](/reference/trace-contract).
+  **One agent execution = one trace.** The root is the trace record; LLM calls, tool calls, and app logic are child spans inside it. See the [trace contract](/reference/trace-contract).
 </Note>
 
 ## The model
@@ -20,7 +20,7 @@ support-agent              <- trace root (input, output)
 `- final-answer            <- generation
 ```
 
-- [Traces](/tracing/instrumentation/traces) - the root span for one execution.
+- [Traces](/tracing/instrumentation/traces) - the root record for one execution.
 - [Generations](/tracing/instrumentation/generations) - LLM calls.
 - [Tool calls](/tracing/instrumentation/tool-calls) - tool invocations.
 - [Spans](/tracing/instrumentation/spans) - retrieval, ranking, app logic.
@@ -42,5 +42,5 @@ Lemma is an opinionated sink: it reads a specific trace shape to power input/out
 
 - [Setup](/tracing/instrumentation/setup) - install the SDK and point it at Lemma.
 - [Trace contract](/reference/trace-contract) - the exact shape Lemma reads.
-- [Good trace vs bad trace](/reference/good-vs-bad-traces) - conformant vs malformed traces.
+- [Building high-quality traces](/reference/building-high-quality-traces) - the ideal instrumentation path, with bad → better → best examples.
 - [Troubleshooting](/tracing/troubleshooting/common-issues) - fix missing spans, flat traces, and delayed exports.

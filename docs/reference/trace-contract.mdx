@@ -1,166 +1,395 @@
 ---
 title: "Trace contract"
-description: "The exact shape and fields Lemma reads from a trace"
+description: "What clients send to Lemma, what ingest requires, and which fields unlock product behavior"
 ---
 
-Lemma reads a specific **trace shape** to power input/output display, model visibility, timing, tool visibility, threads, and automated issue detection. This page is the canonical contract; every other page builds on it.
+Lemma traces are JSON trees delivered to `POST /traces/ingest`. A **trace** is one agent execution: the root record carries the current input, final output or error, agent name, optional thread/user context, and timing. All other work is **child spans** in `trace.spans[]`, typed as `span`, `generation`, or `tool`, optionally nested via `parent_id`.
+
+The SDK builds this payload for you. This page defines what Lemma accepts, what each field means, how ingest normalizes it, and which fields unlock which product behavior.
 
 <Note>
-  **One agent execution = one trace.** LLM calls, tool calls, retrieval, and app logic are child records inside that trace, not separate traces.
+  **One agent execution = one trace.** LLM calls, tool calls, retrieval, and app logic are child spans inside that trace, not separate top-level traces.
 </Note>
 
-## The product contract
+## Mental model
 
-| Concept | What it is | Lemma primitive |
+| Concept | What it is | Client field |
 | --- | --- | --- |
-| **Trace** | One end-to-end agent execution, from user input to final response | Root trace |
-| **Span** | A unit of work inside the trace (retrieval, ranking, app logic) | Child span |
-| **Generation** | A single LLM call (prompt, completion, model, timing) | Child span typed as a generation |
-| **Tool call** | A single tool invocation (name, arguments, result) | Child span typed as a tool |
+| **Trace** | One end-to-end agent execution | The root `trace` object |
+| **Span** | A unit of work inside the trace | `spans[]` entry with `type: "span"` |
+| **Generation** | A single LLM call | `spans[]` entry with `type: "generation"` |
+| **Tool call** | A single tool invocation | `spans[]` entry with `type: "tool"` |
 
-A useful trace has:
+The SDK sends a **trace record** plus child spans. At ingest, Lemma creates a synthetic root span (`{traceId}:root`) that carries root-level fields for storage and display. Producers should target the trace record; they do not create the synthetic root themselves.
 
-- A **root trace** with the user **input** and the final **output** (or error).
-- A stable **agent name** so traces are groupable by workflow.
-- **Generation** records carrying model, input, and output.
-- **Tool** records carrying arguments and results.
-- A **thread id** when the execution is part of a multi-turn conversation.
+## Requirement tiers
 
-## How the SDK satisfies it
+| Tier | Meaning | Examples |
+| --- | --- | --- |
+| **Ingest** | Required for a successful `201` response | Valid JSON, `project_id`, `trace.name`, named spans, unique span IDs |
+| **Semantic** | Needed for Lemma product features | Root input/output-or-error, typed generations and tools, model and payloads, nesting, thread/user |
+| **High quality** | Ideal instrumentation fidelity | Measured durations, complete span I/O, full per-call message history, causal nesting |
+
+Ingest accepts a name-only trace. Semantic fields are not HTTP-required, but without them Lemma can only render timing and a sparse tree. For the pedagogical ideal path, see [Building high-quality traces](/reference/building-high-quality-traces).
+
+## Ingest payload
+
+```json
+{
+  "project_id": "00000000-0000-0000-0000-000000000000",
+  "trace": {
+    "id": "trace-id",
+    "name": "support-agent",
+    "input": "Where is my order #1843?",
+    "output": "It ships tomorrow and arrives Friday.",
+    "thread_id": "conversation-42",
+    "user_id": "user-7",
+    "started_at": "2026-07-13T20:00:00.000Z",
+    "ended_at": "2026-07-13T20:00:02.410Z",
+    "duration_ms": 2410,
+    "spans": [
+      {
+        "id": "span-retrieve",
+        "name": "retrieve-context",
+        "type": "span",
+        "input": { "query": "order 1843 status" },
+        "output": { "count": 2 },
+        "duration_ms": 412
+      },
+      {
+        "id": "span-search",
+        "parent_id": "span-retrieve",
+        "name": "search_docs",
+        "type": "tool",
+        "input": { "query": "order 1843 status" },
+        "output": [{ "id": "doc-1" }],
+        "duration_ms": 183
+      },
+      {
+        "id": "span-answer",
+        "name": "answer",
+        "type": "generation",
+        "model": "gpt-4o",
+        "input": [
+          { "role": "system", "content": "You are a support agent." },
+          { "role": "user", "content": "Where is my order #1843?" }
+        ],
+        "output": "It ships tomorrow and arrives Friday.",
+        "duration_ms": 1870,
+        "attributes": {
+          "llm.input_messages.0.message.role": "system",
+          "llm.input_messages.0.message.content": "You are a support agent."
+        }
+      }
+    ]
+  }
+}
+```
+
+### Envelope and validation
+
+| Field | Ingest rule |
+| --- | --- |
+| Body | Must be a JSON object |
+| `project_id` | Required UUID |
+| `trace` | Required object |
+| `trace.name` | Required non-empty string |
+| `trace.spans[].name` | Required non-empty string for each span |
+| Span `id` values | Must be unique within the payload when provided |
+| Authorization | Required; missing credentials return `401` |
+
+Successful ingest returns **201**. Invalid shape returns **400**. Missing `trace.id` or span `id` values are generated server-side. Missing or invalid `spans[].type` defaults to `"span"`. Missing `parent_id` attaches the child under the synthetic root.
+
+Repeated deliveries for the same `trace.id` are append-only: spans whose IDs already exist are skipped. Do not rely on a client `replace` flag to overwrite earlier spans.
+
+## Trace record
+
+| Field | Role |
+| --- | --- |
+| `id` | Stable identity for the execution; generated if omitted |
+| `name` | Agent / workflow name used for grouping and filtering |
+| `input` | Current user turn or execution entry point |
+| `output` | Final answer on success |
+| `error` / `status` | Failure message and `ERROR` status when the run fails |
+| `started_at` / `ended_at` / `duration_ms` | Trace timing |
+| `thread_id` | Groups multi-turn conversation traces |
+| `user_id` | Per-user slicing |
+| `metadata` | Arbitrary JSON attached to the root |
+| `spans` | Child work |
+
+**Semantic guidance:** include root `input` and either `output` or `error`. Without them, the dashboard can show timing but not what the user asked or whether the run succeeded.
+
+Callback traces set `output` from the return value unless you override it with `trace.output(...)`. Uncaught exceptions mark the root as failed and still send the trace.
+
+## Child spans
+
+Every child is a named object in `trace.spans[]`.
+
+| Field | Role |
+| --- | --- |
+| `id` | Stable child identity; generated if omitted |
+| `parent_id` | Parent span ID; omit to attach under the synthetic root |
+| `name` | Human-readable operation name |
+| `type` | `"span"`, `"generation"`, or `"tool"` |
+| `input` / `output` | Operation arguments and result |
+| `error` / `status` | Failure details; prefer these over inventing an output |
+| `started_at` / `ended_at` / `duration_ms` | Timing |
+| `model` | Generation model name |
+| `attributes` | Flattened contract attributes and escape-hatch keys |
+| `metadata` | Arbitrary JSON for the child |
+
+### Typed children
+
+| Type | Use for | Semantic fields |
+| --- | --- | --- |
+| `span` | Retrieval, ranking, planning, app logic | `input` + `output` (or `error`) |
+| `generation` | One LLM call | `model`, prompt/messages, completion (or `error`) |
+| `tool` | One tool invocation | tool `name`, arguments, result (or `error`) |
+
+Type is a discriminator. Setting `model` alone does not make a generation; set `type: "generation"`.
+
+### Nesting
+
+Children nest through `parent_id`. In TypeScript, recording from a span handle sets the parent automatically. In Python, pass `parent_id` explicitly on `start_tool` / `start_generation` / `start_span` when the child belongs under another span.
+
+```text
+support-agent              ← trace record
+├── retrieve-context       ← type: span
+│   └── search_docs        ← type: tool, parent_id = retrieve-context
+└── answer                 ← type: generation
+```
+
+## Generations and message history
+
+`trace.input` is the **current user turn**. A generation should record the **full ordered message list sent to that LLM call**, including system prompt, prior turns, tool results, and the current user message.
+
+Prefer both:
+
+- `input` — the prompt payload for that call
+- `llmInputMessages` / `llm_input_messages` — structured messages flattened into `llm.input_messages.{index}.message.*`
+
+`model` is the primary model identifier. Native generation props such as `llmProvider`, `llmInvocationParameters`, and `llmOutputMessages` populate OpenInference-style attributes.
+
+## Tools
+
+Tool spans should carry:
+
+- `name` — stable tool identifier
+- `input` — arguments
+- `output` or `error` — result or failure
+- optional `toolParameters` / `tool_parameters` for the schema
+
+Ingest uses `tool_name` when present, otherwise the span `name`, and normalizes tool I/O into tool-call aliases for display.
+
+## Errors
+
+Record a failure on the exact span, generation, or tool where it happened:
+
+- Keep the **input** that led to the failure when it is safe to record.
+- Pass `error` instead of inventing an output.
+- End the failed child so timing is preserved.
+- Rethrow when the whole execution should fail; leave the root successful when the agent recovers.
+
+For callback traces, uncaught exceptions automatically fail the root. If you catch at the root boundary, call `trace.fail(error)`. For completed work, pass `error` to `recordSpan` / `recordGeneration` / `recordTool` (or the Python equivalents). For live handles, call `.end({ error })` / `.end(error=...)`.
 
 <Tabs>
   <Tab title="TypeScript">
     ```typescript
-    import { Lemma } from "@uselemma/tracing";
+    const tool = trace.startTool({
+      name: "lookup_order",
+      input: { orderId },
+    });
 
-    const lemma = new Lemma();
-
-    await lemma.trace(
-      {
-        name: "support-agent",
-        input: userMessage,
-        threadId,
-        userId,
-      },
-      async (trace) => {
-        const docs = await searchDocs(userMessage);
-        trace.recordTool({
-          name: "search_docs",
-          input: { query: userMessage },
-          output: docs,
-        });
-
-        const response = await callModel(userMessage, docs);
-        trace.recordGeneration({
-          name: "draft-reply",
-          input: response.messages,
-          output: response.text,
-          model: "gpt-4o",
-        });
-
-        return response.text;
-      },
-    );
+    try {
+      const order = await lookupOrder(orderId);
+      tool.end({ output: order });
+    } catch (error) {
+      tool.end({ error });
+      throw error;
+    }
     ```
   </Tab>
   <Tab title="Python">
     ```python
-    from uselemma_tracing import Lemma
-
-    lemma = Lemma()
-
-    def run(trace):
-        docs = search_docs(user_message)
-        trace.record_tool(
-            name="search_docs",
-            input={"query": user_message},
-            output=docs,
-        )
-
-        response = call_model(user_message, docs)
-        trace.record_generation(
-            name="draft-reply",
-            input=response.messages,
-            output=response.text,
-            model="gpt-4o",
-        )
-
-        return response.text
-
-    lemma.trace(
-        "support-agent",
-        run,
-        input=user_message,
-        thread_id=thread_id,
-        user_id=user_id,
+    tool = trace.start_tool(
+        name="lookup_order",
+        input={"order_id": order_id},
     )
+
+    try:
+        order = lookup_order(order_id)
+        tool.end(output=order)
+    except Exception as error:
+        tool.end(error=error)
+        raise
     ```
   </Tab>
 </Tabs>
 
-## SDK field mapping
+## Timing
 
-| Contract field | TypeScript SDK API | Python SDK API | Attribute keys emitted |
-| --- | --- | --- | --- |
-| Trace input | `lemma.trace({ input })` | `lemma.trace(..., input=...)` | `input.value`, `ai.agent.input` |
-| Trace output | Callback return value or `trace.output(output)` | Callback return value or `trace.output(output)` | `output.value`, `ai.agent.output`, `ai.response.text` for string output |
-| Trace duration | Measured automatically, `lemma.trace({ durationMs })`, or `trace.end({ durationMs })` | Measured automatically or `lemma.trace(..., duration_ms=...)` | Trace `duration_ms`, root span duration |
-| Agent name | `lemma.trace({ name })` | `lemma.trace("name", ...)` | `gen_ai.agent.name`, `ai.agent.name` |
-| Thread id | `threadId` | `thread_id` | `lemma.thread_id` |
-| User id | `userId` | `user_id` | `user.id`, `enduser.id` |
-| LLM model | `trace.recordGeneration({ model })` | `trace.record_generation(model=...)` | `gen_ai.request.model`, `ai.model.id` |
-| Prompt / completion | `trace.recordGeneration({ input, output })` | `trace.record_generation(input=..., output=...)` | `input.value`, `output.value` |
-| Child duration | `durationMs`, or inferred from the parent when omitted | `duration_ms`, or inferred from the parent when omitted | Span `duration_ms` |
-| Contract props | Native child props such as `llmInputMessages`, `toolParameters`, `embeddingModelName`, and `rerankerOutputDocuments`; raw `attributes` for escape-hatch keys | Snake_case props such as `llm_input_messages`, `tool_parameters`, `embedding_model_name`, and `reranker_output_documents`; raw `attributes` for escape-hatch keys | Lemma span attributes |
-| Generation span | `trace.recordGeneration(...)` | `trace.record_generation(...)` | Generation kind marker |
-| Tool name | `trace.recordTool({ name })` | `trace.record_tool(name=...)` | Span name, `tool.name` |
-| Tool args / result | `trace.recordTool({ input, output })` | `trace.record_tool(input=..., output=...)` | `input.value`, `output.value`, `ai.toolCall.args`, `ai.toolCall.result` |
-| Error | thrown error, `trace.fail(error)`, or child `error` | raised exception, `trace.fail(error)`, or child `error` | Error status and `error.message` |
+Duration resolution order:
+
+1. Explicit `duration_ms` / `durationMs` when provided
+2. Otherwise `ended_at - started_at` when both timestamps exist
+3. Otherwise, for children with missing duration, Lemma allocates remaining parent time
+
+Child duration inference:
+
+- Starts from the synthetic root and walks the parent → child tree
+- Explicit sibling durations claim time first
+- Siblings with `duration_ms == null` split the remaining parent duration equally
+- If explicit siblings already exceed the parent duration, omitted siblings receive `0`
+- The same rule applies recursively when a child becomes a parent
+
+Prefer live handles (`startSpan` / `startTool` / `startGeneration`) so `.end(...)` measures real elapsed time. One-shot `record*` helpers omit child duration when you do not pass it.
+
+## Client fields vs ingest normalization
+
+Clients send first-class JSON fields. Ingest generates display and analysis aliases.
+
+| Client sends | Ingest normalizes to |
+| --- | --- |
+| `trace.input` | `input.value`, `ai.agent.input` |
+| `trace.output` | `output.value`, `ai.agent.output`, and `ai.response.text` for strings |
+| `trace.name` | `gen_ai.agent.name`, `ai.agent.name` |
+| `trace.thread_id` | `lemma.thread_id` |
+| `trace.user_id` | `user.id`, `enduser.id` |
+| `type: "generation"` | `kind: "generation"`, `openinference.span.kind: "llm"` |
+| `type: "tool"` | `kind: "tool"`, `openinference.span.kind: "tool"`, `tool.name` |
+| `model` | `gen_ai.request.model`, `ai.model.id`, `model_name` |
+| generation `input` / `output` | `input.value` / `output.value` |
+| tool `input` / `output` | `input.value`, `output.value`, `ai.toolCall.args`, `ai.toolCall.result` |
+| `error` | `error.message`, error status |
+| native props / `attributes` | Flattened OpenInference-style attribute keys |
+
+Do not hand-build the normalized aliases unless you are bypassing the SDK. Prefer native SDK props and first-class fields.
+
+## SDK mapping
+
+<Tabs>
+  <Tab title="TypeScript">
+    | Contract field | SDK API | Client field |
+    | --- | --- | --- |
+    | Trace input | `lemma.trace({ input })` | `trace.input` |
+    | Trace output | Callback return value or `trace.output(output)` | `trace.output` |
+    | Trace duration | Measured automatically, `durationMs`, or `trace.end({ durationMs })` | `trace.duration_ms` |
+    | Agent name | `lemma.trace({ name })` | `trace.name` |
+    | Thread id | `threadId` | `trace.thread_id` |
+    | User id | `userId` | `trace.user_id` |
+    | Generation | `trace.recordGeneration(...)` / `startGeneration(...)` | `type: "generation"` |
+    | Generation model | `model` | `model` |
+    | Generation content | `input`, `output`, `llmInputMessages` | `input`, `output`, attributes |
+    | Tool | `trace.recordTool(...)` / `startTool(...)` | `type: "tool"` |
+    | Tool args / result | `input`, `output` | `input`, `output` |
+    | Child duration | `durationMs` or live-handle `.end()` | `duration_ms` |
+    | Nesting | Span-handle record/start methods or `parentId` | `parent_id` |
+    | Error | thrown error, `trace.fail(error)`, or child `error` | `error`, `status` |
+  </Tab>
+  <Tab title="Python">
+    | Contract field | SDK API | Client field |
+    | --- | --- | --- |
+    | Trace input | `lemma.trace(..., input=...)` | `trace.input` |
+    | Trace output | Callback return value or `trace.output(output)` | `trace.output` |
+    | Trace duration | Measured automatically or `duration_ms` | `trace.duration_ms` |
+    | Agent name | `lemma.trace("name", ...)` | `trace.name` |
+    | Thread id | `thread_id` | `trace.thread_id` |
+    | User id | `user_id` | `trace.user_id` |
+    | Generation | `trace.record_generation(...)` / `start_generation(...)` | `type: "generation"` |
+    | Generation model | `model` | `model` |
+    | Generation content | `input`, `output`, `llm_input_messages` | `input`, `output`, attributes |
+    | Tool | `trace.record_tool(...)` / `start_tool(...)` | `type: "tool"` |
+    | Tool args / result | `input`, `output` | `input`, `output` |
+    | Child duration | `duration_ms` or live-handle `.end()` | `duration_ms` |
+    | Nesting | `parent_id` on `start_*` helpers | `parent_id` |
+    | Error | raised exception, `trace.fail(error)`, or child `error` | `error`, `status` |
+  </Tab>
+</Tabs>
 
 ## Native contract props
 
-The SDK exposes common Lemma contract fields as native props. Use these instead of hand-building flattened attribute names. In Python, use the snake_case form of the same prop, such as `llm_input_messages`, `tool_parameters`, and `embedding_model_name`.
+Use native props instead of hand-building flattened attribute names. In Python, use snake_case.
 
-| SDK prop | Use on | Attribute keys emitted |
-| --- | --- | --- |
-| `inputMimeType` | Span, generation, tool | `input.mime_type` |
-| `outputMimeType` | Span, generation, tool | `output.mime_type` |
-| `llmModelName` | Generation | `llm.model_name` |
-| `llmProvider` | Generation | `llm.provider` |
-| `llmSystem` | Generation | `llm.system` |
-| `llmInvocationParameters` | Generation | `llm.invocation_parameters` |
-| `llmInputMessages` | Generation | `llm.input_messages.{index}.message.*` |
-| `llmOutputMessages` | Generation | `llm.output_messages.{index}.message.*` |
-| `llmTools` | Generation | `llm.tools` |
-| `llmPromptTemplate` | Generation | `llm.prompt_template.template` |
-| `llmPromptTemplateVariables` | Generation | `llm.prompt_template.variables` |
-| `llmPromptTemplateVersion` | Generation | `llm.prompt_template.version` |
-| `toolDescription` | Tool | `tool.description` |
-| `toolParameters` | Tool | `tool.parameters` |
-| `embeddingModelName` | Span | `embedding.model_name` |
-| `embeddingInvocationParameters` | Span | `embedding.invocation_parameters` |
-| `embeddingEmbeddings` | Span | `embedding.embeddings` |
-| `rerankerModelName` | Span | `reranker.model_name` |
-| `rerankerInputDocuments` | Span | `reranker.input_documents.{index}.document.*` |
-| `rerankerOutputDocuments` | Span | `reranker.output_documents.{index}.document.*` |
+<Tabs>
+  <Tab title="Common">
+    | SDK prop | Use on | Attribute key |
+    | --- | --- | --- |
+    | `inputMimeType` | Span, generation, tool | `input.mime_type` |
+    | `outputMimeType` | Span, generation, tool | `output.mime_type` |
+  </Tab>
+  <Tab title="Generation">
+    | SDK prop | Attribute key |
+    | --- | --- |
+    | `llmModelName` | `llm.model_name` |
+    | `llmProvider` | `llm.provider` |
+    | `llmSystem` | `llm.system` |
+    | `llmInvocationParameters` | `llm.invocation_parameters` |
+    | `llmInputMessages` | `llm.input_messages.{index}.message.*` |
+    | `llmOutputMessages` | `llm.output_messages.{index}.message.*` |
+    | `llmTools` | `llm.tools` |
+    | `llmPromptTemplate` | `llm.prompt_template.template` |
+    | `llmPromptTemplateVariables` | `llm.prompt_template.variables` |
+    | `llmPromptTemplateVersion` | `llm.prompt_template.version` |
+  </Tab>
+  <Tab title="Tool">
+    | SDK prop | Attribute key |
+    | --- | --- |
+    | `toolDescription` | `tool.description` |
+    | `toolParameters` | `tool.parameters` |
+  </Tab>
+  <Tab title="Embedding">
+    | SDK prop | Attribute key |
+    | --- | --- |
+    | `embeddingModelName` | `embedding.model_name` |
+    | `embeddingInvocationParameters` | `embedding.invocation_parameters` |
+    | `embeddingEmbeddings` | `embedding.embeddings` |
+  </Tab>
+  <Tab title="Reranker">
+    | SDK prop | Attribute key |
+    | --- | --- |
+    | `rerankerModelName` | `reranker.model_name` |
+    | `rerankerInputDocuments` | `reranker.input_documents.{index}.document.*` |
+    | `rerankerOutputDocuments` | `reranker.output_documents.{index}.document.*` |
+  </Tab>
+</Tabs>
 
-`model` also populates `llm.model_name` for generation records. Object and array values are serialized where Lemma expects string-valued attributes. For fields without a native prop, pass raw `attributes`.
+`model` also populates `llm.model_name` for generation records. Object and array attribute values are serialized where Lemma expects string-valued attributes. For fields without a native prop, pass raw `attributes`.
 
-## Child duration inference
+## Semantic requirements
 
-When a child span, generation, or tool does not specify `durationMs`, Lemma infers it from the parent duration. Explicit child durations claim time first, then siblings without explicit durations split the remaining parent time equally.
+| Field | Why it matters |
+| --- | --- |
+| One shared `trace.id` for the whole execution | Otherwise one run scatters across unrelated traces |
+| Root `input` | Shows what the user asked |
+| Root `output` or `error` | Distinguishes success from failure |
+| Stable `name` | Groups and filters by agent/workflow |
+| Typed generations with model + content | Makes model calls inspectable |
+| Typed tools with args + result/error | Makes tool behavior inspectable |
+| Correct `parent_id` nesting | Preserves causality in the tree |
+| `thread_id` for multi-turn work | Groups conversation turns |
+| `user_id` when available | Enables per-user slicing |
 
-For example, if a trace took `1000ms`, child `c` specified `500ms`, and siblings `a` and `b` omitted duration, Lemma records `a = 250ms`, `b = 250ms`, and `c = 500ms`. The same rule applies recursively inside nested spans. If explicit siblings already exceed the parent duration, omitted siblings receive `0ms`.
+## Issue detection
 
-## Required vs optional
+Complete, correctly typed trees improve classification and automated issue extraction. Root I/O, model fields, and tool payloads are **not** general ingest gates. Some environments may further restrict issue extraction to specific framework shapes; treat that as an environment policy, not as the base SDK contract.
 
-| Field | Required? | Without it |
-| --- | --- | --- |
-| Single root trace per execution | **Required** | Each call becomes its own trace; no agent view |
-| Root input | **Required** | Traces show timing only |
-| Root output or error | **Required** | You cannot tell success from failure |
-| Agent name | Recommended | Traces are hard to group and filter |
-| Generation model + content | Recommended | Model calls are hard to inspect or group |
-| Tool name + args + result | Recommended | Tool calls are invisible or opaque |
-| Thread id | Optional | Multi-turn conversations are not grouped |
-| User | Optional | No per-user slicing |
+## Privacy
+
+Record complete inputs and outputs only when safe. Redact secrets, credentials, and sensitive user data before tracing them. Framework integrations also support `recordInputs: false` / `recordOutputs: false` when you need structure and timing without payload contents.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Building high-quality traces" icon="circle-check" href="/reference/building-high-quality-traces">
+    Bad → better → best examples for the ideal instrumentation path.
+  </Card>
+  <Card title="Instrument an agent" icon="bot" href="/tracing/instrumentation/instrument-an-agent">
+    Build a complete Lemma trace one piece at a time.
+  </Card>
+  <Card title="Generations" icon="sparkles" href="/tracing/instrumentation/generations">
+    Capture model, full messages, and completion.
+  </Card>
+  <Card title="Common issues" icon="bug" href="/tracing/troubleshooting/common-issues">
+    Diagnose missing spans, flat trees, and blank I/O.
+  </Card>
+</CardGroup>

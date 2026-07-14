@@ -75,21 +75,21 @@ When one user has a back-and-forth with your agent, each turn is its own trace. 
 
 ## Reference
 
-| Context | SDK option | Attribute keys |
-| --- | --- | --- |
-| Agent name | `name` | `gen_ai.agent.name`, `ai.agent.name` |
-| Thread / conversation | `threadId` | `lemma.thread_id` |
-| User | `userId` | `user.id`, `enduser.id` |
+| Context | SDK option | Client field | Ingest normalizes to |
+| --- | --- | --- | --- |
+| Agent name | `name` | `trace.name` | `gen_ai.agent.name`, `ai.agent.name` |
+| Thread / conversation | `threadId` / `thread_id` | `trace.thread_id` | `lemma.thread_id` |
+| User | `userId` / `user_id` | `trace.user_id` | `user.id`, `enduser.id` |
 
-See the [trace contract](/reference/trace-contract) for how each field is read.
+See the [trace contract](/reference/trace-contract) for how each field is sent and normalized.
 
 ## Next steps
 
 <CardGroup cols={2}>
   <Card title="Trace contract" icon="file-check" href="/reference/trace-contract">
-    The exact shape Lemma reads.
+    What clients send, what ingest requires, and what Lemma normalizes.
   </Card>
-  <Card title="Good trace vs bad trace" icon="circle-check" href="/reference/good-vs-bad-traces">
-    Conformant vs malformed traces.
+  <Card title="Building high-quality traces" icon="circle-check" href="/reference/building-high-quality-traces">
+    The ideal instrumentation path, with bad → better → best examples.
   </Card>
 </CardGroup>

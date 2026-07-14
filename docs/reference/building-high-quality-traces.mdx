@@ -1,0 +1,408 @@
+---
+title: "Building high-quality traces"
+description: "The ideal instrumentation path, with bad → better → best examples for structure, timing, nesting, generations, and tools"
+---
+
+A high-quality Lemma trace is not just “data arrived.” It is a complete, nested record of one agent execution: every span has real timing, every successful span has input and output, generations carry the full message list sent to the model, and tools show what they were asked and what they returned.
+
+This page is the pedagogical ideal path. For the exact ingest fields, validation rules, and client-vs-normalization mapping, see the [trace contract](/reference/trace-contract). Use [Common issues](/tracing/troubleshooting/common-issues) when something is missing or malformed.
+
+<Note>
+  **One agent execution = one trace.** Child LLM calls, tool calls, retrieval, and app logic belong inside that root — not as separate top-level traces.
+</Note>
+
+## The ideal trace
+
+<div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px 18px", margin: "20px 0", fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace", fontSize: 12.5, lineHeight: 1.5 }}>
+
+  <div style={{ padding: "4px 0" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <span style={{ background: "#f5f3ff", color: "#7c3aed", border: "1px solid #ddd6fe", borderRadius: 6, padding: "1px 8px", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap" }}>trace root</span>
+      <span style={{ fontWeight: 700, color: "#5b21b6" }}>support-agent</span>
+      <span style={{ flex: 1 }} />
+      <span style={{ color: "#9ca3af", fontSize: 11, whiteSpace: "nowrap" }}>2.41s</span>
+    </div>
+    <div style={{ marginTop: 2, fontSize: 11, color: "#6b7280" }}>
+      <div><span style={{ color: "#9ca3af" }}>input:&nbsp;&nbsp;</span>"Where is my order #1843?"</div>
+      <div><span style={{ color: "#9ca3af" }}>output:&nbsp;</span>"It ships tomorrow and arrives Friday."</div>
+    </div>
+  </div>
+
+  <div style={{ marginLeft: 11, borderLeft: "1.5px solid #e5e7eb", paddingLeft: 16 }}>
+
+    <div style={{ padding: "4px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ background: "#fffbeb", color: "#d97706", border: "1px solid #fde68a", borderRadius: 6, padding: "1px 8px", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap" }}>span</span>
+        <span style={{ fontWeight: 600, color: "#b45309" }}>retrieve-context</span>
+        <span style={{ flex: 1 }} />
+        <span style={{ color: "#9ca3af", fontSize: 11, whiteSpace: "nowrap" }}>412ms</span>
+      </div>
+      <div style={{ marginTop: 2, fontSize: 11, color: "#6b7280" }}>
+        <div><span style={{ color: "#9ca3af" }}>input:&nbsp;&nbsp;</span>{'{ "query": "order 1843 status" }'}</div>
+        <div><span style={{ color: "#9ca3af" }}>output:&nbsp;</span>{'{ "count": 2 }'}</div>
+      </div>
+    </div>
+
+    <div style={{ marginLeft: 11, borderLeft: "1.5px solid #e5e7eb", paddingLeft: 16 }}>
+
+      <div style={{ padding: "4px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: 6, padding: "1px 8px", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap" }}>tool</span>
+          <span style={{ fontWeight: 600, color: "#15803d" }}>search_docs</span>
+          <span style={{ flex: 1 }} />
+          <span style={{ color: "#9ca3af", fontSize: 11, whiteSpace: "nowrap" }}>183ms</span>
+        </div>
+        <div style={{ marginTop: 2, fontSize: 11, color: "#6b7280" }}>
+          <div><span style={{ color: "#9ca3af" }}>args:&nbsp;&nbsp;&nbsp;</span>{'{ "query": "order 1843 status" }'}</div>
+          <div><span style={{ color: "#9ca3af" }}>result:&nbsp;</span>{'[{ "id": "doc-1", "title": "Shipping SLAs" }]'}</div>
+        </div>
+      </div>
+
+      <div style={{ padding: "4px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: 6, padding: "1px 8px", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap" }}>tool</span>
+          <span style={{ fontWeight: 600, color: "#15803d" }}>lookup_order</span>
+          <span style={{ flex: 1 }} />
+          <span style={{ color: "#9ca3af", fontSize: 11, whiteSpace: "nowrap" }}>96ms</span>
+        </div>
+        <div style={{ marginTop: 2, fontSize: 11, color: "#6b7280" }}>
+          <div><span style={{ color: "#9ca3af" }}>args:&nbsp;&nbsp;&nbsp;</span>{'{ "orderId": "1843" }'}</div>
+          <div><span style={{ color: "#9ca3af" }}>result:&nbsp;</span>{'{ "status": "shipped", "eta": "Fri" }'}</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div style={{ padding: "4px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ background: "#eff6ff", color: "#3b82f6", border: "1px solid #bfdbfe", borderRadius: 6, padding: "1px 8px", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap" }}>generation</span>
+        <span style={{ fontWeight: 600, color: "#1d4ed8" }}>answer</span>
+        <span style={{ flex: 1 }} />
+        <span style={{ color: "#9ca3af", fontSize: 11, whiteSpace: "nowrap" }}>1.87s</span>
+      </div>
+      <div style={{ marginTop: 2, fontSize: 11, color: "#6b7280" }}>
+        <div><span style={{ color: "#9ca3af" }}>model:&nbsp;&nbsp;&nbsp;&nbsp;</span>gpt-4o</div>
+        <div><span style={{ color: "#9ca3af" }}>messages:&nbsp;</span>[system, prior turns, user, tool results]</div>
+        <div><span style={{ color: "#9ca3af" }}>output:&nbsp;&nbsp;&nbsp;</span>"It ships tomorrow and arrives Friday."</div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+What “ideal” means on each node:
+
+- **Root** — current user input, final answer (or error), measured duration
+- **Spans / tools** — real input and output, nested under the step that caused them, measured start → end
+- **Generations** — model name plus the **full message list** sent to that call (system, prior turns, tool results, current user), not just the latest user string
+
+## Quality checklist
+
+| Rule | Why it matters |
+| --- | --- |
+| One root per agent execution | Otherwise one run scatters across unrelated traces |
+| Root has input and final output (or error) | You can read what the user asked and whether the run succeeded |
+| Correct typed children | Generations, tools, and generic spans render and filter correctly |
+| Every span has a real start and end | Duration, latency, and timelines stay trustworthy |
+| Every successful span has input and output | Opaque spans hide what happened; failures keep input plus error |
+| Every failure is recorded on the span where it occurred | You can see which operation failed and what input caused it |
+| Nest under the work that caused the child | Flat trees hide retrieval, retries, and sub-steps |
+| Generations record the full message list for that call | Prior turns and tool results are part of what the model saw |
+| Tools record arguments and result (or error) | Tool behavior becomes inspectable |
+
+<Warning>
+  Record complete inputs and outputs only when safe. Redact secrets, credentials, and sensitive user data before tracing them.
+</Warning>
+
+## Structure and nesting
+
+**Bad** — each call is its own top-level trace:
+
+```text
+draft-reply                ← separate trace
+search_docs                ← separate trace
+final-answer               ← separate trace
+```
+
+**Better** — one root, but everything is flat under it:
+
+```text
+support-agent
+├── plan
+├── embed-query
+├── search_docs
+├── rerank
+└── final-answer
+```
+
+**Best** — one root, children nested under the step that performed them:
+
+```text
+support-agent
+├── plan
+│   └── embed-query
+├── retrieve
+│   ├── search_docs
+│   └── rerank
+└── final-answer
+```
+
+Wrap the run with `lemma.trace()` and record children from the trace or span handle that owns them. See [Traces](/tracing/instrumentation/traces) and [Spans](/tracing/instrumentation/spans).
+
+## Input / output
+
+**Bad** — named span with nothing useful:
+
+```text
+retrieve-context           ← no input, no output
+```
+
+**Better** — partial payload:
+
+```text
+retrieve-context           ← input only (or output only)
+```
+
+**Best** — every successful span carries both sides:
+
+```text
+retrieve-context           ← input + output
+```
+
+Failures should still keep the input and record the error instead of an output. Opaque spans hide what happened; input and output make the tree inspectable.
+
+## Timing
+
+**Bad** — no duration at all:
+
+```text
+retrieve-context           ← duration missing
+```
+
+**Better** — duration inferred from the parent:
+
+```text
+retrieve-context           ← duration inferred
+```
+
+**Best** — measured from real start → end:
+
+```text
+retrieve-context           ← duration from start → end
+```
+
+Prefer live handles (`startSpan` / `start_span`, and the matching tool and generation helpers) so `.end(...)` establishes duration after the work completes. Pass `durationMs` / `duration_ms` only when you already measured the operation externally. Lemma can infer missing child durations from a parent, but measured bounds are better.
+
+## Errors
+
+Record a failure on the exact span, generation, or tool where it happened. Keep the input, pass the error instead of an output, and end the span so timing remains accurate.
+
+**Bad** — the exception is swallowed and the failed operation is missing:
+
+```text
+support-agent              ← lookup_order failed, but no failed span
+```
+
+**Better** — the root fails, but the source is unclear:
+
+```text
+support-agent              ← error: "Order service unavailable"
+└── lookup_order           ← no error recorded here
+```
+
+**Best** — the child records its input, error, and duration; the root also fails when the execution cannot recover:
+
+```text
+support-agent              ← error: "Order service unavailable"
+└── lookup_order           ← input + error + duration
+```
+
+With a live handle, call `tool.end({ error })` / `tool.end(error=error)` and rethrow when the whole execution should fail. Callback traces automatically record uncaught exceptions on the root. If you catch an error at the root boundary, call `trace.fail(error)`. If the agent recovers, keep the child marked as failed and let the root complete successfully.
+
+See [Errors in the trace contract](/reference/trace-contract#errors) for the exact recording rules and SDK examples.
+
+## Generations
+
+For each LLM call, record the **full ordered message list sent to that call** — system prompt, prior conversation turns, tool results, and the current user message — not only the latest user string. That list is what the model saw; the root trace input is only the current user turn.
+
+**Bad** — little more than a name:
+
+```text
+answer                     ← generation (name only)
+```
+
+**Better** — model and latest user string only:
+
+```text
+answer                     ← model + current message + output
+```
+
+**Best** — model, complete message history for this call, and the response:
+
+```text
+answer                     ← model + full messages + output + duration
+```
+
+```json
+[
+  { "role": "system", "content": "You are a support agent." },
+  { "role": "user", "content": "Hi, I ordered last week" },
+  { "role": "assistant", "content": "Happy to help — what's the order id?" },
+  { "role": "user", "content": "Where is my order #1843?" },
+  { "role": "tool", "content": "{\"status\":\"shipped\",\"eta\":\"Fri\"}" }
+]
+```
+
+In the SDK, pass that full list as both `input` and `llmInputMessages` / `llm_input_messages`. See [Generations](/tracing/instrumentation/generations) and the [trace contract](/reference/trace-contract#generations-and-message-history).
+
+## Tool calls
+
+**Bad** — tools ran but were never recorded:
+
+```text
+support-agent
+├── draft-reply
+└── final-answer           ← search_docs ran, but no tool span
+```
+
+**Better** — tool span exists, but opaque:
+
+```text
+search_docs                ← tool (name only)
+```
+
+**Best** — typed tool under the correct parent, with args and result:
+
+```text
+retrieve-context
+└── search_docs            ← tool (args, result, duration)
+```
+
+Record each completed tool with `trace.recordTool({ name, input, output })` / `trace.record_tool(name=..., input=..., output=...)`, or use live tool handles when you want measured duration. See [Tool calls](/tracing/instrumentation/tool-calls).
+
+## Happy-path example
+
+Use live handles so start → end establishes timing. Put the **current user message** on the root, and the **full model message list** on the generation.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    await lemma.trace(
+      {
+        name: "support-agent",
+        input: userMessage,
+        threadId,
+        userId,
+      },
+      async (trace) => {
+        const retrieve = trace.startSpan({
+          name: "retrieve-context",
+          input: { query: userMessage },
+        });
+
+        const search = retrieve.startTool({
+          name: "search_docs",
+          input: { query: userMessage },
+        });
+        const docs = await searchDocs(userMessage);
+        search.end({ output: docs });
+
+        retrieve.end({ output: { count: docs.length } });
+
+        const messages = [
+          { role: "system", content: "You are a support agent." },
+          ...priorMessages,
+          { role: "user", content: userMessage },
+          {
+            role: "tool",
+            content: JSON.stringify(docs),
+          },
+        ];
+
+        const generation = trace.startGeneration({
+          name: "answer",
+          model: "gpt-4o",
+          input: messages,
+          llmInputMessages: messages,
+        });
+
+        try {
+          const response = await callModel(messages);
+          generation.end({ output: response.text });
+          return response.text;
+        } catch (error) {
+          generation.end({ error });
+          throw error;
+        }
+      },
+    );
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    def run(trace):
+        retrieve = trace.start_span(
+            name="retrieve-context",
+            input={"query": user_message},
+        )
+
+        search = trace.start_tool(
+            name="search_docs",
+            input={"query": user_message},
+            parent_id=retrieve.id,
+        )
+        docs = search_docs(user_message)
+        search.end(output=docs)
+
+        retrieve.end(output={"count": len(docs)})
+
+        messages = [
+            {"role": "system", "content": "You are a support agent."},
+            *prior_messages,
+            {"role": "user", "content": user_message},
+            {"role": "tool", "content": json.dumps(docs)},
+        ]
+
+        generation = trace.start_generation(
+            name="answer",
+            model="gpt-4o",
+            input=messages,
+            llm_input_messages=messages,
+        )
+
+        try:
+            response = call_model(messages)
+            generation.end(output=response.text)
+            return response.text
+        except Exception as error:
+            generation.end(error=error)
+            raise
+
+    lemma.trace(
+        "support-agent",
+        run,
+        input=user_message,
+        thread_id=thread_id,
+        user_id=user_id,
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Trace contract" icon="file-check" href="/reference/trace-contract">
+    The exact shape and fields Lemma reads.
+  </Card>
+  <Card title="Instrument an agent" icon="bot" href="/tracing/instrumentation/instrument-an-agent">
+    Build a complete trace one piece at a time.
+  </Card>
+  <Card title="Generations" icon="sparkles" href="/tracing/instrumentation/generations">
+    Capture model, full messages, and completion.
+  </Card>
+  <Card title="Common issues" icon="bug" href="/tracing/troubleshooting/common-issues">
+    Diagnose missing spans, flat trees, and blank I/O.
+  </Card>
+</CardGroup>

@@ -5,7 +5,7 @@ description: "Lemma is an observability platform for AI agents"
 
 Lemma is an observability platform for AI agents. You send one trace per agent execution, and Lemma lets you search, debug, and monitor what your agents actually did in production - and automatically surfaces silent failures.
 
-You instrument with the Lemma SDK; Lemma reads the result and owns the analysis. Follow Lemma's required trace structure so every run is complete and easy to debug.
+You instrument with the Lemma SDK; Lemma reads the result and owns the analysis. Follow Lemma's [trace contract](/reference/trace-contract) so every run is complete and easy to debug.
 
 <Note>
   **The one rule:** one agent execution = one trace. LLM calls and tool calls are child spans of that trace, not separate traces.
@@ -20,8 +20,8 @@ You instrument with the Lemma SDK; Lemma reads the result and owns the analysis.
   <Card title="Lemma tracing skill" icon="bot" href="/getting-started/agent-skill">
     Let a coding agent install the SDK and add tracing from the public Lemma repo.
   </Card>
-  <Card title="Trace contract" icon="file-check" href="/reference/trace-contract">
-    The exact shape Lemma reads - the mental model everything builds on.
+  <Card title="Building high-quality traces" icon="circle-check" href="/reference/building-high-quality-traces">
+    The ideal instrumentation path, with bad → better → best examples.
   </Card>
 </CardGroup>
 
@@ -31,17 +31,19 @@ You instrument with the Lemma SDK; Lemma reads the result and owns the analysis.
 2. **The SDK sends to Lemma** over HTTPS, using your Lemma credentials.
 3. **Lemma reads the trace shape** to show inputs and outputs, model calls, tool calls, threads, and to run automated issue detection.
 
-## Instrument in levels
+## What to instrument
 
-You do not need perfect instrumentation to get value. Start at level 1 and go deeper where debugging hurts.
+Instrument every part of your agent. Each layer unlocks more of Lemma, and a complete trace is what powers full debugging and automated issue detection. Aim to record all of them.
 
-| Level | Add this | You can now see |
+| Layer | Record this | You can now see |
 | --- | --- | --- |
-| 1 | [Trace](/tracing/instrumentation/traces) root with input/output | Which executions ran and whether they succeeded |
-| 2 | [Generations](/tracing/instrumentation/generations) | Prompts, completions, model, and latency |
-| 3 | [Tool calls](/tracing/instrumentation/tool-calls) | Tool arguments, results, errors, and latency |
-| 4 | [Spans](/tracing/instrumentation/spans) | Retrieval, ranking, and app-logic steps |
-| 5 | [Threads & context](/tracing/instrumentation/context) | Conversations, users, custom filters |
+| [Trace](/tracing/instrumentation/traces) | Root with input/output | Which executions ran and whether they succeeded |
+| [Generations](/tracing/instrumentation/generations) | Model, full messages, completion | Prompts, completions, model, and latency |
+| [Tool calls](/tracing/instrumentation/tool-calls) | Name, arguments, result | Tool arguments, results, errors, and latency |
+| [Spans](/tracing/instrumentation/spans) | Retrieval, ranking, app logic | Every app-logic step in the execution tree |
+| [Threads & context](/tracing/instrumentation/context) | Thread, user, metadata | Conversations, users, custom filters |
+
+See [Building high-quality traces](/reference/building-high-quality-traces) for what a complete, well-instrumented trace looks like.
 
 ## What you can do with Lemma
 
@@ -57,7 +59,7 @@ You do not need perfect instrumentation to get value. Start at level 1 and go de
   <Card title="Instrument with the SDK" icon="wrench" href="/tracing/instrumentation/setup">
     Install the SDK, then add traces, generations, tool calls, and spans.
   </Card>
-  <Card title="Trace contract" icon="file-check" href="/reference/trace-contract">
-    Understand the exact shape Lemma reads.
+  <Card title="Building high-quality traces" icon="circle-check" href="/reference/building-high-quality-traces">
+    The ideal instrumentation path, with bad → better → best examples.
   </Card>
 </CardGroup>

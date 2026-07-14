@@ -85,8 +85,7 @@
                 "group": "Reference",
                 "expanded": false,
                 "pages": [
-                  "reference/trace-contract",
-                  "reference/good-vs-bad-traces"
+                  "reference/trace-contract"
                 ]
               }
             ]
@@ -114,12 +113,45 @@
         ]
       },
       {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Guides",
+            "pages": [
+              "reference/building-high-quality-traces",
+              "guides/instrumenting-multi-turn-agents"
+            ]
+          },
+          {
+            "group": "Migration guides",
+            "icon": "arrow-right-left",
+            "pages": [
+              "guides/migrations/raindrop",
+              "guides/migrations/langfuse",
+              "guides/migrations/opentelemetry"
+            ]
+          }
+        ]
+      },
+      {
         "tab": "API Reference",
         "openapi": "https://api.uselemma.ai/openapi.json"
       }
     ]
   },
   "redirects": [
+    {
+      "source": "/guides/raindrop-to-lemma",
+      "destination": "/guides/migrations/raindrop"
+    },
+    {
+      "source": "/guides/langfuse-otel-to-lemma",
+      "destination": "/guides/migrations/opentelemetry"
+    },
+    {
+      "source": "/reference/good-vs-bad-traces",
+      "destination": "/reference/building-high-quality-traces"
+    },
     {
       "source": "/getting-started/minimum-viable-trace",
       "destination": "/reference/trace-contract"

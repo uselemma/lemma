@@ -6,12 +6,12 @@ description: "Core concepts and terminology in Lemma"
 Four nouns describe everything in Lemma. They are the same words used in the dashboard and across these docs.
 
 <Note>
-  **One agent execution = one trace.** A trace has a single root span; LLM calls, tool calls, and app logic are child spans inside it.
+  **One agent execution = one trace.** The root is the trace record; LLM calls, tool calls, and app logic are child spans inside it.
 </Note>
 
 ## How a trace is structured
 
-A single agent execution produces a tree of spans. The root span is the trace; everything inside the execution nests under it.
+A single agent execution produces a tree. The root is the trace record; everything inside the execution nests under it as child spans.
 
 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "28px 0", gap: 0, fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace" }}>
 

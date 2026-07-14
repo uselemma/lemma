@@ -1,0 +1,190 @@
+---
+title: "From Langfuse to Lemma"
+description: "Keep your existing Langfuse instrumentation and add Lemma SDK tracing alongside it to produce the Lemma trace contract"
+---
+
+If you already trace with Langfuse, you do not have to tear anything out to adopt Lemma. The Lemma SDK is **additive**: it runs alongside your existing observability and delivers its own trace shape to Lemma. What it does *not* do is read your Langfuse observations and turn them into Lemma traces for you.
+
+<Note>
+  Adding the Lemma SDK next to Langfuse is fully supported. Langfuse instrumentation **on its own** is not sufficient for Lemma, because it usually does not produce the [trace contract](/reference/trace-contract) Lemma reads. Do not route Lemma work through Langfuse.
+</Note>
+
+## Why existing instrumentation is not enough
+
+Lemma is an opinionated sink. It reads a specific trace shape to power input/output display, model visibility, timing, tool visibility, threads, and automated issue detection. See [Overview](/tracing/overview) for how Lemma reads your traces.
+
+Langfuse is a flexible observability layer. It will happily record traces, observations, and timing, but it does not guarantee the things Lemma depends on:
+
+- **One root trace per agent execution** with the current user input and the final output or error.
+- **Typed children** — generations, tools, and generic spans, not undifferentiated observations.
+- **Per-generation message history** — the full ordered message list sent to each LLM call.
+
+Because those semantics are not guaranteed by your existing setup, the fix is to emit the Lemma trace contract explicitly with the Lemma SDK. Keep Langfuse for whatever you already use it for; add Lemma for the Lemma product experience.
+
+## Concept mapping
+
+The mental model transfers cleanly. What changes is that Lemma needs its children **typed** and its root **complete**. For the canonical field semantics and the client-vs-normalization mapping, see the [trace contract](/reference/trace-contract).
+
+| Langfuse concept | Lemma primitive | What Lemma needs |
+| --- | --- | --- |
+| Langfuse trace | Lemma [trace record](/reference/trace-contract#trace-record) (root) | One agent execution = one trace, with `input` and final `output` or `error` |
+| Langfuse observation (generic) | Lemma [child span](/reference/trace-contract#child-spans) | A typed entry in `spans[]` |
+| Langfuse generation | Lemma [generation](/tracing/instrumentation/generations) (`type: "generation"`) | `model` plus the full per-call message history |
+| Langfuse span wrapping a tool | Lemma [tool](/tracing/instrumentation/tool-calls) (`type: "tool"`) | Tool `name`, arguments, and result or error |
+| Langfuse span for retrieval, ranking, or app logic | Lemma [span](/tracing/instrumentation/spans) (`type: "span"`) | `input` and `output` (or `error`) |
+| Parent / child observation nesting | `parent_id` nesting | Children under the step that caused them |
+| Observation start / end timestamps | `started_at` / `ended_at` / `duration_ms` | Real measured bounds |
+| Session id | [Thread](/tracing/instrumentation/context) (`threadId` / `thread_id`) | Groups multi-turn conversation traces |
+| User id | [User](/tracing/instrumentation/context) (`userId` / `user_id`) | Per-user slicing |
+
+<Note>
+  `type` is a discriminator. Setting a `model` on an untyped span does not make it a generation — you must set `type: "generation"`. The SDK typed helpers (`recordGeneration` / `recordTool` / `recordSpan`) do this for you.
+</Note>
+
+## What transfers and what does not
+
+**Transfers** — the structural intuition you already have:
+
+- Nesting: parent/child observation trees map directly onto Lemma's `parent_id` nesting.
+- Timing: start/end timestamps map onto Lemma's `started_at` / `ended_at` / `duration_ms`.
+- One logical run: the idea that a single agent execution is one unit maps onto one Lemma trace.
+
+**Does not transfer automatically** — Lemma needs these produced explicitly:
+
+- A dedicated **Lemma root trace** per execution (`lemma.trace(...)`).
+- **Typed** generations and tools, rather than generic observations.
+- **Root input and output** (or error) on the trace record.
+- **Per-generation message history** — the full ordered message list, not just the latest user string.
+
+For the bad → better → best version of each of these, see [Building high-quality traces](/reference/building-high-quality-traces).
+
+## Run Lemma side by side
+
+Leave your Langfuse instrumentation exactly where it is. Wrap the same agent execution in `lemma.trace()` and record the LLM calls and tools you already know about as typed Lemma children. This produces a conforming Lemma trace without disturbing your existing pipeline.
+
+Install and configure the SDK first — see [Setup](/tracing/instrumentation/setup).
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import { Lemma } from "@uselemma/tracing";
+
+    const lemma = new Lemma();
+
+    // Your existing Langfuse instrumentation stays in place.
+    const answer = await lemma.trace(
+      {
+        name: "support-agent",
+        input: userMessage,
+        threadId,
+        userId,
+      },
+      async (trace) => {
+        const docs = await searchDocs(userMessage);
+        trace.recordTool({
+          name: "search_docs",
+          input: { query: userMessage },
+          output: docs,
+        });
+
+        const messages = [
+          { role: "system", content: "You are a support agent." },
+          ...priorMessages,
+          { role: "user", content: userMessage },
+          { role: "tool", content: JSON.stringify(docs) },
+        ];
+
+        const response = await callModel(messages);
+        trace.recordGeneration({
+          name: "answer",
+          model: "gpt-4o",
+          input: messages,
+          output: response.text,
+          llmInputMessages: messages,
+        });
+
+        return response.text;
+      },
+    );
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import json
+
+    from uselemma_tracing import Lemma
+
+    lemma = Lemma()
+
+    # Your existing Langfuse instrumentation stays in place.
+    def run(trace):
+        docs = search_docs(user_message)
+        trace.record_tool(
+            name="search_docs",
+            input={"query": user_message},
+            output=docs,
+        )
+
+        messages = [
+            {"role": "system", "content": "You are a support agent."},
+            *prior_messages,
+            {"role": "user", "content": user_message},
+            {"role": "tool", "content": json.dumps(docs)},
+        ]
+
+        response = call_model(messages)
+        trace.record_generation(
+            name="answer",
+            model="gpt-4o",
+            input=messages,
+            output=response.text,
+            llm_input_messages=messages,
+        )
+
+        return response.text
+
+    answer = lemma.trace(
+        "support-agent",
+        run,
+        input=user_message,
+        thread_id=thread_id,
+        user_id=user_id,
+    )
+    ```
+  </Tab>
+</Tabs>
+
+Pass the **full ordered message list** for each call as both `input` and `llmInputMessages` / `llm_input_messages`. The root trace `input` is only the current user turn. See [Generations](/tracing/instrumentation/generations) and [Tool calls](/tracing/instrumentation/tool-calls) for live handles, errors, and nesting under a measured parent span.
+
+If your run is coordinated across streaming callbacks or helpers rather than one function, use a TypeScript trace handle and end it from the terminal callback. See [Traces](/tracing/instrumentation/traces).
+
+## Pitfalls
+
+<Warning>
+  Record complete inputs and outputs only when safe. Redact secrets, credentials, and sensitive user data before tracing them.
+</Warning>
+
+| Pitfall | Fix |
+| --- | --- |
+| Assuming Langfuse observations already satisfy Lemma | They usually do not carry the Lemma contract. Emit it explicitly with the Lemma SDK. |
+| Routing Lemma work through Langfuse | Do not. Add Lemma SDK tracing directly alongside Langfuse; keep Langfuse only for what still needs it. |
+| No Lemma root trace | Wrap each agent execution in `lemma.trace()` so children have one root to attach to. |
+| Untyped children | Record LLM calls with `recordGeneration` and tools with `recordTool` so they render and filter as generations and tools. |
+| Missing message history | Put the full ordered message list on each generation's `input` and `llmInputMessages` / `llm_input_messages`, not just the latest user string. |
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Setup" icon="wrench" href="/tracing/instrumentation/setup">
+    Install the SDK and point it at Lemma.
+  </Card>
+  <Card title="Trace contract" icon="file-check" href="/reference/trace-contract">
+    The exact shape and fields Lemma reads.
+  </Card>
+  <Card title="Building high-quality traces" icon="circle-check" href="/reference/building-high-quality-traces">
+    Bad → better → best examples for the ideal path.
+  </Card>
+  <Card title="From OpenTelemetry to Lemma" icon="plug-zap" href="/guides/migrations/opentelemetry">
+    Add Lemma alongside an existing OTel pipeline.
+  </Card>
+</CardGroup>
