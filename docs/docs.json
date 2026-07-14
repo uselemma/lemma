@@ -118,7 +118,7 @@
           {
             "group": "Guides",
             "pages": [
-              "reference/building-high-quality-traces",
+              "guides/building-high-quality-traces",
               "guides/instrumenting-multi-turn-agents"
             ]
           },
@@ -150,7 +150,11 @@
     },
     {
       "source": "/reference/good-vs-bad-traces",
-      "destination": "/reference/building-high-quality-traces"
+      "destination": "/guides/building-high-quality-traces"
+    },
+    {
+      "source": "/reference/building-high-quality-traces",
+      "destination": "/guides/building-high-quality-traces"
     },
     {
       "source": "/getting-started/minimum-viable-trace",

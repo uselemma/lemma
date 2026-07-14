@@ -30,7 +30,7 @@ The SDK sends a **trace record** plus child spans. At ingest, Lemma creates a sy
 | **Semantic** | Needed for Lemma product features | Root input/output-or-error, typed generations and tools, model and payloads, nesting, thread/user |
 | **High quality** | Ideal instrumentation fidelity | Measured durations, complete span I/O, full per-call message history, causal nesting |
 
-Ingest accepts a name-only trace. Semantic fields are not HTTP-required, but without them Lemma can only render timing and a sparse tree. For the pedagogical ideal path, see [Building high-quality traces](/reference/building-high-quality-traces).
+Ingest accepts a name-only trace. Semantic fields are not HTTP-required, but without them Lemma can only render timing and a sparse tree. For the pedagogical ideal path, see [Building high-quality traces](/guides/building-high-quality-traces).
 
 ## Ingest payload
 
@@ -380,7 +380,7 @@ Record complete inputs and outputs only when safe. Redact secrets, credentials, 
 ## Related pages
 
 <CardGroup cols={2}>
-  <Card title="Building high-quality traces" icon="circle-check" href="/reference/building-high-quality-traces">
+  <Card title="Building high-quality traces" icon="circle-check" href="/guides/building-high-quality-traces">
     Bad → better → best examples for the ideal instrumentation path.
   </Card>
   <Card title="Instrument an agent" icon="bot" href="/tracing/instrumentation/instrument-an-agent">
