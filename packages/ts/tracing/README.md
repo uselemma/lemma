@@ -273,7 +273,7 @@ lemma.recordTool({
   name: "tool call",
 });
 
-await trace.flush();
+await trace.end();
 ```
 
 Detached handle calls require `traceId`. If a detached observation has a parent, pass `parentSpanId`; calls that cannot attach safely warn and no-op.

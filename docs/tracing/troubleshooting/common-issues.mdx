@@ -314,7 +314,7 @@ support-agent
 
 **Fix:** `await lemma.trace(...)` inside the handler and keep trace recording inside the callback. The SDK sends the completed payload before `lemma.trace()` resolves.
 
-**Debug with Debug mode:** check whether the ingest log appears before the function returns. If it appears after the response is sent, or never appears, await the trace promise and avoid detached background recording unless you explicitly flush or end the trace handle.
+**Debug with Debug mode:** check whether the ingest log appears before the function returns. If it appears after the response is sent, or never appears, await the trace promise and avoid detached background recording unless you explicitly end the trace handle.
 
 ## Traces render but there are no issues or incidents
 

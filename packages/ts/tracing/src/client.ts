@@ -753,12 +753,12 @@ export class TraceContext {
 }
 
 export class TraceHandle extends TraceContext {
-  private flushPromise: Promise<void> = Promise.resolve();
+  private sendPromise: Promise<void> = Promise.resolve();
   private ended = false;
 
   constructor(
     options: TraceOptions,
-    private readonly flushFn: (
+    private readonly sendFn: (
       trace: TraceHandle,
       startedAt: Date,
       endedAt: Date,
@@ -766,34 +766,21 @@ export class TraceHandle extends TraceContext {
     private readonly startedAt = new Date(),
   ) {
     super(options);
-    // A trace is delivered only when it is explicitly ended (`end()`) or
-    // flushed (`flush()`). We deliberately do NOT auto-send on construction or
-    // on every recorded span: the ingest API is append-only and treats each
-    // submission's spans as new, so streaming partial snapshots re-sends every
-    // prior span and accumulates duplicates. Recording mutates the in-memory
-    // trace only; the single terminal send carries the complete trace.
-  }
-
-  /**
-   * Send the trace's current contents in one request. Prefer `end()`; use
-   * `flush()` only when you deliberately want to deliver before ending (each
-   * call is a full send, so repeated flushes re-send earlier spans).
-   */
-  flush() {
-    const endedAt = new Date();
-    this.flushPromise = this.flushPromise.then(() =>
-      this.flushFn(this, this.startedAt, endedAt),
-    );
-    return this.flushPromise;
+    // A trace is delivered only when it is explicitly ended (`end()`). We
+    // deliberately do NOT auto-send on construction or on every recorded span:
+    // the ingest API is append-only and treats each submission's spans as new,
+    // so streaming partial snapshots re-sends every prior span and accumulates
+    // duplicates. Recording mutates the in-memory trace only; the single
+    // terminal send from `end()` carries the complete trace.
   }
 
   async end(): Promise<void>;
   async end(output: unknown): Promise<void>;
   async end(options: TraceEndOptions): Promise<void>;
   async end(outputOrOptions?: unknown | TraceEndOptions) {
-    // Ending is idempotent: a trace is sent exactly once so a second end() (or
-    // a shutdown flush after end()) can't duplicate its spans.
-    if (this.ended) return this.flushPromise;
+    // Ending is idempotent: a trace is sent exactly once so a second end()
+    // can't duplicate its spans.
+    if (this.ended) return this.sendPromise;
     if (isTraceEndOptions(outputOrOptions)) {
       if ("output" in outputOrOptions) {
         this.output(outputOrOptions.output);
@@ -805,7 +792,11 @@ export class TraceHandle extends TraceContext {
       this.output(outputOrOptions);
     }
     this.ended = true;
-    await this.flush();
+    const endedAt = new Date();
+    this.sendPromise = this.sendPromise.then(() =>
+      this.sendFn(this, this.startedAt, endedAt),
+    );
+    await this.sendPromise;
   }
 
   /** Whether this trace has already been delivered via `end()`. */

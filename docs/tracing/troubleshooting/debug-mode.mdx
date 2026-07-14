@@ -110,7 +110,7 @@ For a successful trace, look for this sequence:
 
 `sending trace` now includes `projectId`, `bodyBytes`, and `requestedAt`. `trace sent` includes response headers (`cf-ray`, `server`, `date`) and warns when `status !== 201`.
 
-If the trace uses a handle, you should see `trace handle created`, then `sending trace` when the handle flushes or ends.
+If the trace uses a handle, you should see `trace handle created`, then `sending trace` when the handle ends.
 
 ## Verify ingest enqueue
 
@@ -159,7 +159,7 @@ Use the first missing log line to narrow the problem.
 | What you see | What it means | What to check |
 | --- | --- | --- |
 | No Lemma logs | Debug mode is not enabled in this process, or this code path is not running | Set `LEMMA_DEBUG=1` in the runtime that serves traffic |
-| `trace started`, but no `sending trace` | The callback did not finish, or the trace handle was never flushed/ended | Await `lemma.trace(...)`, call `trace.end(...)`, and check thrown errors |
+| `trace started`, but no `sending trace` | The callback did not finish, or the trace handle was never ended | Await `lemma.trace(...)`, call `trace.end(...)`, and check thrown errors |
 | `sending trace`, then `trace ingest failed` | The SDK reached the endpoint, but ingest rejected the request | Check status code, `hint` field, API key, project ID, `baseUrl`, and network policy |
 | `trace sent`, but the dashboard looks wrong | Delivery worked; the issue is likely trace shape | Compare `spanCount` (`span_count` in Python), tool/generation calls, and the [trace contract](/reference/trace-contract) |
 

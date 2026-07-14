@@ -102,7 +102,7 @@ describe("HTTP tracing integration", () => {
       name: "detached-tool",
     });
     detachedParent.end();
-    await detached.flush();
+    await detached.end();
 
     const aiTrace = lemma.trace({ name: "ai-sdk-trace", input: "hi" });
     const integration = vercelAI({ trace: aiTrace });

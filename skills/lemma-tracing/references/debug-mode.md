@@ -82,7 +82,7 @@ If the smoke trace succeeds but the real agent does not, credentials and network
 | What you see | What it means | What to do |
 | --- | --- | --- |
 | No Lemma logs | Debug mode is not enabled in this process, or the traced path is not running | Confirm env/config in the running server, job worker, or route handler; add a temporary app log next to `lemma.trace(...)` |
-| `trace started`, but no `sending trace` | The callback did not finish, threw before flush, or an open handle was not ended/flushed | Await `lemma.trace(...)`; call and await `trace.end(...)`; inspect thrown errors and finalization callbacks |
+| `trace started`, but no `sending trace` | The callback did not finish, threw before send, or an open handle was not ended | Await `lemma.trace(...)`; call and await `trace.end(...)`; inspect thrown errors and finalization callbacks |
 | `trace handle created`, but no `sending trace` | A TypeScript handle exists but never reaches terminal finalization | End it from the final callback, stream terminal event, queue completion, or `finally` block |
 | `sending trace`, then `trace ingest failed` | The SDK reached Lemma, but ingest rejected the request | Check status, response body, API key, project ID, `baseUrl`, and network policy |
 | `trace sent`, but dashboard is wrong | Delivery worked; the payload shape is wrong or incomplete | Compare child count, parent IDs, and contract fields, then fix recording calls |
@@ -123,7 +123,7 @@ Interpret the logs:
 | --- | --- | --- |
 | A child span appears as its own trace | The child was recorded outside the active root trace, or a helper created a new trace | Move the child recording inside `lemma.trace(...)`, pass the trace/span handle, or pass `traceId` and `parentSpanId` to detached helpers |
 | A span is present but root-level instead of nested | The record call did not use the parent span handle and no `parentSpanId` was provided | Call `parent.recordTool(...)`, `parent.recordGeneration(...)`, or `parent.recordSpan(...)`; for detached helpers, pass `parentSpanId` |
-| Expected span is absent and `spanCount` is too low | The recording code did not run, ran after the trace ended, or ran in a different async context | Add a temporary app log next to the recording call, keep it inside the trace callback, or end/flush only after child work completes |
+| Expected span is absent and `spanCount` is too low | The recording code did not run, ran after the trace ended, or ran in a different async context | Add a temporary app log next to the recording call, keep it inside the trace callback, or end only after child work completes |
 | Debug logs show the span, but dashboard shape is still wrong | The span type or contract fields are wrong | Use typed helpers: `recordTool`, `recordGeneration`, `recordSpan`; include native fields like `model`, `input`, `output`, and `toolParameters` |
 
 Correct nested handle pattern:
@@ -269,7 +269,7 @@ Use debug mode like this:
 1. Confirm `trace sent` appears before the handler returns or the job exits.
 2. Await `lemma.trace(...)`; do not fire and forget.
 3. For TypeScript handles, call and await `trace.end(...)` in `finally` or the terminal callback.
-4. Avoid recording child work after the root callback has returned unless using detached recording by ID and an explicit flush/end path.
+4. Avoid recording child work after the root callback has returned unless using detached recording by ID and an explicit `trace.end(...)` path.
 
 ## Finish With the Contract
 

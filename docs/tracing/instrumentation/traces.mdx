@@ -103,7 +103,7 @@ Use the callback form when one function owns the whole run. In TypeScript, use a
   </Tab>
 </Tabs>
 
-The TypeScript trace handle has a stable `trace.id`. Calls are flushed to Lemma as trace snapshots, and `trace.end({ output, durationMs })` performs a final flush. Callback traces in both SDKs measure total trace duration automatically; pass `durationMs` / `duration_ms` only when you already measured it.
+The TypeScript trace handle has a stable `trace.id`. Call `trace.end({ output, durationMs })` once when the run is finished to send the complete trace. Callback traces in both SDKs measure total trace duration automatically; pass `durationMs` / `duration_ms` only when you already measured it.
 
 ## Record by ID
 
@@ -122,7 +122,7 @@ lemma.recordTool({
   name: "tool call",
 });
 
-await trace.flush();
+await trace.end();
 ```
 
 Detached handle calls require `traceId`. If a detached span, generation, or tool belongs under a parent span, pass `parentSpanId`; calls that cannot attach safely warn and no-op.
