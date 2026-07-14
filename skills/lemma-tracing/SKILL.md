@@ -137,12 +137,12 @@ Expected successful sequence:
 [LEMMA:client] trace sent
 ```
 
-For trace handles, expect `trace handle created`, span-level debug logs as each handle starts/ends, then `sending trace` when the handle flushes or ends. Use the `spanCount` (`span_count` in Python) on `sending trace` to confirm children are actually included.
+For trace handles, expect `trace handle created`, span-level debug logs as each handle starts/ends, then `sending trace` when the handle ends. Use the `spanCount` (`span_count` in Python) on `sending trace` to confirm children are actually included.
 
 Common reads:
 
 - No Lemma logs: debug mode is not enabled in the running process, or the traced path is not executing.
-- `trace started` but no `sending trace`: callback did not finish, or a handle was never flushed/ended.
+- `trace started` but no `sending trace`: callback did not finish, or a handle was never ended.
 - `sending trace` then `trace ingest failed`: check credentials, project ID, `baseUrl`, status code, and network policy.
 - Individual spans show up as traces: the child work is being recorded outside the root trace context; move it inside the callback or pass `traceId` / `parentSpanId`.
 - Spans are not nested properly: record nested work on the parent span handle or pass the correct `parentSpanId` to detached helpers.
@@ -167,7 +167,7 @@ Validation checklist before considering an integration complete:
 - Tool calls are typed tool children with input arguments and output/error.
 - App work is recorded as spans, nested under the correct parent when relevant.
 - Related conversation turns share `threadId` / `thread_id`.
-- TypeScript trace handles are ended or flushed from the terminal callback, `finally` block, or job completion path.
+- TypeScript trace handles are ended from the terminal callback, `finally` block, or job completion path.
 - Debug logs show `trace sent` and a final `spanCount` / `span_count` that matches the expected child records.
 - The dashboard trace shape matches the code path: root, generations, tools, spans, parent/child nesting, and thread/user context when expected.
 

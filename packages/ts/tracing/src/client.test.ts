@@ -222,7 +222,7 @@ describe("Lemma", () => {
     const trace = lemma.trace();
     const span = trace.startSpan("parent span");
     span.recordTool("tool call");
-    await trace.flush();
+    await trace.end();
 
     const body = jsonBody(fetchMock.mock.calls.at(-1)!);
     expect(body.trace).toMatchObject({
@@ -308,7 +308,7 @@ describe("Lemma", () => {
       name: "tool call",
     });
     span.end();
-    await trace.flush();
+    await trace.end();
 
     const body = jsonBody(fetchMock.mock.calls.at(-1)!);
     expect(body.trace.name).toBe("trace");
@@ -394,7 +394,7 @@ describe("Lemma", () => {
       parentId: "parent-span",
       name: "child tool",
     });
-    await trace.flush();
+    await trace.end();
 
     const body = jsonBody(fetchMock.mock.calls.at(-1)!);
     expect(span.id).toBe("");
