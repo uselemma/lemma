@@ -941,8 +941,15 @@ export class Lemma {
     if (!fn) {
       const handle = new TraceHandle(
         traceOptions,
-        (trace, startedAt, endedAt) =>
-          this.flushTrace(trace, startedAt, endedAt),
+        async (trace, startedAt, endedAt) => {
+          try {
+            await this.flushTrace(trace, startedAt, endedAt);
+          } finally {
+            // Drop the handle once ended so long-lived clients don't retain
+            // every historical TraceHandle (and its spans/payloads) forever.
+            this.traces.delete(trace.id);
+          }
+        },
       );
       this.traces.set(handle.id, handle);
       lemmaDebug("client", "trace handle created", {

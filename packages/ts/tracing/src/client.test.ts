@@ -291,6 +291,37 @@ describe("Lemma", () => {
     expect(jsonBody(fetchMock.mock.calls[0]).trace.output).toBe("done");
   });
 
+  it("releases ended trace handles from the client registry", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const trace = lemma.trace({ name: "support-agent" });
+    expect(
+      (lemma as unknown as { traces: Map<string, unknown> }).traces.has(trace.id),
+    ).toBe(true);
+
+    await trace.end({ output: "done" });
+
+    expect(
+      (lemma as unknown as { traces: Map<string, unknown> }).traces.has(trace.id),
+    ).toBe(false);
+
+    // Detached helpers must not keep working against an ended, unregistered
+    // handle — that would imply the registry still retained it.
+    const span = lemma.startSpan({ traceId: trace.id, name: "after-end" });
+    expect(span.id).toBe("");
+    expect(warn).toHaveBeenCalledWith(
+      `@uselemma/tracing: unknown trace id "${trace.id}"; skipping span`,
+    );
+
+    warn.mockRestore();
+  });
+
   it("supports client-level detached observations by trace id", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const lemma = new Lemma({
