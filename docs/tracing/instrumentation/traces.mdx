@@ -127,6 +127,59 @@ await trace.end();
 
 Detached handle calls require `traceId`. If a detached span, generation, or tool belongs under a parent span, pass `parentSpanId`; calls that cannot attach safely warn and no-op.
 
+## Send a trace you built yourself
+
+`lemma.trace()` assumes the client owns the trace lifecycle within a single process. When the producer lives elsewhere — a cross-process buffer, a queue worker, a batch backfill — build a `TraceContext` yourself and deliver it with `ingest()`. Give it a stable `id` so retries address the same trace.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import { Lemma, TraceContext } from "@uselemma/tracing";
+
+    const lemma = new Lemma();
+
+    const context = new TraceContext({
+      id: turnId, // stable id for this execution (use for retries)
+      name: "support-agent",
+      input: prompt,
+      threadId: conversationId,
+    });
+    context.recordTool({ name: "search_docs", input: query, output: docs, durationMs: 25 });
+    context.recordGeneration({ name: "answer", model: "gpt-4o", output: finalAnswer });
+    context.output(finalAnswer);
+
+    await lemma.ingest(context, { startedAt });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from uselemma_tracing import Lemma, TraceContext
+
+    lemma = Lemma()
+
+    context = TraceContext(
+        id=turn_id,  # stable id for this execution (use for retries)
+        name="support-agent",
+        input=prompt,
+        thread_id=conversation_id,
+    )
+    context.record_tool(name="search_docs", input=query, output=docs, duration_ms=25)
+    context.record_generation(name="answer", model="gpt-4o", output=final_answer)
+    context.output(final_answer)
+
+    lemma.ingest(context, started_at=started_at)
+    ```
+  </Tab>
+</Tabs>
+
+`ingest()` POSTs one payload. Deliver **one complete trace** when the execution (agent turn) finishes: root input/output, thread/user, and all child spans in one call. This is required — patching a trace over time is not currently supported.
+
+`ingest()` is not an incremental merge API: omitted root fields do not preserve prior values, and after Lemma processes the trace once, a later re-delivery does not re-run issue extraction (occasional late child spans may still append to the tree for display). Retries of the same complete payload are safe — already-stored span IDs are skipped — so a failed send can be retried as-is. It raises on a non-2xx response and never mutates the trace's status.
+
+<Warning>
+  Across queues and workers, assemble the full tree in a coordinator and `ingest()` once when the turn is done. Do not stream partial deliveries under one `trace.id`.
+</Warning>
+
 ## Override output or record errors
 
 Return values are captured automatically. Use `trace.output()` only when the recorded output should differ from the return value.

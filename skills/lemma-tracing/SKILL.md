@@ -35,6 +35,8 @@ Every integration must satisfy this product contract:
 
 If the app cannot produce this shape at the exact call site, pass IDs and record from the coordinator that knows the full trace, or start one top-level trace per process and carry the same `threadId`.
 
+When you assemble a trace yourself and deliver it with `ingest()` (queues, workers, backfills), send one complete payload — root input/output, thread/user, and all child spans — when the turn finishes. This is required; patching a trace over time is not currently supported. Retries of the same payload are safe (stable span IDs are skipped). `ingest()` is not an incremental merge API: omitted root fields do not preserve prior values, and analysis runs once after an idle debounce.
+
 ## Choose the Integration Path
 
 | Situation | Preferred path |

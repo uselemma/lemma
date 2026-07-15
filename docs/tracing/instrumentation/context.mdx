@@ -73,6 +73,47 @@ When one user has a back-and-forth with your agent, each turn is its own trace. 
   </Tab>
 </Tabs>
 
+## Environment & service name
+
+To separate environments or set a service name, use the mechanism that matches your goal:
+
+| Goal | Mechanism |
+| --- | --- |
+| Isolate staging from production | Use separate Lemma projects |
+| Label the environment on a trace | Set `metadata["deployment.environment.name"]` |
+| Set a custom service name | Use the OTLP resource `service.name` — the SDK ingest path always stores `service_name: "lemma-sdk"` |
+
+Attach the environment label through trace `metadata`:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    await lemma.trace(
+      {
+        name: "support-agent",
+        input: userMessage,
+        metadata: { "deployment.environment.name": "staging" },
+      },
+      async (trace) => runAgent(userMessage, trace),
+    );
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    lemma.trace(
+        "support-agent",
+        lambda trace: run_agent(user_message, trace),
+        input=user_message,
+        metadata={"deployment.environment.name": "staging"},
+    )
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  `TraceOptions.environment` was removed and was never persisted on the SDK ingest path. Use a separate project or the `deployment.environment.name` metadata key instead.
+</Note>
+
 ## Reference
 
 | Context | SDK option | Client field | Ingest normalizes to |
@@ -80,6 +121,7 @@ When one user has a back-and-forth with your agent, each turn is its own trace. 
 | Agent name | `name` | `trace.name` | `gen_ai.agent.name`, `ai.agent.name` |
 | Thread / conversation | `threadId` / `thread_id` | `trace.thread_id` | `lemma.thread_id` |
 | User | `userId` / `user_id` | `trace.user_id` | `user.id`, `enduser.id` |
+| Environment | `metadata["deployment.environment.name"]` | `trace.metadata` | `deployment.environment.name` |
 
 See the [trace contract](/reference/trace-contract) for how each field is sent and normalized.
 
