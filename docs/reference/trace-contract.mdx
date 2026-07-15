@@ -100,7 +100,15 @@ Ingest accepts a name-only trace. Semantic fields are not HTTP-required, but wit
 
 Successful ingest returns **201**. Invalid shape returns **400**. Missing `trace.id` or span `id` values are generated server-side. Missing or invalid `spans[].type` defaults to `"span"`. Missing `parent_id` attaches the child under the synthetic root.
 
-Repeated deliveries for the same `trace.id` are append-only: spans whose IDs already exist are skipped. Do not rely on a client `replace` flag to overwrite earlier spans.
+### Delivery and retries
+
+Deliver **one complete trace** when the execution (agent turn) finishes. This is required; patching a trace over time is not currently supported. Treat `ingest` as a single delivery, not an incremental merge API.
+
+- **Required:** one complete delivery per execution — root input/output, thread/user, and all child spans in one payload, sent when the turn is done.
+- **Retries:** re-sending the same payload with the same span IDs is idempotent; spans whose IDs already exist are skipped.
+- **Not a merge API:** omitted root fields do **not** preserve prior values. There is no field-level upsert, and patching a trace across calls is not supported.
+- **Processing:** after an idle window Lemma processes the trace once; a later successful re-delivery does not restart `processTrace` / `extractSignals`. Late new span IDs may still append for display.
+- Do not reuse one `trace.id` across conversation turns — see [Instrumenting multi-turn agents](/guides/instrumenting-multi-turn-agents).
 
 ## Trace record
 

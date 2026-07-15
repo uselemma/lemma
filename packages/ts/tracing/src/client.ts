@@ -158,7 +158,6 @@ type SdkTracePayload = {
     error?: string | null;
     spans: SdkTraceSpanPayload[];
   };
-  replace?: boolean;
 };
 
 type DebugSpanSummary = {
@@ -728,7 +727,6 @@ export class TraceContext {
     projectId: string,
     startedAt: Date,
     endedAt: Date,
-    replace = false,
   ): SdkTracePayload {
     return {
       project_id: projectId,
@@ -747,7 +745,6 @@ export class TraceContext {
         error: this.traceError,
         spans: this.spans,
       },
-      replace,
     };
   }
 }
@@ -854,12 +851,7 @@ export class Lemma {
     });
     context.output("ok");
     const startedAt = new Date();
-    const payload = context.toPayload(
-      this.projectId,
-      startedAt,
-      new Date(),
-      false,
-    );
+    const payload = context.toPayload(this.projectId, startedAt, new Date());
     const body = JSON.stringify(payload);
     const url = `${this.baseUrl}${INGEST_PATH}`;
 
@@ -950,7 +942,7 @@ export class Lemma {
       const handle = new TraceHandle(
         traceOptions,
         (trace, startedAt, endedAt) =>
-          this.flushTrace(trace, startedAt, endedAt, true),
+          this.flushTrace(trace, startedAt, endedAt),
       );
       this.traces.set(handle.id, handle);
       lemmaDebug("client", "trace handle created", {
@@ -991,20 +983,23 @@ export class Lemma {
    * that live outside a single process (cross-process buffers, queues, batch
    * backfills) where a long-lived handle can't be held.
    *
-   * Spans merge into the trace by id when `replace` is false (the default), so a
-   * trace can be sent incrementally across several calls; pass `replace: true`
-   * to overwrite it wholesale. Throws on a non-2xx response and never mutates the
-   * trace's status, so a failed send can be retried as-is.
+   * Deliver **one complete trace** when the execution (agent turn) finishes:
+   * root input/output, thread/user, and all child spans in a single call. This
+   * is required — patching a trace over time is not supported. Omitted root
+   * fields do not preserve prior values, and after Lemma processes the trace
+   * once, a later re-delivery does not re-run issue extraction (late new span
+   * IDs may still append for display). Retries of the same complete payload are
+   * safe: already-stored span IDs are skipped. Throws on a non-2xx response and
+   * never mutates the trace's status, so a failed send can be retried as-is.
    */
   async ingest(
     context: TraceContext,
-    options: { startedAt: Date; endedAt?: Date; replace?: boolean },
+    options: { startedAt: Date; endedAt?: Date },
   ): Promise<void> {
     await this.flushTrace(
       context,
       options.startedAt,
       options.endedAt ?? new Date(),
-      options.replace ?? false,
     );
   }
 
@@ -1260,14 +1255,8 @@ export class Lemma {
     context: TraceContext,
     startedAt: Date,
     endedAt: Date,
-    replace = false,
   ) {
-    const payload = context.toPayload(
-      this.projectId,
-      startedAt,
-      endedAt,
-      replace,
-    );
+    const payload = context.toPayload(this.projectId, startedAt, endedAt);
     const body = JSON.stringify(payload);
     const url = `${this.baseUrl}${INGEST_PATH}`;
     lemmaDebug("client", "sending trace", {
@@ -1278,7 +1267,6 @@ export class Lemma {
       bodyBytes: new TextEncoder().encode(body).length,
       requestedAt: new Date().toISOString(),
       url,
-      replace,
     });
     const response = await this.fetchImpl(url, {
       method: "POST",

@@ -141,7 +141,7 @@ import { Lemma, TraceContext } from "@uselemma/tracing";
 const lemma = new Lemma();
 
 const context = new TraceContext({
-  id: turnId, // stable id ties batches to one trace
+  id: turnId, // stable id for this execution (use for retries)
   name: prompt,
   input: prompt,
   threadId: conversationId,
@@ -153,7 +153,9 @@ context.output(finalAnswer);
 await lemma.ingest(context, { startedAt });
 ```
 
-`ingest()` is a single POST. Spans merge into the trace by id when `replace` is false (the default), so you can send a trace incrementally across several calls under one stable id and let the server reconcile them; pass `replace: true` to overwrite the trace wholesale. It throws on a non-2xx response and never mutates the trace's status, so a failed send can be retried as-is without fabricating an error.
+`ingest()` POSTs one payload. Deliver **one complete trace** when the execution (agent turn) finishes: root input/output, thread/user, and all child spans in one call. This is required — patching a trace over time is not currently supported.
+
+`ingest()` is not an incremental merge API: omitted root fields do not preserve prior values, and after Lemma processes the trace once, a later re-delivery does not re-run issue extraction (occasional late child spans may still append to the tree for display). Retries of the same complete payload are safe — already-stored span IDs are skipped — so a failed send can be retried as-is. It throws on a non-2xx response and never mutates the trace's status.
 
 ## Vercel AI SDK
 

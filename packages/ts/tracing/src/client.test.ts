@@ -137,7 +137,6 @@ describe("Lemma", () => {
     await trace.end({ output: "hello", durationMs: 321 });
 
     const body = jsonBody(fetchMock.mock.calls.at(-1)!);
-    expect(body.replace).toBe(true);
     expect(body.trace.id).toBe(trace.id);
     expect(body.trace.output).toBe("hello");
     expect(body.trace.duration_ms).toBe(321);
@@ -478,7 +477,6 @@ describe("Lemma", () => {
       }),
     );
     const body = jsonBody(fetchMock.mock.calls[0]);
-    expect(body.replace).toBe(false);
     expect(body.project_id).toBe("10000000-0000-0000-0000-000000000001");
     expect(body.trace).toMatchObject({
       id: "trace-1",
@@ -491,21 +489,7 @@ describe("Lemma", () => {
     expect(body.trace.spans).toMatchObject([{ name: "search_docs", type: "tool" }]);
   });
 
-  it("ingest replaces the trace when asked", async () => {
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
-    const lemma = new Lemma({
-      apiKey: "key",
-      projectId: "10000000-0000-0000-0000-000000000001",
-      fetch: fetchMock as typeof fetch,
-    });
-
-    const context = new TraceContext({ id: "trace-1", name: "t" });
-    await lemma.ingest(context, { startedAt: new Date(), replace: true });
-
-    expect(jsonBody(fetchMock.mock.calls[0]).replace).toBe(true);
-  });
-
-  it("ingest merges incrementally across calls under one stable id", async () => {
+  it("ingest sends each call as its own complete delivery", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const lemma = new Lemma({
       apiKey: "key",
@@ -515,24 +499,19 @@ describe("Lemma", () => {
 
     const startedAt = new Date("2026-01-01T00:00:00.000Z");
 
-    // Two independently-built contexts standing in for two processes/batches.
-    const first = new TraceContext({ id: "trace-1", name: "turn" });
-    first.recordGeneration({ name: "draft", model: "gpt-4o" });
-    await lemma.ingest(first, { startedAt });
+    const context = new TraceContext({ id: "trace-1", name: "turn" });
+    context.recordGeneration({ name: "draft", model: "gpt-4o" });
+    context.recordTool({ name: "lookup" });
+    await lemma.ingest(context, { startedAt });
 
-    const second = new TraceContext({ id: "trace-1", name: "turn" });
-    second.recordTool({ name: "lookup" });
-    await lemma.ingest(second, { startedAt });
-
-    const a = jsonBody(fetchMock.mock.calls[0]);
-    const b = jsonBody(fetchMock.mock.calls[1]);
-    expect(a.replace).toBe(false);
-    expect(b.replace).toBe(false);
-    expect(a.trace.id).toBe("trace-1");
-    expect(b.trace.id).toBe("trace-1");
-    expect(a.trace.started_at).toBe(b.trace.started_at);
-    expect(a.trace.spans).toMatchObject([{ name: "draft", type: "generation" }]);
-    expect(b.trace.spans).toMatchObject([{ name: "lookup", type: "tool" }]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.id).toBe("trace-1");
+    expect(body.trace.started_at).toBe("2026-01-01T00:00:00.000Z");
+    expect(body.trace.spans).toMatchObject([
+      { name: "draft", type: "generation" },
+      { name: "lookup", type: "tool" },
+    ]);
   });
 
   it("ingest throws on a non-2xx response so the caller can retry", async () => {
