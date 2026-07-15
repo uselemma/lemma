@@ -198,6 +198,14 @@ For failures, record the error before re-raising:
 
 **Debug with Debug mode:** confirm the trace logs `trace sent`, then open that trace in Lemma. If root output is still blank, the callback likely returned `undefined`, streamed the answer elsewhere, or exited before setting `trace.output(...)`.
 
+## Root input/output is null after a second delivery
+
+**Cause:** the trace was delivered again with a sparse `ingest()` payload — for example a follow-up call that carries a late child span but omits root `input`/`output`. `ingest()` is not an incremental merge API, so omitted root fields do not preserve prior values, and analysis typically already ran once after the first complete delivery.
+
+**Fix:** send **one complete trace** when the execution finishes — root input/output, thread/user, and all child spans in a single `ingest()` call. Retries of that same complete payload are safe (already-stored span IDs are skipped). Across queues and workers, assemble the full tree in a coordinator and ingest once rather than streaming partial deliveries under one `trace.id`.
+
+**Debug with Debug mode:** check the `sending trace` log for each delivery. If a later send has a small `spanCount` (`span_count` in Python) and no root I/O, that sparse payload is overwriting the root fields — consolidate it into the single terminal send.
+
 ## Model or content is missing
 
 **Cause:** the LLM call is recorded as a generic span, so Lemma has no model, prompt, or completion to read as a generation.

@@ -197,7 +197,6 @@ def test_ingest_sends_a_self_built_trace_once_merging_by_default():
     url, headers, body = calls[0]
     assert url == "https://api.example.test/traces/ingest"
     assert headers["Authorization"] == "Bearer key"
-    assert body["replace"] is False
     assert body["project_id"] == PROJECT_ID
     assert body["trace"]["id"] == "trace-1"
     assert body["trace"]["name"] == "cursor-agent-turn"
@@ -209,22 +208,7 @@ def test_ingest_sends_a_self_built_trace_once_merging_by_default():
     assert body["trace"]["spans"][0]["type"] == "tool"
 
 
-def test_ingest_replaces_the_trace_when_asked():
-    calls = []
-
-    def transport(_url, _headers, body):
-        calls.append(json.loads(body.decode()))
-        return 201, "{}"
-
-    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
-
-    context = TraceContext(id="trace-1", name="t")
-    lemma.ingest(context, started_at=_now_utc(), replace=True)
-
-    assert calls[0]["replace"] is True
-
-
-def test_ingest_merges_incrementally_across_calls_under_one_stable_id():
+def test_ingest_sends_each_call_as_its_own_complete_delivery():
     calls = []
 
     def transport(_url, _headers, body):
@@ -235,24 +219,19 @@ def test_ingest_merges_incrementally_across_calls_under_one_stable_id():
 
     started_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
-    first = TraceContext(id="trace-1", name="turn")
-    first.record_generation(name="draft", model="gpt-4o")
-    lemma.ingest(first, started_at=started_at)
+    context = TraceContext(id="trace-1", name="turn")
+    context.record_generation(name="draft", model="gpt-4o")
+    context.record_tool(name="lookup")
+    lemma.ingest(context, started_at=started_at)
 
-    second = TraceContext(id="trace-1", name="turn")
-    second.record_tool(name="lookup")
-    lemma.ingest(second, started_at=started_at)
-
-    a, b = calls
-    assert a["replace"] is False
-    assert b["replace"] is False
-    assert a["trace"]["id"] == "trace-1"
-    assert b["trace"]["id"] == "trace-1"
-    assert a["trace"]["started_at"] == b["trace"]["started_at"]
-    assert a["trace"]["spans"][0]["name"] == "draft"
-    assert a["trace"]["spans"][0]["type"] == "generation"
-    assert b["trace"]["spans"][0]["name"] == "lookup"
-    assert b["trace"]["spans"][0]["type"] == "tool"
+    assert len(calls) == 1
+    body = calls[0]
+    assert body["trace"]["id"] == "trace-1"
+    assert body["trace"]["started_at"] == "2026-01-01T00:00:00Z"
+    assert body["trace"]["spans"][0]["name"] == "draft"
+    assert body["trace"]["spans"][0]["type"] == "generation"
+    assert body["trace"]["spans"][1]["name"] == "lookup"
+    assert body["trace"]["spans"][1]["type"] == "tool"
 
 
 def test_ingest_surfaces_failures_without_fabricating_status():

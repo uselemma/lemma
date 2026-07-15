@@ -103,7 +103,7 @@ from uselemma_tracing import Lemma, TraceContext
 lemma = Lemma()
 
 context = TraceContext(
-    id=turn_id,  # stable id ties batches to one trace
+    id=turn_id,  # stable id for this execution (use for retries)
     name=prompt,
     input=prompt,
     thread_id=conversation_id,
@@ -115,12 +115,17 @@ context.output(final_answer)
 lemma.ingest(context, started_at=started_at)
 ```
 
-`ingest()` is a single POST. Spans merge into the trace by id when `replace` is
-`False` (the default), so you can send a trace incrementally across several
-calls under one stable id and let the server reconcile them; pass `replace=True`
-to overwrite the trace wholesale. It raises on a non-2xx response and never
-mutates the trace's status, so a failed send can be retried as-is without
-fabricating an error.
+`ingest()` POSTs one payload. Deliver **one complete trace** when the execution
+(agent turn) finishes: root input/output, thread/user, and all child spans in
+one call. This is required — patching a trace over time is not currently
+supported.
+
+`ingest()` is not an incremental merge API: omitted root fields do not preserve
+prior values, and after Lemma processes the trace once, a later re-delivery does
+not re-run issue extraction (occasional late child spans may still append to the
+tree for display). Retries of the same complete payload are safe — already-stored
+span IDs are skipped — so a failed send can be retried as-is. It raises on a
+non-2xx response and never mutates the trace's status.
 
 ## OpenAI Agents SDK
 

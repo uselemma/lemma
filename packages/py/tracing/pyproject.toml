@@ -1,6 +1,6 @@
 [project]
 name = "uselemma-tracing"
-version = "7.4.1"
+version = "7.4.2"
 description = "HTTP tracing SDK for Lemma"
 readme = "README.md"
 license = "MIT"

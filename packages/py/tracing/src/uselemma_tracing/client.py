@@ -718,7 +718,6 @@ class TraceContext:
         project_id: str,
         started_at: datetime,
         ended_at: datetime,
-        replace: bool = False,
     ) -> dict[str, Any]:
         return {
             "project_id": project_id,
@@ -739,7 +738,6 @@ class TraceContext:
                 "error": self.error,
                 "spans": self.spans,
             },
-            "replace": replace,
         }
 
 
@@ -795,7 +793,7 @@ class Lemma:
         )
         ctx.output("ok")
         started_at = _now()
-        payload = ctx.payload(self.project_id or "", started_at, _now(), False)
+        payload = ctx.payload(self.project_id or "", started_at, _now())
         body = json.dumps(payload, default=str).encode()
         url = f"{self.base_url}{INGEST_PATH}"
 
@@ -941,7 +939,6 @@ class Lemma:
         *,
         started_at: datetime,
         ended_at: datetime | None = None,
-        replace: bool = False,
     ) -> None:
         """Deliver a trace you assembled yourself, in a single request.
 
@@ -951,22 +948,25 @@ class Lemma:
         producers that live outside a single process (cross-process buffers,
         queues, batch backfills) where a long-lived handle can't be held.
 
-        Spans merge into the trace by id when ``replace`` is ``False`` (the
-        default), so a trace can be sent incrementally across several calls
-        under one stable id; pass ``replace=True`` to overwrite it wholesale.
-        Raises on a non-2xx response and never mutates the trace's status, so a
-        failed send can be retried as-is.
+        Deliver **one complete trace** when the execution (agent turn)
+        finishes: root input/output, thread/user, and all child spans in a
+        single call. This is required — patching a trace over time is not
+        supported. Omitted root fields do not preserve prior values, and after
+        Lemma processes the trace once, a later re-delivery does not re-run
+        issue extraction (late new span IDs may still append for display).
+        Retries of the same complete payload are safe: already-stored span IDs
+        are skipped. Raises on a non-2xx response and never mutates the trace's
+        status, so a failed send can be retried as-is.
         """
-        self._send(context, started_at, ended_at or _now(), replace)
+        self._send(context, started_at, ended_at or _now())
 
     def _send(
         self,
         ctx: TraceContext,
         started_at: datetime,
         ended_at: datetime,
-        replace: bool = False,
     ) -> None:
-        payload = ctx.payload(self.project_id or "", started_at, ended_at, replace)
+        payload = ctx.payload(self.project_id or "", started_at, ended_at)
         body = json.dumps(payload, default=str).encode()
         url = f"{self.base_url}{INGEST_PATH}"
         _lemma_debug(
@@ -978,7 +978,6 @@ class Lemma:
             project_id=payload["project_id"],
             body_bytes=len(body),
             requested_at=_iso(_now()),
-            replace=replace,
             url=url,
         )
         status, text = self.transport(

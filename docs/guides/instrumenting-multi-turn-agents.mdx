@@ -261,6 +261,7 @@ Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a 
   - **Losing the thread id across processes.** If a worker or async turn starts a trace without the conversation's `threadId`, that turn detaches from the conversation.
   - **Putting the full history only on the root.** The root `input` is the current turn. Prior turns and tool results belong on the generation's message list — otherwise you can't see what the model actually received.
   - **Reusing one trace id to "continue" a conversation.** Ingest is append-only per `trace.id`; reuse grafts turns together instead of grouping separate traces by thread.
+  - **Incremental-ingesting one turn.** Send each turn as one complete trace when it finishes; do not stream sparse partial deliveries under the same `trace.id` expecting later calls to patch the root or re-run analysis. Retries of the same complete payload are safe.
 </Warning>
 
 ## Related pages
