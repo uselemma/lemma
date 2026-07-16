@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from uselemma_tracing import disable_debug_mode, enable_debug_mode, openai_agents
@@ -197,6 +198,123 @@ def test_openai_agents_force_flush_sends_open_trace_once():
     processor.on_trace_end(FakeTrace(trace_id="trace_open", name="agent"))
     processor.force_flush()
     assert len(calls) == 1
+
+
+def test_openai_agents_records_is_error_function_output_as_error():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+
+    processor.on_trace_start(FakeTrace(trace_id="trace_err", name="support-agent"))
+    processor.on_span_start(
+        FakeSpan(
+            trace_id="trace_err",
+            span_id="span_tool",
+            span_data={
+                "type": "function",
+                "name": "pdf_server_pdf",
+                "input": '{"query":"YAT"}',
+            },
+        )
+    )
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_err",
+            span_id="span_tool",
+            span_data={
+                "type": "function",
+                "name": "pdf_server_pdf",
+                "input": '{"query":"YAT"}',
+                "output": json.dumps(
+                    {
+                        "content": [
+                            {"type": "text", "text": "Internal error: Validation error"}
+                        ],
+                        "isError": True,
+                    }
+                ),
+            },
+        )
+    )
+    processor.on_trace_end(FakeTrace(trace_id="trace_err", name="support-agent"))
+
+    span = calls[0]["trace"]["spans"][0]
+    assert span["name"] == "pdf_server_pdf"
+    assert span["status"] == "ERROR"
+    assert span["error"] == "Internal error: Validation error"
+    assert "output" not in span
+
+
+def test_openai_agents_extends_parent_when_child_tool_ends_later():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+
+    processor.on_trace_start(FakeTrace(trace_id="trace_timing", name="support-agent"))
+    processor.on_span_start(
+        FakeSpan(
+            trace_id="trace_timing",
+            span_id="span_generation",
+            span_data={"type": "generation", "model": "gpt-4o"},
+            started_at="2026-06-29T10:00:00.000Z",
+        )
+    )
+    processor.on_span_start(
+        FakeSpan(
+            trace_id="trace_timing",
+            span_id="span_tool",
+            parent_id="span_generation",
+            span_data={"type": "function", "name": "search_docs"},
+            started_at="2026-06-29T10:00:00.050Z",
+        )
+    )
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_timing",
+            span_id="span_generation",
+            span_data={
+                "type": "generation",
+                "model": "gpt-4o",
+                "output": [{"role": "assistant", "content": "done"}],
+            },
+            started_at="2026-06-29T10:00:00.000Z",
+            ended_at="2026-06-29T10:00:00.100Z",
+        )
+    )
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_timing",
+            span_id="span_tool",
+            parent_id="span_generation",
+            span_data={
+                "type": "function",
+                "name": "search_docs",
+                "output": '{"ok":true}',
+            },
+            started_at="2026-06-29T10:00:00.050Z",
+            ended_at="2026-06-29T10:00:00.180Z",
+        )
+    )
+    processor.on_trace_end(FakeTrace(trace_id="trace_timing", name="support-agent"))
+
+    spans = {span["id"]: span for span in calls[0]["trace"]["spans"]}
+
+    def parse_ts(value: str) -> datetime:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+    assert parse_ts(spans["span_generation"]["ended_at"]) >= parse_ts(
+        spans["span_tool"]["ended_at"]
+    )
 
 
 def test_openai_agents_debug_logs_live_child_parent(capsys):

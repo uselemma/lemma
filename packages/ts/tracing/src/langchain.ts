@@ -4,6 +4,7 @@ import {
   type SpanHandle,
   type TraceHandle,
 } from "./client";
+import { toolResultError } from "./tool-result";
 
 type RunId = string;
 
@@ -310,7 +311,18 @@ export class LemmaLangChainCallbackHandler {
 
   handleToolEnd(output: unknown, runId: RunId) {
     const run = this.runs.get(runId);
-    run?.handle?.end({
+    if (!run) return;
+    const softError = toolResultError(output);
+    if (softError) {
+      run.handle?.end({
+        status: "ERROR",
+        error:
+          this.options.recordOutputs === false ? undefined : softError,
+      });
+      this.runs.delete(runId);
+      return;
+    }
+    run.handle?.end({
       output: this.options.recordOutputs === false ? undefined : output,
     });
     this.runs.delete(runId);

@@ -117,6 +117,42 @@ describe("langChain", () => {
       error: "lookup failed",
     });
   });
+
+  it("records MCP isError tool ends as error without output", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const handler = langChain({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    handler.handleChainStart({ name: "support-agent" }, "hello", "chain-1");
+    handler.handleToolStart(
+      { name: "pdf_server_pdf" },
+      { query: "YAT" },
+      "tool-1",
+      "chain-1",
+    );
+    handler.handleToolEnd(
+      {
+        content: [
+          { type: "text", text: "Internal error: Validation error" },
+        ],
+        isError: true,
+      },
+      "tool-1",
+    );
+    await handler.handleChainEnd({ ok: true }, "chain-1");
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      name: "pdf_server_pdf",
+      type: "tool",
+      status: "ERROR",
+      error: "Internal error: Validation error",
+    });
+    expect(body.trace.spans[0]).not.toHaveProperty("output");
+  });
 });
 
 describe("langGraph", () => {

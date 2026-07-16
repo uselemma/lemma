@@ -296,6 +296,40 @@ class SpanHandle:
             self.payload.update(span)
         self.trace._debug_span("span ended", self.payload)
 
+    def ensure_ended_at(self, ended_at: datetime | str) -> None:
+        """Extend this span's end when a child finished later.
+
+        Only applies after end() — open parents are left alone so a later end()
+        cannot overwrite a premature extension with a shorter duration.
+        """
+        if not self.ended or self.payload is None:
+            return
+        next_end = _datetime_or_now(ended_at)
+        started = self.payload.get("started_at")
+        started_dt = (
+            started
+            if isinstance(started, datetime)
+            else _parse_datetime(started)
+            if isinstance(started, str)
+            else None
+        )
+        if started_dt is None:
+            return
+        current_end = self.payload.get("ended_at")
+        current_dt = (
+            current_end
+            if isinstance(current_end, datetime)
+            else _parse_datetime(current_end)
+            if isinstance(current_end, str)
+            else started_dt
+        )
+        if current_dt is not None and next_end <= current_dt:
+            return
+        self.payload["ended_at"] = _iso(next_end)
+        self.payload["duration_ms"] = max(
+            0, int((next_end - started_dt).total_seconds() * 1000)
+        )
+
 
 @dataclass
 class TraceContext:

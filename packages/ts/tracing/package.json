@@ -1,6 +1,6 @@
 {
   "name": "@uselemma/tracing",
-  "version": "7.4.3",
+  "version": "7.5.0",
   "description": "HTTP tracing SDK for Lemma",
   "license": "MIT",
   "author": "Lemma",

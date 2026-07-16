@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from .client import Lemma, SpanHandle, TraceContext, _now
+from .tool_result import tool_result_error
 
 
 @dataclass
@@ -351,9 +352,16 @@ class LemmaLangChainCallbackHandler:
 
     def on_tool_end(self, output: Any, *, run_id: str, **_: Any) -> None:
         run = self._runs.pop(str(run_id), None)
-        run and run.handle and run.handle.end(
-            output=output if self.record_outputs else None
-        )
+        if run is None or run.handle is None:
+            return
+        soft_error = tool_result_error(output)
+        if soft_error is not None:
+            run.handle.end(
+                status="ERROR",
+                error=soft_error if self.record_outputs else None,
+            )
+            return
+        run.handle.end(output=output if self.record_outputs else None)
 
     def on_tool_error(self, error: BaseException, *, run_id: str, **_: Any) -> None:
         run = self._runs.pop(str(run_id), None)

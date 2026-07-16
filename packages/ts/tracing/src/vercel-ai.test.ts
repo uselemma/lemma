@@ -578,4 +578,171 @@ describe("vercelAI", () => {
       output: "hi",
     });
   });
+
+  it("records MCP isError tool results as error without output", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await lemma.trace("support-agent", async (trace) => {
+      const integration = vercelAI({ trace });
+
+      integration.onStepStart?.({
+        stepNumber: 0,
+        model: { provider: "openai", modelId: "gpt-4o" },
+        messages: [{ role: "user", content: "search pdf" }],
+      });
+      integration.onToolCallFinish?.({
+        toolCall: {
+          toolName: "pdf_server_pdf",
+          toolCallId: "tool-1",
+          input: { query: "YAT" },
+        },
+        durationMs: 40,
+        success: true,
+        output: {
+          content: [
+            {
+              text: "Internal error: Validation error: request: Missing required argument",
+              type: "text",
+            },
+          ],
+          isError: true,
+        },
+      } as never);
+      integration.onStepFinish?.({
+        stepNumber: 0,
+        model: { provider: "openai", modelId: "gpt-4o" },
+        text: "I hit an error.",
+      });
+
+      return "I hit an error.";
+    });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    const tool = body.trace.spans.find(
+      (span: { type?: string }) => span.type === "tool",
+    );
+    expect(tool).toMatchObject({
+      name: "pdf_server_pdf",
+      type: "tool",
+      status: "ERROR",
+      error:
+        "Internal error: Validation error: request: Missing required argument",
+    });
+    expect(tool).not.toHaveProperty("output");
+  });
+
+  it("keeps v6 tool timing inside the parent generation window", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await lemma.trace("support-agent", async (trace) => {
+      const integration = vercelAI({ trace });
+
+      integration.onStepStart?.({
+        stepNumber: 0,
+        model: { provider: "openai", modelId: "gpt-4o" },
+        messages: [{ role: "user", content: "find docs" }],
+      });
+      // Step can finish before trailing tool callbacks in AI SDK v6.
+      integration.onStepFinish?.({
+        stepNumber: 0,
+        model: { provider: "openai", modelId: "gpt-4o" },
+        text: "Found docs.",
+      });
+      integration.onToolCallFinish?.({
+        toolCall: {
+          toolName: "search_docs",
+          toolCallId: "tool-1",
+          input: { query: "docs" },
+        },
+        durationMs: 25,
+        success: true,
+        output: [{ title: "Docs" }],
+      } as never);
+
+      return "Found docs.";
+    });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    const generation = body.trace.spans.find(
+      (span: { type?: string }) => span.type === "generation",
+    );
+    const tool = body.trace.spans.find(
+      (span: { type?: string }) => span.type === "tool",
+    );
+    expect(tool).toMatchObject({
+      parent_id: generation.id,
+      duration_ms: 25,
+    });
+    expect(Date.parse(tool.ended_at)).toBeGreaterThanOrEqual(
+      Date.parse(tool.started_at),
+    );
+    expect(Date.parse(tool.ended_at) - Date.parse(tool.started_at)).toBe(25);
+    expect(Date.parse(generation.ended_at)).toBeGreaterThanOrEqual(
+      Date.parse(tool.ended_at),
+    );
+  });
+
+  it("records v7 tool-error without inventing an output", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await lemma.trace("support-agent", async (trace) => {
+      const integration = vercelAI({ trace });
+
+      integration.onStepStart?.({
+        callId: "call-1",
+        provider: "openai",
+        modelId: "gpt-4o",
+        stepNumber: 0,
+        messages: [{ role: "user", content: "lookup" }],
+      } as never);
+      integration.onToolExecutionEnd?.({
+        callId: "call-1",
+        toolCall: {
+          toolName: "lookup",
+          toolCallId: "tool-1",
+          input: { id: "1" },
+        },
+        toolExecutionMs: 10,
+        toolOutput: {
+          type: "tool-error",
+          error: "lookup failed",
+        },
+      } as never);
+      integration.onStepEnd?.({
+        callId: "call-1",
+        stepNumber: 0,
+        model: { provider: "openai", modelId: "gpt-4o" },
+        text: "failed",
+        performance: { stepTimeMs: 50, responseTimeMs: 40 },
+      } as never);
+
+      return "failed";
+    });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    const tool = body.trace.spans.find(
+      (span: { type?: string }) => span.type === "tool",
+    );
+    expect(tool).toMatchObject({
+      name: "lookup",
+      status: "ERROR",
+      error: "lookup failed",
+    });
+    expect(tool).not.toHaveProperty("output");
+  });
 });
