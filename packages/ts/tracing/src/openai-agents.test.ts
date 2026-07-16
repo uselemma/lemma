@@ -133,6 +133,120 @@ describe("openAIAgents", () => {
     ).toBe(40);
   });
 
+  it("records function spans with isError output as error without output", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await processor.onTraceStart({
+      traceId: "trace_err",
+      name: "support-agent",
+    });
+    await processor.onSpanStart({
+      traceId: "trace_err",
+      spanId: "span_tool",
+      spanData: {
+        type: "function",
+        name: "pdf_server_pdf",
+        input: JSON.stringify({ query: "YAT" }),
+      },
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_err",
+      spanId: "span_tool",
+      spanData: {
+        type: "function",
+        name: "pdf_server_pdf",
+        input: JSON.stringify({ query: "YAT" }),
+        output: JSON.stringify({
+          content: [{ type: "text", text: "Internal error: Validation error" }],
+          isError: true,
+        }),
+      },
+    });
+    await processor.onTraceEnd({
+      traceId: "trace_err",
+      name: "support-agent",
+    });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      name: "pdf_server_pdf",
+      type: "tool",
+      status: "ERROR",
+      error: "Internal error: Validation error",
+    });
+    expect(body.trace.spans[0]).not.toHaveProperty("output");
+  });
+
+  it("extends a parent generation when a child tool ends later", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await processor.onTraceStart({
+      traceId: "trace_timing",
+      name: "support-agent",
+    });
+    await processor.onSpanStart({
+      traceId: "trace_timing",
+      spanId: "span_generation",
+      spanData: { type: "generation", model: "gpt-4o" },
+      startedAt: "2026-06-29T10:00:00.000Z",
+    });
+    await processor.onSpanStart({
+      traceId: "trace_timing",
+      spanId: "span_tool",
+      parentId: "span_generation",
+      spanData: { type: "function", name: "search_docs" },
+      startedAt: "2026-06-29T10:00:00.050Z",
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_timing",
+      spanId: "span_generation",
+      spanData: {
+        type: "generation",
+        model: "gpt-4o",
+        output: [{ role: "assistant", content: "done" }],
+      },
+      startedAt: "2026-06-29T10:00:00.000Z",
+      endedAt: "2026-06-29T10:00:00.100Z",
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_timing",
+      spanId: "span_tool",
+      parentId: "span_generation",
+      spanData: {
+        type: "function",
+        name: "search_docs",
+        output: JSON.stringify({ ok: true }),
+      },
+      startedAt: "2026-06-29T10:00:00.050Z",
+      endedAt: "2026-06-29T10:00:00.180Z",
+    });
+    await processor.onTraceEnd({
+      traceId: "trace_timing",
+      name: "support-agent",
+    });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    const generation = body.trace.spans.find(
+      (span: { id?: string }) => span.id === "span_generation",
+    );
+    const tool = body.trace.spans.find(
+      (span: { id?: string }) => span.id === "span_tool",
+    );
+    expect(Date.parse(generation.ended_at)).toBeGreaterThanOrEqual(
+      Date.parse(tool.ended_at),
+    );
+  });
+
   it("sends each trace once and does not resend on shutdown after it ends", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const processor = openAIAgents({

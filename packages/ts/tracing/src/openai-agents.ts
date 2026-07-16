@@ -1,4 +1,5 @@
 import { Lemma, type SpanHandle, type TraceHandle } from "./client";
+import { toolResultError } from "./tool-result";
 
 type MaybePromise<T> = T | PromiseLike<T>;
 
@@ -127,7 +128,9 @@ export function openAIAgents(
       fetch: options.fetch,
     });
   const traces = new Map<string, StoredTrace>();
-  const spans = new Map<string, SpanHandle>();
+  const spans = new Map<string, { handle: SpanHandle; traceId: string }>();
+  /** Ended handles kept only until their trace finalizes (for parent extend). */
+  const endedSpans = new Map<string, { handle: SpanHandle; traceId: string }>();
 
   function ensureTrace(trace: OpenAIAgentsTrace): StoredTrace {
     const existing = traces.get(trace.traceId);
@@ -190,28 +193,57 @@ export function openAIAgents(
   }
 
   function endSpan(span: OpenAIAgentsSpan) {
-    const handle = spans.get(span.spanId) ?? startSpan(span);
+    const handle =
+      spans.get(span.spanId)?.handle ?? startSpan(span);
     if (!handle) return;
     spans.delete(span.spanId);
 
     const data = span.spanData;
-    const output =
-      options.recordOutputs === false
+    // Parse outputs for soft-error detection even when payloads are not recorded.
+    const rawOutput =
+      data.type === "generation"
+        ? textFromGenerationOutput(data["output"])
+        : parseMaybeJson(data["output"] ?? data["_response"]);
+    const softError =
+      data.type === "function" ? toolResultError(rawOutput) : null;
+    const errorMessage = span.error?.message ?? softError ?? undefined;
+    const parsedOutput =
+      options.recordOutputs === false || errorMessage
         ? undefined
-        : data.type === "generation"
-          ? textFromGenerationOutput(data["output"])
-          : parseMaybeJson(data["output"] ?? data["_response"]);
+        : rawOutput;
+    const spanEndedAt = endedAt(span);
     handle.end({
-      output,
-      error: span.error?.message,
-      status: span.error ? "ERROR" : undefined,
+      // Failures must not invent an output — record error instead.
+      output: parsedOutput,
+      error: options.recordOutputs === false ? undefined : errorMessage,
+      status: errorMessage ? "ERROR" : undefined,
       model: typeof data["model"] === "string" ? data["model"] : undefined,
-      endedAt: endedAt(span),
+      endedAt: spanEndedAt,
       llmOutputMessages:
-        options.recordOutputs === false || !Array.isArray(data["output"])
+        errorMessage ||
+        options.recordOutputs === false ||
+        !Array.isArray(data["output"])
           ? undefined
           : (data["output"] as unknown[]),
     });
+    endedSpans.set(span.spanId, { handle, traceId: span.traceId });
+
+    // Tools that finish after their parent generation must not outlast it.
+    if (span.parentId && data.type === "function") {
+      const parent =
+        spans.get(span.parentId)?.handle ??
+        endedSpans.get(span.parentId)?.handle;
+      parent?.ensureEndedAt(spanEndedAt);
+    }
+  }
+
+  function forgetTraceSpans(traceId: string) {
+    for (const [spanId, entry] of endedSpans) {
+      if (entry.traceId === traceId) endedSpans.delete(spanId);
+    }
+    for (const [spanId, entry] of spans) {
+      if (entry.traceId === traceId) spans.delete(spanId);
+    }
   }
 
   // Deliver a trace exactly once and drop it, so a later shutdown/forceFlush (or
@@ -219,6 +251,7 @@ export function openAIAgents(
   // spans. Sending happens only here, via the handle's terminal end().
   async function finalizeTrace(traceId: string, stored: StoredTrace) {
     traces.delete(traceId);
+    forgetTraceSpans(traceId);
     if (stored.ended) return;
     stored.ended = true;
     await stored.handle.end();
@@ -242,7 +275,7 @@ export function openAIAgents(
     },
     onSpanStart: async (span) => {
       const handle = startSpan(span);
-      if (handle) spans.set(span.spanId, handle);
+      if (handle) spans.set(span.spanId, { handle, traceId: span.traceId });
     },
     onSpanEnd: async (span) => {
       endSpan(span);

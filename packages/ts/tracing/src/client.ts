@@ -455,6 +455,23 @@ export class SpanHandle {
     this.trace.changed();
   }
 
+  /**
+   * Extend this span's end time if a child finished later.
+   * Only applies after end() — open parents are left alone so a later end()
+   * cannot overwrite a premature extension with a shorter duration.
+   */
+  ensureEndedAt(endedAt: Date | string) {
+    if (!this.ended) return;
+    const nextEnd = timestampMs(endedAt);
+    const startedMs = timestampMs(this.payload.started_at);
+    if (nextEnd == null || startedMs == null) return;
+    const currentEnd = timestampMs(this.payload.ended_at) ?? startedMs;
+    if (nextEnd <= currentEnd) return;
+    this.payload.ended_at = new Date(nextEnd).toISOString();
+    this.payload.duration_ms = Math.max(0, nextEnd - startedMs);
+    this.trace.changed();
+  }
+
   startSpan(name: string): SpanHandle;
   startSpan(options: Omit<SpanOptions, "endedAt">): SpanHandle;
   startSpan(options: string | Omit<SpanOptions, "endedAt">): SpanHandle {
@@ -547,6 +564,8 @@ export class NoopSpanHandle {
   readonly id = "";
 
   end() {}
+
+  ensureEndedAt(_endedAt: Date | string) {}
 
   startSpan(): NoopSpanHandle {
     return this;

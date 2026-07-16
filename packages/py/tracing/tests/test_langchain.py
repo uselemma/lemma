@@ -105,6 +105,37 @@ def test_langchain_records_errors():
     assert body["trace"]["spans"][0]["error"] == "lookup failed"
 
 
+def test_langchain_records_is_error_tool_end_as_error_without_output():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id="10000000-0000-0000-0000-000000000001",
+        transport=make_transport(calls),
+    )
+
+    handler.on_chain_start({"name": "support-agent"}, "hello", run_id="chain-1")
+    handler.on_tool_start(
+        {"name": "pdf_server_pdf"},
+        {"query": "YAT"},
+        run_id="tool-1",
+        parent_run_id="chain-1",
+    )
+    handler.on_tool_end(
+        {
+            "content": [{"type": "text", "text": "Internal error: Validation error"}],
+            "isError": True,
+        },
+        run_id="tool-1",
+    )
+    handler.on_chain_end({"ok": True}, run_id="chain-1")
+
+    span = calls[0]["body"]["trace"]["spans"][0]
+    assert span["name"] == "pdf_server_pdf"
+    assert span["status"] == "ERROR"
+    assert span["error"] == "Internal error: Validation error"
+    assert "output" not in span
+
+
 def test_langgraph_uses_default_agent_name_and_nested_node_spans():
     calls = []
     handler = langgraph(
