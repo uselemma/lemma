@@ -100,7 +100,7 @@ describe("mastra / LemmaMastraExporter", () => {
         endTime: "2026-06-29T10:00:00.150Z",
         input: { query: "order" },
         output: [{ title: "Shipping" }],
-        attributes: { toolId: "search_docs" },
+        entityId: "search_docs",
       }),
     );
     await emit(
@@ -188,7 +188,7 @@ describe("mastra / LemmaMastraExporter", () => {
         parentSpanId: "root_err",
         input: { id: "1843" },
         errorInfo: { message: "order not found" },
-        attributes: { toolId: "lookup" },
+        entityId: "lookup",
       }),
     );
     await emit(
@@ -239,7 +239,7 @@ describe("mastra / LemmaMastraExporter", () => {
         parentSpanId: "hidden_internal",
         input: { q: "x" },
         output: { ok: true },
-        attributes: { toolId: "search" },
+        entityName: "search",
       }),
     );
     await emit(
@@ -469,7 +469,7 @@ describe("mastra / LemmaMastraExporter", () => {
           isError: true,
           content: [{ type: "text", text: "order not found" }],
         },
-        attributes: { toolId: "lookup" },
+        entityId: "lookup",
       }),
     );
     await emit(
@@ -533,6 +533,228 @@ describe("mastra / LemmaMastraExporter", () => {
       started_at: "2026-06-29T10:00:00.000Z",
       ended_at: "2026-06-29T10:00:02.500Z",
     });
+  });
+
+  it("sets llmInputMessages from Mastra { messages } generation input and text output", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const messages = [
+      { role: "system", content: "You are helpful." },
+      { role: "user", content: "where is my order?" },
+    ];
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "gen_wrapped",
+        name: "llm: 'gpt-4o'",
+        type: "model_generation",
+        parentSpanId: "root_wrapped",
+        input: { messages },
+        output: { text: "It arrives Friday.", usage: { totalTokens: 12 } },
+        attributes: { model: "gpt-4o", provider: "openai" },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "root_wrapped",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        input: { messages },
+        output: "It arrives Friday.",
+      }),
+    );
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.input).toBe("where is my order?");
+    expect(body.trace.spans[0]).toMatchObject({
+      type: "generation",
+      input: { messages },
+      attributes: {
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.0.message.content": "You are helpful.",
+        "llm.input_messages.1.message.role": "user",
+        "llm.input_messages.1.message.content": "where is my order?",
+        "llm.output_messages.0.message.role": "assistant",
+        "llm.output_messages.0.message.content": "It arrives Friday.",
+      },
+    });
+  });
+
+  it("resolves toolName from entityId/entityName and tool: span names", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "tool_entity",
+        name: "tool: 'search_docs'",
+        type: "tool_call",
+        parentSpanId: "root_tool_id",
+        entityId: "search_docs",
+        entityName: "Search Docs",
+        input: { query: "order" },
+        output: { ok: true },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "tool_name_only",
+        name: "tool: 'lookup'",
+        type: "tool_call",
+        parentSpanId: "root_tool_id",
+        entityName: "lookup",
+        input: { id: "1" },
+        output: { ok: true },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "tool_parsed",
+        name: "tool: 'parse_me'",
+        type: "tool_call",
+        parentSpanId: "root_tool_id",
+        input: {},
+        output: { ok: true },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "root_tool_id",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        input: "hi",
+        output: "hello",
+      }),
+    );
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans).toMatchObject([
+      { id: "tool_entity", tool_name: "search_docs" },
+      { id: "tool_name_only", tool_name: "lookup" },
+      { id: "tool_parsed", tool_name: "parse_me" },
+    ]);
+  });
+
+  it("marks attributes.success false tool spans as ERROR", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "tool_soft",
+        name: "tool: 'validate'",
+        type: "tool_call",
+        parentSpanId: "root_soft",
+        entityId: "validate",
+        input: { value: "" },
+        output: { message: "value is required" },
+        attributes: { success: false },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "tool_soft_mcp",
+        name: "tool: 'lookup'",
+        type: "mcp_tool_call",
+        parentSpanId: "root_soft",
+        entityId: "lookup",
+        input: { id: "1843" },
+        output: {
+          isError: true,
+          content: [{ type: "text", text: "order not found" }],
+        },
+        attributes: { success: false },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "root_soft",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        input: "validate this",
+        output: "failed",
+      }),
+    );
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      id: "tool_soft",
+      type: "tool",
+      status: "ERROR",
+      error: "Tool failed",
+      input: { value: "" },
+    });
+    expect(body.trace.spans[0]).not.toHaveProperty("output");
+    expect(body.trace.spans[1]).toMatchObject({
+      id: "tool_soft_mcp",
+      type: "tool",
+      status: "ERROR",
+      error: "order not found",
+    });
+    expect(body.trace.spans[1]).not.toHaveProperty("output");
+  });
+
+  it("extracts latest user message from a bare root message array", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "root_bare",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        input: [
+          { role: "user", content: "first" },
+          { role: "assistant", content: "ok" },
+          { role: "user", content: "second turn" },
+        ],
+        output: "done",
+      }),
+    );
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.input).toBe("second turn");
   });
 
   it("awaits outstanding deliveries on flush/shutdown", async () => {

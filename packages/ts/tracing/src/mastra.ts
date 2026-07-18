@@ -44,6 +44,10 @@ export type MastraExportedSpan = {
   parentSpanId?: string;
   isRootSpan: boolean;
   isEvent: boolean;
+  /** Mastra entity id (e.g. tool id on tool spans). */
+  entityId?: string;
+  /** Mastra entity name (e.g. tool name on tool spans). */
+  entityName?: string;
   startTime: Date | string;
   endTime?: Date | string;
   input?: unknown;
@@ -95,7 +99,9 @@ const TOOL_TYPES = new Set([
 
 function toDate(value: Date | string | undefined): Date | undefined {
   if (value == null) return undefined;
-  if (value instanceof Date) return value;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value;
+  }
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }
@@ -138,8 +144,36 @@ function asOutputMessages(output: unknown): unknown[] | undefined {
   if (typeof output === "object") {
     const record = output as Record<string, unknown>;
     if (typeof record.role === "string") return [output];
+    // Mastra model_generation often ends with `{ text, ... }` (no role).
+    if (typeof record.text === "string") {
+      return [{ role: "assistant", content: record.text }];
+    }
   }
   return [{ role: "assistant", content: output }];
+}
+
+/** Extract chat messages from a bare array or `{ messages: [...] }` Mastra input. */
+function asInputMessages(input: unknown): unknown[] | undefined {
+  if (Array.isArray(input)) return input;
+  if (input && typeof input === "object") {
+    const messages = (input as Record<string, unknown>).messages;
+    if (Array.isArray(messages)) return messages;
+  }
+  return undefined;
+}
+
+/** Parse `tool: 'name'` / `tool: "name"` style Mastra span names. */
+function toolNameFromSpanName(name: string): string | undefined {
+  const match = /^tool:\s*['"]([^'"]+)['"]\s*$/i.exec(name.trim());
+  return match?.[1] || undefined;
+}
+
+function resolveToolName(span: MastraExportedSpan): string {
+  if (typeof span.entityId === "string" && span.entityId) return span.entityId;
+  if (typeof span.entityName === "string" && span.entityName) {
+    return span.entityName;
+  }
+  return toolNameFromSpanName(span.name) ?? span.name;
 }
 
 function messageContent(message: unknown): unknown {
@@ -151,15 +185,14 @@ function messageContent(message: unknown): unknown {
 
 /**
  * Prefer the current user turn for the Lemma root input.
- * Mastra agent_run roots usually set `input: { messages: [...] }`.
+ * Mastra agent_run roots usually set `input: { messages: [...] }`
+ * (or occasionally a bare message array).
  */
 function rootTraceInput(input: unknown): unknown {
   if (typeof input === "string") return input;
-  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
 
-  const record = input as Record<string, unknown>;
-  const messages = record.messages;
-  if (!Array.isArray(messages) || messages.length === 0) return input;
+  const messages = asInputMessages(input);
+  if (!messages || messages.length === 0) return input;
 
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
@@ -183,8 +216,15 @@ function resolveParentId(
 
 function childErrorMessage(span: MastraExportedSpan): string | undefined {
   if (span.errorInfo?.message) return span.errorInfo.message;
-  if (TOOL_TYPES.has(span.type)) {
-    return toolResultError(span.output) ?? undefined;
+  if (!TOOL_TYPES.has(span.type)) return undefined;
+
+  const fromOutput = toolResultError(span.output);
+  if (fromOutput) return fromOutput;
+
+  // Mastra validation / soft tool failures often set `attributes.success: false`
+  // with an error-shaped output and no errorInfo.
+  if (span.attributes?.success === false) {
+    return "Tool failed";
   }
   return undefined;
 }
@@ -288,8 +328,9 @@ export class LemmaMastraExporter {
 
     if (GENERATION_TYPES.has(span.type)) {
       const attrs = span.attributes;
-      const llmInputMessages =
-        recordInputs && Array.isArray(span.input) ? span.input : undefined;
+      const llmInputMessages = recordInputs
+        ? asInputMessages(span.input)
+        : undefined;
       const llmOutputMessages =
         recordOutputs && !errorMessage
           ? asOutputMessages(span.output)
@@ -307,11 +348,11 @@ export class LemmaMastraExporter {
     }
 
     if (TOOL_TYPES.has(span.type)) {
-      const toolId = attributeString(span.attributes, "toolId");
+      const toolName = resolveToolName(span);
       trace.recordTool({
         ...base,
         name: this.options.toolName ?? span.name,
-        toolName: toolId ?? span.name,
+        toolName,
       });
       return;
     }
