@@ -658,7 +658,7 @@ describe("mastra / LemmaMastraExporter", () => {
     ]);
   });
 
-  it("marks attributes.success false tool spans as ERROR", async () => {
+  it("marks attributes.success false tool spans as ERROR with output message", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const exporter = mastra({
       apiKey: "key",
@@ -684,6 +684,26 @@ describe("mastra / LemmaMastraExporter", () => {
       exporter,
       "span_ended",
       span({
+        id: "tool_soft_validation",
+        name: "tool: 'ship'",
+        type: "tool_call",
+        parentSpanId: "root_soft",
+        entityId: "ship",
+        input: { qty: -1 },
+        // Mastra ValidationError shape from validateToolInput/Output.
+        output: {
+          error: true,
+          message:
+            "Tool input validation failed for ship. Please fix the following errors and try again:\n- qty: Number must be greater than 0",
+          validationErrors: { errors: [], fields: {} },
+        },
+        attributes: { success: false },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
         id: "tool_soft_mcp",
         name: "tool: 'lookup'",
         type: "mcp_tool_call",
@@ -694,6 +714,19 @@ describe("mastra / LemmaMastraExporter", () => {
           isError: true,
           content: [{ type: "text", text: "order not found" }],
         },
+        attributes: { success: false },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "tool_soft_empty",
+        name: "tool: 'empty'",
+        type: "tool_call",
+        parentSpanId: "root_soft",
+        entityId: "empty",
+        input: {},
         attributes: { success: false },
       }),
     );
@@ -715,17 +748,31 @@ describe("mastra / LemmaMastraExporter", () => {
       id: "tool_soft",
       type: "tool",
       status: "ERROR",
-      error: "Tool failed",
+      error: "value is required",
       input: { value: "" },
     });
     expect(body.trace.spans[0]).not.toHaveProperty("output");
     expect(body.trace.spans[1]).toMatchObject({
+      id: "tool_soft_validation",
+      type: "tool",
+      status: "ERROR",
+      error:
+        "Tool input validation failed for ship. Please fix the following errors and try again:\n- qty: Number must be greater than 0",
+    });
+    expect(body.trace.spans[1]).not.toHaveProperty("output");
+    expect(body.trace.spans[2]).toMatchObject({
       id: "tool_soft_mcp",
       type: "tool",
       status: "ERROR",
       error: "order not found",
     });
-    expect(body.trace.spans[1]).not.toHaveProperty("output");
+    expect(body.trace.spans[2]).not.toHaveProperty("output");
+    expect(body.trace.spans[3]).toMatchObject({
+      id: "tool_soft_empty",
+      type: "tool",
+      status: "ERROR",
+      error: "Tool failed",
+    });
   });
 
   it("extracts latest user message from a bare root message array", async () => {

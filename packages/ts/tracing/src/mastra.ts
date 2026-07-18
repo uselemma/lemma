@@ -214,6 +214,21 @@ function resolveParentId(
   return parentSpanId;
 }
 
+/** Prefer a human message from soft-failure payloads when success is false. */
+function softFailureMessage(output: unknown): string | undefined {
+  if (!output || typeof output !== "object" || Array.isArray(output)) {
+    return undefined;
+  }
+  const record = output as Record<string, unknown>;
+  if (typeof record.message === "string" && record.message.trim()) {
+    return record.message;
+  }
+  if (typeof record.error === "string" && record.error.trim()) {
+    return record.error;
+  }
+  return undefined;
+}
+
 function childErrorMessage(span: MastraExportedSpan): string | undefined {
   if (span.errorInfo?.message) return span.errorInfo.message;
   if (!TOOL_TYPES.has(span.type)) return undefined;
@@ -224,7 +239,7 @@ function childErrorMessage(span: MastraExportedSpan): string | undefined {
   // Mastra validation / soft tool failures often set `attributes.success: false`
   // with an error-shaped output and no errorInfo.
   if (span.attributes?.success === false) {
-    return "Tool failed";
+    return softFailureMessage(span.output) ?? "Tool failed";
   }
   return undefined;
 }

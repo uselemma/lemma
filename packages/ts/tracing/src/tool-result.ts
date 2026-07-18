@@ -1,13 +1,20 @@
 /**
  * Detect MCP-style / framework tool results that encode failure in the payload
- * (e.g. `{ isError: true, content: [...] }`) instead of throwing.
+ * (e.g. `{ isError: true, content: [...] }` or Mastra `{ error: true, message }`)
+ * instead of throwing.
  * Returns an error message when the result should be recorded as `error`
  * (with no `output`), or null when it is a normal success payload.
  */
 export function toolResultError(output: unknown): string | null {
   const record = asResultRecord(output);
   if (!record) return null;
-  if (record.isError !== true && record.is_error !== true) return null;
+  if (
+    record.isError !== true &&
+    record.is_error !== true &&
+    record.error !== true
+  ) {
+    return null;
+  }
 
   const content = record.content;
   if (Array.isArray(content)) {
