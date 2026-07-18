@@ -1017,10 +1017,11 @@ class LemmaLangChainCallbackHandler:
             elif soft_error is None:
                 self._note_root_output(stored, structured)
 
-        if run.owns_trace and awaiting_tools:
+        if awaiting_tools:
             # Keep the run stub so tool/follow-up generation callbacks can nest
-            # under this owned trace instead of opening a second root.
-            run.defer_finalize = True
+            # under this generation (whether or not this run owns the root).
+            if run.owns_trace:
+                run.defer_finalize = True
             return
 
         self._runs.pop(run_key, None)
@@ -1029,11 +1030,25 @@ class LemmaLangChainCallbackHandler:
             self._maybe_finalize_owner(run, ended_at)
             return
 
-        if not awaiting_tools:
-            deferred = self._deferred_owner_for(run.owning_trace_id)
-            if deferred is not None:
-                self._runs.pop(deferred.root_run_id, None)
-                self._maybe_finalize_owner(deferred, ended_at)
+        deferred = self._deferred_owner_for(run.owning_trace_id)
+        if deferred is not None:
+            self._runs.pop(deferred.root_run_id, None)
+            self._maybe_finalize_owner(deferred, ended_at)
+
+    def _finalize_deferred_owner(
+        self,
+        owning_trace_id: str,
+        ended_at: datetime,
+        root_error: str | None = None,
+    ) -> None:
+        deferred = self._deferred_owner_for(owning_trace_id)
+        if deferred is None:
+            return
+        stored = self._traces.get(deferred.owning_trace_id)
+        if stored is not None and root_error:
+            self._note_root_error(stored, root_error)
+        self._runs.pop(deferred.root_run_id, None)
+        self._maybe_finalize_owner(deferred, ended_at)
 
     def on_llm_error(self, error: BaseException, *, run_id: str, **_: Any) -> None:
         run = self._runs.pop(str(run_id), None)
@@ -1053,7 +1068,10 @@ class LemmaLangChainCallbackHandler:
             self._note_bounds(stored, run.started_at, ended_at)
             if run.owns_trace:
                 self._note_root_error(stored, message)
-        self._maybe_finalize_owner(run, ended_at)
+        if run.owns_trace:
+            self._maybe_finalize_owner(run, ended_at)
+            return
+        self._finalize_deferred_owner(run.owning_trace_id, ended_at, message)
 
     def on_tool_start(
         self,
@@ -1157,7 +1175,10 @@ class LemmaLangChainCallbackHandler:
             self._note_bounds(stored, run.started_at, ended_at)
             if run.owns_trace:
                 self._note_root_error(stored, message)
-        self._maybe_finalize_owner(run, ended_at)
+        if run.owns_trace:
+            self._maybe_finalize_owner(run, ended_at)
+            return
+        self._finalize_deferred_owner(run.owning_trace_id, ended_at, message)
 
     def on_retriever_start(
         self,

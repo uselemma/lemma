@@ -1167,10 +1167,10 @@ export class LemmaLangChainCallbackHandler {
       }
     }
 
-    if (run.ownsTrace && awaitingTools) {
+    if (awaitingTools) {
       // Keep the run stub so tool/follow-up generation callbacks can nest
-      // under this owned trace instead of opening a second root.
-      run.deferFinalize = true;
+      // under this generation (whether or not this run owns the root trace).
+      if (run.ownsTrace) run.deferFinalize = true;
       return;
     }
 
@@ -1182,13 +1182,24 @@ export class LemmaLangChainCallbackHandler {
     }
 
     // Final answer generation under a deferred owned LLM — close that root.
-    if (!awaitingTools) {
-      const deferred = this.deferredOwnerFor(run.owningTraceId);
-      if (deferred) {
-        this.runs.delete(deferred.rootRunId);
-        await this.maybeFinalizeOwner(deferred, endedAt);
-      }
+    const deferred = this.deferredOwnerFor(run.owningTraceId);
+    if (deferred) {
+      this.runs.delete(deferred.rootRunId);
+      await this.maybeFinalizeOwner(deferred, endedAt);
     }
+  }
+
+  private async finalizeDeferredOwner(
+    owningTraceId: string,
+    endedAt: Date,
+    rootError?: string,
+  ) {
+    const deferred = this.deferredOwnerFor(owningTraceId);
+    if (!deferred) return;
+    const stored = this.storedTrace(deferred.owningTraceId);
+    if (stored && rootError) this.noteRootError(stored, rootError);
+    this.runs.delete(deferred.rootRunId);
+    await this.maybeFinalizeOwner(deferred, endedAt);
   }
 
   async handleLLMError(error: unknown, runId: RunId) {
@@ -1211,7 +1222,11 @@ export class LemmaLangChainCallbackHandler {
     }
 
     this.runs.delete(runId);
-    await this.maybeFinalizeOwner(run, endedAt);
+    if (run.ownsTrace) {
+      await this.maybeFinalizeOwner(run, endedAt);
+      return;
+    }
+    await this.finalizeDeferredOwner(run.owningTraceId, endedAt, message);
   }
 
   handleToolStart(
@@ -1316,7 +1331,11 @@ export class LemmaLangChainCallbackHandler {
     }
 
     this.runs.delete(runId);
-    await this.maybeFinalizeOwner(run, endedAt);
+    if (run.ownsTrace) {
+      await this.maybeFinalizeOwner(run, endedAt);
+      return;
+    }
+    await this.finalizeDeferredOwner(run.owningTraceId, endedAt, message);
   }
 
   handleRetrieverStart(
