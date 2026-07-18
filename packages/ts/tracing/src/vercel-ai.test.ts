@@ -947,6 +947,25 @@ describe("vercelAI", () => {
     expect(body.trace).not.toHaveProperty("output");
   });
 
+  it("fail() before telemetry still ingests a root error trace", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      agentName: "support-agent",
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await integration.fail(new Error("threw before callbacks"));
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace).toMatchObject({
+      name: "support-agent",
+      status: "ERROR",
+      error: "threw before callbacks",
+    });
+  });
+
   it("ignores duplicate terminal events", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const integration = vercelAI({

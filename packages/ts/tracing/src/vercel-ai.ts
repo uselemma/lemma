@@ -679,6 +679,27 @@ export function vercelAI(
     return promise;
   }
 
+  function ensureManagedTrace(event?: TerminalEvent) {
+    if (options.trace || managedTrace) return;
+    beginActivity();
+    managedTrace = getLemma().trace({
+      name: traceName(
+        options,
+        event as VercelAIEndEvent | VercelAIV6FinishEvent | undefined,
+      ),
+      metadata: mergedMetadata(
+        eventMetadata(event as VercelAIEndEvent | VercelAIV6FinishEvent),
+      ),
+      threadId: resolveThreadId(
+        eventMetadata(event as VercelAIEndEvent | VercelAIV6FinishEvent),
+      ),
+      userId: resolveUserId(
+        eventMetadata(event as VercelAIEndEvent | VercelAIV6FinishEvent),
+      ),
+      startedAt: runStartedAt,
+    });
+  }
+
   async function endOwnedTrace(event: TerminalEvent) {
     if (phase === "idle") return;
     if (phase === "ending") return;
@@ -696,14 +717,19 @@ export function vercelAI(
           output: (value: unknown) => void;
         }
       | undefined;
+    let explicit = false;
     if (trace && typeof trace.end === "function") {
+      explicit = true;
       ownedTrace = {
         end: trace.end.bind(trace),
         fail: trace.fail.bind(trace),
         output: trace.output.bind(trace),
       };
-    } else if (managedTrace) {
-      ownedTrace = managedTrace;
+    } else {
+      ensureManagedTrace(event);
+      if (managedTrace) {
+        ownedTrace = managedTrace;
+      }
     }
 
     const identityTrace = (options.trace ?? managedTrace) as
@@ -737,19 +763,23 @@ export function vercelAI(
         // Yield so a racing fail()/trailing callback in this turn can settle.
         await Promise.resolve();
         const terminalError = runError;
+        // Explicit handles already own startedAt from construction; only pass
+        // durationMs for managed traces we started with runStartedAt.
+        const timing = explicit
+          ? { endedAt }
+          : { durationMs, endedAt };
         if (terminalError) {
           ownedTrace.fail(rootErrorPayload(terminalError));
           ownedTrace.output(undefined);
-          await ownedTrace.end({ durationMs, endedAt });
+          await ownedTrace.end(timing);
           return;
         }
         if (options.recordOutputs === false || successOutput === undefined) {
-          await ownedTrace.end({ durationMs, endedAt });
+          await ownedTrace.end(timing);
         } else {
           await ownedTrace.end({
             output: successOutput,
-            durationMs,
-            endedAt,
+            ...timing,
           });
         }
       } finally {
