@@ -215,7 +215,7 @@ With Debug mode enabled, check the `sending trace` log for each delivery. If a l
 
 ## Model or content is missing
 
-This happens when you record the large language model (LLM) call as a generic span, so Lemma has no model, prompt, or completion to read as a generation.
+This happens when you record the LLM call as a generic span, so Lemma has no model, prompt, or completion to read as a generation.
 
 To fix it, record model calls with `trace.recordGeneration()`.
 

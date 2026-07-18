@@ -17,7 +17,7 @@ Langfuse is a flexible observability layer. It records traces, observations, and
 
 - **One root trace per agent execution**: carries the current user input and the final output or error
 - **Typed children**: generations, tools, and generic spans, not undifferentiated observations
-- **Per-generation message history**: the full ordered message list sent to each large language model (LLM) call
+- **Per-generation message history**: the full ordered message list sent to each LLM call
 
 Because your existing setup doesn’t guarantee those semantics, the fix is to emit the Lemma trace contract explicitly with the Lemma SDK. Keep Langfuse for whatever you already use it for; add Lemma for the Lemma product experience.
 

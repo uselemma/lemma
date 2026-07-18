@@ -5,7 +5,7 @@ description: "Map Raindrop's event- and signal-centric model onto Lemma's trace 
 
 [Raindrop](https://www.raindrop.ai) is an AI-native observability platform for production agents. Its model centers on events: you emit an *AI event* per interaction, group related events into a conversation, and Raindrop surfaces quality *signals*, individual failures (*stumbles*), and recurring failures (*issues*) on top of that stream.
 
-Lemma models the same reality differently. It centers on traces: one agent execution is one trace, a nested tree of typed spans, and Lemma runs automated issue detection on complete, correctly typed traces. Migrating is mostly a re-instrumentation: instead of emitting an event (and optional spans) per interaction, you wrap each execution in `lemma.trace()` and record its large language model (LLM) calls and tools as typed children.
+Lemma models the same reality differently. It centers on traces: one agent execution is one trace, a nested tree of typed spans, and Lemma runs automated issue detection on complete, correctly typed traces. Migrating is mostly a re-instrumentation: instead of emitting an event (and optional spans) per interaction, you wrap each execution in `lemma.trace()` and record its LLM calls and tools as typed children.
 
 <Note>
   One agent execution = one trace. In Raindrop you emit one event per interaction and group by `convoId`; in Lemma you emit one trace per execution and group multi-turn conversations by `threadId`. See the [trace contract](/reference/trace-contract).

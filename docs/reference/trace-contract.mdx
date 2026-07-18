@@ -8,7 +8,7 @@ Lemma traces are JSON trees delivered to `POST /traces/ingest`. A trace is one a
 The SDK builds this payload for you. This page defines what Lemma accepts, what each field means, how ingest normalizes it, and which fields unlock which product behavior.
 
 <Note>
-  **One agent execution = one trace.** Large language model (LLM) calls, tool calls, retrieval, and app logic are child spans inside that trace, not separate top-level traces.
+  **One agent execution = one trace.** LLM calls, tool calls, retrieval, and app logic are child spans inside that trace, not separate top-level traces.
 </Note>
 
 ## Mental model
