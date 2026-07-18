@@ -518,8 +518,15 @@ export function vercelAI(
   let latestV6GenerationId: string | undefined;
   let managedTrace: TraceHandle | undefined;
   let recordedV6Step = false;
+  let sawV7StepZero = false;
+  let usedV7Steps = false;
   let runStartedAt: Date | undefined;
   let runError: string | undefined;
+  let endingTrace:
+    | {
+        fail: (error: unknown) => void;
+      }
+    | undefined;
 
   function resetRunState() {
     phase = "idle";
@@ -534,8 +541,11 @@ export function vercelAI(
     latestV6GenerationId = undefined;
     managedTrace = undefined;
     recordedV6Step = false;
+    sawV7StepZero = false;
+    usedV7Steps = false;
     runStartedAt = undefined;
     runError = undefined;
+    endingTrace = undefined;
   }
 
   function trackGeneration(handle: SpanHandle) {
@@ -575,9 +585,6 @@ export function vercelAI(
   }
 
   function beginActivity() {
-    if (phase === "ending") {
-      throw new Error(CONCURRENT_REUSE_ERROR);
-    }
     if (phase === "idle") {
       phase = "active";
       runStartedAt = new Date();
@@ -610,13 +617,30 @@ export function vercelAI(
     if (userId) trace.userId(userId);
   }
 
+  function rootErrorPayload(message: string) {
+    // Preserve ERROR status while redacting message bodies when outputs are off.
+    return options.recordOutputs === false ? "error" : message;
+  }
+
   function resolveTrace(
     event?:
       | VercelAIV6StartEvent
       | VercelAIStepStartEvent
       | VercelAIV6StepStartEvent
       | VercelAIModelCallStartEvent,
-  ): ResolvedTrace {
+  ): ResolvedTrace | null {
+    // Trailing AI SDK callbacks can arrive while terminal delivery is in flight.
+    // Attach them to the still-open trace instead of throwing.
+    if (phase === "ending") {
+      const trace = options.trace ?? managedTrace;
+      return trace
+        ? {
+            trace,
+            source: options.trace ? "explicit" : "managed",
+          }
+        : null;
+    }
+
     beginActivity();
     const metadata = eventMetadata(event);
     if (options.trace) {
@@ -705,11 +729,13 @@ export function vercelAI(
         ? undefined
         : endOutput(event);
 
+    endingTrace = ownedTrace;
+
     const endPromise = (async () => {
       try {
         if (!ownedTrace) return;
         if (terminalError) {
-          ownedTrace.fail(terminalError);
+          ownedTrace.fail(rootErrorPayload(terminalError));
         }
         if (output === undefined) {
           await ownedTrace.end({ durationMs, endedAt });
@@ -729,7 +755,9 @@ export function vercelAI(
     event: VercelAIV6StepFinishEvent | VercelAIV6FinishEvent,
     stored: StoredV6Step | undefined,
   ) {
-    const { trace } = resolveTrace(stored?.event);
+    const resolved = resolveTrace(stored?.event);
+    if (!resolved) return;
+    const { trace } = resolved;
 
     const startedAt = stored?.startedAt ?? new Date();
     const endedAt = new Date();
@@ -791,7 +819,16 @@ export function vercelAI(
   }
 
   function startV7Generation(event: VercelAIStepStartEvent) {
-    const { trace } = resolveTrace(event);
+    if (event.stepNumber === 0) {
+      if (sawV7StepZero && phase === "active") {
+        throw new Error(CONCURRENT_REUSE_ERROR);
+      }
+      sawV7StepZero = true;
+    }
+    usedV7Steps = true;
+    const resolved = resolveTrace(event);
+    if (!resolved) return;
+    const { trace } = resolved;
 
     const name =
       typeof options.generationName === "function"
@@ -825,8 +862,10 @@ export function vercelAI(
   function startV6Generation(
     event: VercelAIV6StepStartEvent | VercelAIV6StartEvent,
     key: string,
-  ): StoredV6Step {
-    const { trace } = resolveTrace(event);
+  ): StoredV6Step | undefined {
+    const resolved = resolveTrace(event);
+    if (!resolved) return undefined;
+    const { trace } = resolved;
     const startedAt = new Date();
     const name =
       typeof options.generationName === "function"
@@ -910,7 +949,21 @@ export function vercelAI(
 
   const integration: VercelAITelemetryIntegration = {
     onLanguageModelCallStart(event) {
-      const { trace } = resolveTrace(event);
+      if (
+        phase === "active" &&
+        !usedV7Steps &&
+        v7Steps.size === 0 &&
+        generationSpanIdsByCallId.size > 0 &&
+        !generationSpanIdsByCallId.has(event.callId)
+      ) {
+        // A second model callId without v7 step bookkeeping means another
+        // concurrent generateText/streamText is sharing this integration.
+        throw new Error(CONCURRENT_REUSE_ERROR);
+      }
+
+      const resolved = resolveTrace(event);
+      if (!resolved) return;
+      const { trace } = resolved;
       if (generationSpanIdsByCallId.has(event.callId)) {
         modelCalls.set(event.callId, { event, startedAt: new Date() });
         return;
@@ -971,7 +1024,9 @@ export function vercelAI(
     },
 
     onToolExecutionStart(event) {
-      const { trace } = resolveTrace();
+      const resolved = resolveTrace();
+      if (!resolved) return;
+      const { trace } = resolved;
 
       const parentId = resolveToolParentId(
         event.callId,
@@ -1010,7 +1065,9 @@ export function vercelAI(
     },
 
     onToolExecutionEnd(event) {
-      const { trace } = resolveTrace();
+      const resolved = resolveTrace();
+      if (!resolved) return;
+      const { trace } = resolved;
 
       const name =
         typeof options.toolName === "function"
@@ -1088,7 +1145,8 @@ export function vercelAI(
         // Duplicate step start for the same step number — ignore.
         return;
       }
-      v6Steps.set(key, startV6Generation(event, key));
+      const stored = startV6Generation(event, key);
+      if (stored) v6Steps.set(key, stored);
     },
 
     onStepEnd(event) {
@@ -1131,7 +1189,9 @@ export function vercelAI(
     },
 
     onToolCallFinish(event) {
-      const { trace } = resolveTrace();
+      const resolved = resolveTrace();
+      if (!resolved) return;
+      const { trace } = resolved;
 
       const name =
         typeof options.toolName === "function"
@@ -1189,10 +1249,16 @@ export function vercelAI(
     },
 
     async fail(error) {
+      const message = errorMessage(error);
+      runError = message;
+      if (phase === "ending") {
+        // Best-effort: apply before the in-flight terminal send reads error state.
+        endingTrace?.fail(rootErrorPayload(message));
+        return;
+      }
       if (phase === "idle") {
         beginActivity();
       }
-      runError = errorMessage(error);
       await endOwnedTrace({ error });
     },
 

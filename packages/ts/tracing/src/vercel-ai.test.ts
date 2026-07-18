@@ -1016,6 +1016,139 @@ describe("vercelAI", () => {
     await integration.shutdown();
   });
 
+  it("fails fast on concurrent v7 model calls without onStart", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onLanguageModelCallStart?.({
+      callId: "call-1",
+      provider: "openai",
+      modelId: "gpt-4o",
+      messages: [{ role: "user", content: "one" }],
+    } as never);
+
+    expect(() =>
+      integration.onLanguageModelCallStart?.({
+        callId: "call-2",
+        provider: "openai",
+        modelId: "gpt-4o",
+        messages: [{ role: "user", content: "two" }],
+      } as never),
+    ).toThrow(/already tracing a run/);
+  });
+
+  it("fails fast on concurrent v7 step-zero starts", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onStepStart?.({
+      callId: "call-1",
+      provider: "openai",
+      modelId: "gpt-4o",
+      stepNumber: 0,
+      messages: [{ role: "user", content: "one" }],
+    } as never);
+
+    expect(() =>
+      integration.onStepStart?.({
+        callId: "call-2",
+        provider: "openai",
+        modelId: "gpt-4o",
+        stepNumber: 0,
+        messages: [{ role: "user", content: "two" }],
+      } as never),
+    ).toThrow(/already tracing a run/);
+  });
+
+  it("does not throw for trailing tool callbacks during ending", async () => {
+    let resolveFetch: ((value: Response) => void) | undefined;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      prompt: "find docs",
+    });
+    integration.onStepStart?.({
+      stepNumber: 0,
+      model: { provider: "openai", modelId: "gpt-4o" },
+      messages: [{ role: "user", content: "find docs" }],
+    });
+    integration.onStepFinish?.({
+      stepNumber: 0,
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "Found docs.",
+    });
+
+    const finishPromise = integration.onFinish?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "Found docs.",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(() =>
+      integration.onToolCallFinish?.({
+        toolCall: {
+          toolName: "search_docs",
+          toolCallId: "tool-1",
+          input: { query: "docs" },
+        },
+        durationMs: 25,
+        success: true,
+        output: [{ title: "Docs" }],
+      } as never),
+    ).not.toThrow();
+
+    expect(resolveFetch).toBeTypeOf("function");
+    resolveFetch?.(new Response("{}", { status: 201 }));
+    await finishPromise;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("redacts root error text when recordOutputs is false", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+      recordOutputs: false,
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      prompt: "secret failure",
+    });
+    await integration.fail(new Error("secret stack details"));
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace).toMatchObject({
+      status: "ERROR",
+      error: "error",
+    });
+    expect(body.trace.error).not.toContain("secret");
+  });
+
   it("records real root wall-clock bounds", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const integration = vercelAI({
