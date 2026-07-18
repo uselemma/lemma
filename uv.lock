@@ -2707,7 +2707,7 @@ wheels = [
 
 [[package]]
 name = "uselemma-tracing"
-version = "7.5.0"
+version = "7.6.0"
 source = { editable = "packages/py/tracing" }
 
 [package.optional-dependencies]
