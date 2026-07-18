@@ -57,7 +57,7 @@ After init, debug mode prints a one-time config banner:
   expectedSuccessStatus: 201
 ```
 
-If `baseUrl` is not production or `projectId` is not a valid universally unique identifier (UUID), the banner includes `warnings`.
+If `baseUrl` is not production or `projectId` is not a valid universally unique identifier, the banner includes `warnings`.
 
 Verify logs and `debugSmokeTest().ingestStatus` reflect whether this specific trace was enqueued, ingested, or ready, not whether the project has any ready traces.
 
@@ -131,7 +131,7 @@ With both enabled, the SDK calls `GET /traces/ingest-status?project_id=...&otel_
 [LEMMA:verify] ingest accepted (201), ingest-status check failed (status/network)
 ```
 
-`enqueued` means the OpenTelemetry Protocol (OTLP) worker accepted the payload and wrote it to the ingest queue. It does not require the dashboard to show the trace yet (useful during backlog).
+`enqueued` means the OpenTelemetry Protocol worker accepted the payload and wrote it to the ingest queue. It does not require the dashboard to show the trace yet (useful during backlog).
 
 ## Confirming delivery reached Lemma
 

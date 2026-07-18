@@ -83,7 +83,7 @@ To separate environments or set a service name, use the mechanism that matches y
 | --- | --- |
 | Isolate staging from production | Use separate Lemma projects |
 | Label the environment on a trace | Set `metadata["deployment.environment.name"]` |
-| Set a custom service name | Use the OpenTelemetry Protocol (OTLP) resource `service.name`; the SDK ingest path always stores `service_name: "lemma-sdk"` |
+| Set a custom service name | Use the OpenTelemetry Protocol resource `service.name`; the SDK ingest path always stores `service_name: "lemma-sdk"` |
 
 Attach the environment label through trace `metadata`:
 
