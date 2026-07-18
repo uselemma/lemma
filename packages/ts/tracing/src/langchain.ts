@@ -49,6 +49,11 @@ type StoredRun = {
   parentRunId?: string;
   /** True when this run created and owns the managed trace. */
   ownsTrace: boolean;
+  /**
+   * Owned LLM ended with tool_calls — keep the run stub so later tools /
+   * generations can nest, and defer finalize until a final answer or flush.
+   */
+  deferFinalize?: boolean;
 };
 
 type StoredTrace = {
@@ -496,6 +501,19 @@ function llmOutputMessages(result: LLMResult): unknown[] | undefined {
     }
   }
   return messages.length ? messages : undefined;
+}
+
+function hasToolCalls(output: unknown): boolean {
+  if (!output || typeof output !== "object") return false;
+  if (Array.isArray(output)) return output.some((item) => hasToolCalls(item));
+  const record = output as Record<string, unknown>;
+  if (Array.isArray(record.tool_calls) && record.tool_calls.length > 0) {
+    return true;
+  }
+  if (Array.isArray(record.toolCalls) && record.toolCalls.length > 0) {
+    return true;
+  }
+  return false;
 }
 
 function providerFromId(id: unknown): string | undefined {
@@ -1104,6 +1122,19 @@ export class LemmaLangChainCallbackHandler {
     });
   }
 
+  private deferredOwnerFor(owningTraceId: string): StoredRun | undefined {
+    for (const run of this.runs.values()) {
+      if (
+        run.ownsTrace &&
+        run.deferFinalize &&
+        run.owningTraceId === owningTraceId
+      ) {
+        return run;
+      }
+    }
+    return undefined;
+  }
+
   async handleLLMEnd(output: LLMResult, runId: RunId) {
     const run = this.runs.get(runId);
     if (!run?.handle) return;
@@ -1111,6 +1142,7 @@ export class LemmaLangChainCallbackHandler {
     const structured = llmStructuredOutput(output);
     const outputMessages = llmOutputMessages(output);
     const softError = toolResultError(structured);
+    const awaitingTools = !softError && hasToolCalls(structured);
 
     run.handle.end({
       output:
@@ -1129,14 +1161,34 @@ export class LemmaLangChainCallbackHandler {
       if (run.ownsTrace) {
         if (softError) this.noteRootError(stored, softError);
         else this.noteRootOutput(stored, structured);
-      } else if (!softError && stored.rootOutput === undefined) {
-        // Prefer chain-level root output; fill from generation when absent.
+      } else if (!softError) {
+        // Prefer chain-level root output; refresh from later generations.
         this.noteRootOutput(stored, structured);
       }
     }
 
+    if (run.ownsTrace && awaitingTools) {
+      // Keep the run stub so tool/follow-up generation callbacks can nest
+      // under this owned trace instead of opening a second root.
+      run.deferFinalize = true;
+      return;
+    }
+
     this.runs.delete(runId);
-    await this.maybeFinalizeOwner(run, endedAt);
+
+    if (run.ownsTrace) {
+      await this.maybeFinalizeOwner(run, endedAt);
+      return;
+    }
+
+    // Final answer generation under a deferred owned LLM — close that root.
+    if (!awaitingTools) {
+      const deferred = this.deferredOwnerFor(run.owningTraceId);
+      if (deferred) {
+        this.runs.delete(deferred.rootRunId);
+        await this.maybeFinalizeOwner(deferred, endedAt);
+      }
+    }
   }
 
   async handleLLMError(error: unknown, runId: RunId) {

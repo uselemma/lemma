@@ -65,6 +65,9 @@ class _StoredRun:
     owns_trace: bool
     parent_run_id: str | None = None
     handle: SpanHandle | None = None
+    # Owned LLM ended with tool_calls — keep stub so later tools/generations
+    # can nest, and defer finalize until a final answer or flush.
+    defer_finalize: bool = False
 
 
 @dataclass
@@ -377,6 +380,18 @@ def _generation_message(item: Any) -> Any | None:
     if isinstance(item, dict) and "content" in item and not isinstance(item.get("text"), str):
         return item
     return None
+
+
+def _has_tool_calls(output: Any) -> bool:
+    if isinstance(output, list):
+        return any(_has_tool_calls(item) for item in output)
+    if not isinstance(output, dict):
+        return False
+    tool_calls = output.get("tool_calls")
+    if isinstance(tool_calls, list) and tool_calls:
+        return True
+    tool_calls = output.get("toolCalls")
+    return isinstance(tool_calls, list) and bool(tool_calls)
 
 
 def llm_structured_output(response: Any) -> Any:
@@ -725,6 +740,16 @@ class LemmaLangChainCallbackHandler:
         self._note_bounds(stored, run.started_at, ended_at)
         self._finalize(run.owning_trace_id, stored)
 
+    def _deferred_owner_for(self, owning_trace_id: str) -> _StoredRun | None:
+        for run in self._runs.values():
+            if (
+                run.owns_trace
+                and run.defer_finalize
+                and run.owning_trace_id == owning_trace_id
+            ):
+                return run
+        return None
+
     def on_chain_start(
         self,
         serialized: Any,
@@ -958,13 +983,15 @@ class LemmaLangChainCallbackHandler:
         )
 
     def on_llm_end(self, response: Any, *, run_id: str, **_: Any) -> None:
-        run = self._runs.pop(str(run_id), None)
+        run_key = str(run_id)
+        run = self._runs.get(run_key)
         if run is None or run.handle is None:
             return
         ended_at = _now()
         structured = llm_structured_output(response)
         output_messages = llm_output_messages(response)
         soft_error = tool_result_error(structured)
+        awaiting_tools = soft_error is None and _has_tool_calls(structured)
 
         run.handle.end(
             output=structured if self.record_outputs and soft_error is None else None,
@@ -987,10 +1014,26 @@ class LemmaLangChainCallbackHandler:
                     self._note_root_error(stored, soft_error)
                 else:
                     self._note_root_output(stored, structured)
-            elif soft_error is None and stored.root_output is None:
+            elif soft_error is None:
                 self._note_root_output(stored, structured)
 
-        self._maybe_finalize_owner(run, ended_at)
+        if run.owns_trace and awaiting_tools:
+            # Keep the run stub so tool/follow-up generation callbacks can nest
+            # under this owned trace instead of opening a second root.
+            run.defer_finalize = True
+            return
+
+        self._runs.pop(run_key, None)
+
+        if run.owns_trace:
+            self._maybe_finalize_owner(run, ended_at)
+            return
+
+        if not awaiting_tools:
+            deferred = self._deferred_owner_for(run.owning_trace_id)
+            if deferred is not None:
+                self._runs.pop(deferred.root_run_id, None)
+                self._maybe_finalize_owner(deferred, ended_at)
 
     def on_llm_error(self, error: BaseException, *, run_id: str, **_: Any) -> None:
         run = self._runs.pop(str(run_id), None)

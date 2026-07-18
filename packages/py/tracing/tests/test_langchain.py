@@ -128,6 +128,8 @@ def test_standalone_chat_model_finalizes_one_owned_trace():
         },
         run_id="llm-solo",
     )
+    # Owned LLM ends with tool_calls defer finalize until flush / final answer.
+    handler.flush()
 
     assert len(calls) == 1
     body = calls[0]["body"]
@@ -389,6 +391,8 @@ def test_message_normalization_and_provider_from_class():
         },
         run_id="llm-1",
     )
+    # Owned LLM ends with tool_calls defer finalize until flush / final answer.
+    handler.flush()
 
     span = calls[0]["body"]["trace"]["spans"][0]
     assert span["attributes"]["llm.provider"] == "anthropic"

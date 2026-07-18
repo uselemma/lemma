@@ -144,6 +144,8 @@ describe("langChain", () => {
       },
       "llm-solo",
     );
+    // Owned LLM ends with tool_calls defer finalize until flush / final answer.
+    await h.flush();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = jsonBody(fetchMock.mock.calls[0]);
@@ -397,6 +399,7 @@ describe("langChain", () => {
       },
       "llm-1",
     );
+    await h.flush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.spans[0]).toMatchObject({
@@ -418,6 +421,66 @@ describe("langChain", () => {
         tool_calls: [{ id: "c1", name: "search", args: { q: "1" } }],
       },
     });
+  });
+
+  it("keeps an owned LLM open for tools when the generation has tool_calls", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock);
+
+    h.handleChatModelStart(
+      { name: "ChatOpenAI", id: ["langchain_openai", "ChatOpenAI"] },
+      [[{ type: "human", content: "lookup" }]],
+      "llm-1",
+    );
+    await h.handleLLMEnd(
+      {
+        generations: [
+          [
+            {
+              message: {
+                type: "ai",
+                content: "",
+                tool_calls: [{ id: "c1", name: "search", args: { q: "1" } }],
+              },
+            },
+          ],
+        ],
+      },
+      "llm-1",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    h.handleToolStart(
+      { name: "search" },
+      { q: "1" },
+      "tool-1",
+      "llm-1",
+    );
+    await h.handleToolEnd({ ok: true }, "tool-1");
+    h.handleChatModelStart(
+      { name: "ChatOpenAI", id: ["langchain_openai", "ChatOpenAI"] },
+      [[{ type: "human", content: "lookup" }]],
+      "llm-2",
+      "llm-1",
+    );
+    await h.handleLLMEnd(
+      {
+        generations: [[{ message: { type: "ai", content: "found it" } }]],
+      },
+      "llm-2",
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace).toMatchObject({
+      input: "lookup",
+      output: "found it",
+    });
+    expect(body.trace.spans.map((s: { type: string }) => s.type)).toEqual([
+      "generation",
+      "tool",
+      "generation",
+    ]);
   });
 
   it("flush finalizes open traces once and shutdown does not resend", async () => {
