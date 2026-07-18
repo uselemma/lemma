@@ -55,6 +55,7 @@ export type OpenAIAgentsIntegrationOptions = {
 type StoredTrace = {
   handle: TraceHandle;
   ended: boolean;
+  openedAt: Date;
   rootInput?: unknown;
   rootOutput?: unknown;
   rootError?: string;
@@ -158,17 +159,24 @@ function spanName(data: OpenAIAgentsSpanData): string {
   return `openai-agents-${data.type || "span"}`;
 }
 
-function openAIAttributes(span: OpenAIAgentsSpan): Record<string, unknown> {
+function openAIAttributes(
+  span: OpenAIAgentsSpan,
+  recordPayloads: boolean,
+): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries({
       "openai.agents.trace_id": span.traceId,
       "openai.agents.span_id": span.spanId,
       "openai.agents.parent_id": span.parentId,
       "openai.agents.span_type": span.spanData.type,
-      "openai.agents.trace_metadata": span.traceMetadata
-        ? JSON.stringify(span.traceMetadata)
+      "openai.agents.trace_metadata":
+        recordPayloads && span.traceMetadata
+          ? JSON.stringify(span.traceMetadata)
+          : undefined,
+      // Full span_data can contain prompts/outputs — omit when privacy is on.
+      "openai.agents.span_data": recordPayloads
+        ? JSON.stringify(span.spanData)
         : undefined,
-      "openai.agents.span_data": JSON.stringify(span.spanData),
     }).filter(([, value]) => value !== undefined && value !== null),
   );
 }
@@ -233,7 +241,10 @@ export function openAIAgents(
   ) {
     if (typeof groupId === "string" && groupId) return groupId;
     const key = options.threadIdKey ?? "threadId";
-    return lookupString([metadata, options.metadata], [key, "thread_id"]);
+    return lookupString(
+      [metadata, options.metadata],
+      [key, "threadId", "thread_id"],
+    );
   }
 
   function resolveUserId(metadata?: Record<string, unknown>) {
@@ -307,7 +318,11 @@ export function openAIAgents(
       threadId: resolveThreadId(trace.groupId, trace.metadata),
       userId: resolveUserId(trace.metadata),
     });
-    const stored: StoredTrace = { handle, ended: false };
+    const stored: StoredTrace = {
+      handle,
+      ended: false,
+      openedAt: new Date(),
+    };
     traces.set(trace.traceId, stored);
     return stored;
   }
@@ -326,13 +341,15 @@ export function openAIAgents(
     const spanStartedAt = startedAt(span);
     noteBounds(trace, spanStartedAt, undefined);
 
+    const recordPayloads =
+      options.recordInputs !== false && options.recordOutputs !== false;
     const base = {
       id: span.spanId,
       parentId: span.parentId ?? null,
       name: spanName(data),
       input: options.recordInputs === false ? undefined : input,
       metadata: options.metadata,
-      attributes: openAIAttributes(span),
+      attributes: openAIAttributes(span, recordPayloads),
       startedAt: spanStartedAt,
     };
 
@@ -447,7 +464,8 @@ export function openAIAgents(
     stored.ended = true;
 
     const endedAtValue = stored.latestEnd ?? new Date();
-    const startedAtValue = stored.earliestStart ?? endedAtValue;
+    const startedAtValue =
+      stored.earliestStart ?? stored.openedAt ?? endedAtValue;
     const rootDuration = durationMs(startedAtValue, endedAtValue);
 
     const timing = {

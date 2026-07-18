@@ -201,7 +201,12 @@ def _span_name(data: dict[str, Any]) -> str:
     return f"openai-agents-{span_type or 'span'}"
 
 
-def _attributes(span: Any, data: dict[str, Any]) -> dict[str, Any]:
+def _attributes(
+    span: Any,
+    data: dict[str, Any],
+    *,
+    record_payloads: bool,
+) -> dict[str, Any]:
     return {
         key: value
         for key, value in {
@@ -209,8 +214,11 @@ def _attributes(span: Any, data: dict[str, Any]) -> dict[str, Any]:
             "openai.agents.span_id": _get(span, "span_id"),
             "openai.agents.parent_id": _get(span, "parent_id"),
             "openai.agents.span_type": data.get("type"),
-            "openai.agents.trace_metadata": _json(_get(span, "trace_metadata")),
-            "openai.agents.span_data": _json(data),
+            "openai.agents.trace_metadata": (
+                _json(_get(span, "trace_metadata")) if record_payloads else None
+            ),
+            # Full span_data can contain prompts/outputs — omit when privacy is on.
+            "openai.agents.span_data": _json(data) if record_payloads else None,
         }.items()
         if value is not None
     }
@@ -392,7 +400,7 @@ class LemmaOpenAIAgentsProcessor:
         stored.ended = True
 
         ended_at = stored.latest_end or _now()
-        started_at = stored.earliest_start or ended_at
+        started_at = stored.earliest_start or stored.started_at or ended_at
         root_duration = _duration_ms(started_at, ended_at)
         if root_duration is not None:
             stored.context.duration_ms = root_duration
@@ -465,7 +473,11 @@ class LemmaOpenAIAgentsProcessor:
             "name": _span_name(data),
             "input": input_value if self.record_inputs else None,
             "metadata": self.metadata,
-            "attributes": _attributes(span, data),
+            "attributes": _attributes(
+                span,
+                data,
+                record_payloads=self.record_inputs and self.record_outputs,
+            ),
             "started_at": span_started_at,
         }
         if _is_generation_type(span_type):
