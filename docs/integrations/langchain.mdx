@@ -4,13 +4,15 @@ description: "Record LangChain runs with Lemma callback handlers"
 ---
 
 Use Lemma's LangChain integration when your app runs chains, chat models,
-retrievers, tools, or agents through LangChain callbacks. The integration
-creates one Lemma trace for the root run, records LLM calls as generations,
-tools as tool calls, retrievers as spans, and nested
-chains as child spans.
+retrievers, tools, or agents through LangChain callbacks. Each root execution
+owns one complete Lemma trace: current-turn input, final answer or root error,
+promoted `thread_id` / `user_id`, typed nested generations/tools/spans, and real
+wall-clock timing. Standalone LLM/tool/retriever callbacks finalize their own
+owned trace. Missing-parent events never overwrite concurrent trace state.
 
 You do not need to wrap LangChain calls in `lemma.trace()`. Pass the callback
-handler through LangChain's `callbacks` option.
+handler through LangChain's `callbacks` option, then `flush()` / `shutdown()`
+when the process exits.
 
 ## TypeScript
 
@@ -27,19 +29,23 @@ import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage } from "@langchain/core/messages";
 import { langChain } from "@uselemma/tracing";
 
-const model = new ChatOpenAI({
-  model: "gpt-4o",
-  callbacks: [
-    langChain({
-      apiKey: process.env.LEMMA_API_KEY,
-      projectId: process.env.LEMMA_PROJECT_ID,
-      agentName: "support-agent",
-    }),
-  ],
+const lemmaHandler = langChain({
+  apiKey: process.env.LEMMA_API_KEY,
+  projectId: process.env.LEMMA_PROJECT_ID,
+  agentName: "support-agent",
+  threadIdKey: "conversation_id",
+  userIdKey: "user_id",
 });
 
-export async function callAgent(userMessage: string) {
-  const response = await model.invoke([new HumanMessage(userMessage)]);
+const model = new ChatOpenAI({
+  model: "gpt-4o",
+  callbacks: [lemmaHandler],
+});
+
+export async function callAgent(userMessage: string, conversationId: string) {
+  const response = await model.invoke([new HumanMessage(userMessage)], {
+    metadata: { conversation_id: conversationId },
+  });
   return response.content;
 }
 ```
@@ -60,20 +66,21 @@ import os
 from langchain_openai import ChatOpenAI
 from uselemma_tracing import langchain
 
-model = ChatOpenAI(
-    model="gpt-4o",
-    callbacks=[
-        langchain(
-            api_key=os.environ["LEMMA_API_KEY"],
-            project_id=os.environ["LEMMA_PROJECT_ID"],
-            agent_name="support-agent",
-        )
-    ],
+lemma_handler = langchain(
+    api_key=os.environ["LEMMA_API_KEY"],
+    project_id=os.environ["LEMMA_PROJECT_ID"],
+    agent_name="support-agent",
+    thread_id_key="conversation_id",
+    user_id_key="user_id",
 )
+model = ChatOpenAI(model="gpt-4o", callbacks=[lemma_handler])
 
 
-def call_agent(user_message: str):
-    response = model.invoke(user_message)
+def call_agent(user_message: str, conversation_id: str):
+    response = model.invoke(
+        user_message,
+        config={"metadata": {"conversation_id": conversation_id}},
+    )
     return response.content
 ```
 
@@ -81,15 +88,20 @@ def call_agent(user_message: str):
 
 | LangChain callback | Lemma record |
 | --- | --- |
-| Root chain start/end | One Lemma trace named from `agentName` or the LangChain run name |
-| LLM or chat model start/end | Generation with input messages, output text, model, timing, and parent ID |
-| Tool start/end | Tool call with name, input, output or error, timing, and parent ID |
+| Root chain / standalone LLM / tool / retriever | One owned Lemma trace with current-turn input, final output or root error, `thread_id` / `user_id`, and wall times |
+| LLM or chat model start/end | Generation with normalized `{ role, content }` history, structured assistant output (incl. tool calls), derived provider/model, timing, parent ID |
+| Tool start/end | Tool call with name, input, output **or** soft/hard error (never both), timing, parent ID |
 | Retriever start/end | Span with query input, output, timing, and parent ID |
-| Nested chain start/end | Child span preserving LangChain parent run IDs |
+| Nested chain start/end | Child span preserving LangChain parent run IDs (orphan-safe fallback to root) |
+
+Promote identity from configurable metadata/tag keys (`threadIdKey` /
+`thread_id_key`, `userIdKey` / `user_id_key`). Defaults also check
+`conversation_id`, `session_id`, and `resourceId`.
 
 Use `langChain({ recordInputs: false, recordOutputs: false })` in TypeScript or
 `langchain(record_inputs=False, record_outputs=False)` in Python to avoid
-sending prompts, tool inputs, tool outputs, or model output text.
+sending prompts, tool inputs, tool outputs, or model output text while keeping
+span structure and status.
 
 ## Debugging
 

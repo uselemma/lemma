@@ -177,7 +177,10 @@ text.
 ## LangChain and LangGraph
 
 Install the optional integration dependency and pass `langchain()` as a callback
-handler:
+handler. Each root run owns one Lemma trace with current-turn input, final
+output or root error, promoted `thread_id` / `user_id`, typed nested
+generations/tools/spans, and real wall-clock bounds. Call `flush()` /
+`shutdown()` to finalize open traces.
 
 ```bash
 pip install "uselemma-tracing[langchain]" langchain-openai
@@ -187,15 +190,21 @@ pip install "uselemma-tracing[langchain]" langchain-openai
 from langchain_openai import ChatOpenAI
 from uselemma_tracing import langchain
 
-model = ChatOpenAI(
-    model="gpt-4o",
-    callbacks=[langchain(agent_name="support-agent")],
+handler = langchain(
+    agent_name="support-agent",
+    thread_id_key="conversation_id",
+    user_id_key="user_id",
 )
-
-response = model.invoke(user_message)
+model = ChatOpenAI(model="gpt-4o", callbacks=[handler])
+response = model.invoke(
+    user_message,
+    config={"metadata": {"conversation_id": thread_id, "user_id": user_id}},
+)
+handler.flush()
 ```
 
-LangGraph uses LangChain callbacks too:
+`langgraph()` is the same LangChain callback adapter with a LangGraph default
+trace name (`langgraph-agent`):
 
 ```bash
 pip install "uselemma-tracing[langgraph]"
@@ -210,13 +219,10 @@ result = graph.invoke(
 )
 ```
 
-The handler creates one Lemma trace for the root chain/graph run, records LLM
-calls as generations, tools as tool spans, retrievers as spans, and nested
-chains or graph nodes as child spans.
-
 Use `langchain(record_inputs=False, record_outputs=False)` or
 `langgraph(record_inputs=False, record_outputs=False)` to avoid sending prompts,
-tool inputs, tool outputs, or generated text.
+tool inputs, tool outputs, or generated text while keeping span structure and
+status.
 
 ## Supported Contract Fields
 

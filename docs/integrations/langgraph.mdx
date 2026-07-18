@@ -4,10 +4,11 @@ description: "Record LangGraph graph runs with Lemma callback handlers"
 ---
 
 LangGraph uses LangChain's callback system, so Lemma's LangGraph integration is
-a LangChain callback handler with LangGraph defaults. It creates one Lemma trace
-for each graph invocation, records graph nodes as child spans, records model
-calls as generations, records tools as tool calls, and preserves parent run IDs
-so nested nodes stay nested correctly.
+an explicit LangChain callback adapter with LangGraph defaults (default trace
+name `langgraph-agent`). It creates one owned Lemma trace per graph invocation,
+records graph nodes as nested child spans, model calls as generations, tools as
+tool calls, extracts current-turn input from graph message state, and preserves
+parent run IDs with orphan-safe fallback.
 
 You do not need to wrap graph calls in `lemma.trace()`. Pass the callback
 handler through the graph invoke config.
@@ -112,15 +113,19 @@ def call_graph(user_message: str):
 
 | LangGraph callback | Lemma record |
 | --- | --- |
-| Root graph run | One Lemma trace named from `agentName` or the graph run name |
+| Root graph run | One owned Lemma trace (default name `langgraph-agent`) with current-turn input from state, final output or root error, `thread_id` / `user_id`, wall times |
 | Graph node | Child span with node input, output, timing, and parent ID |
-| LLM or chat model | Generation with messages, output text, model, timing, and parent ID |
-| Tool call | Tool span with input, output or error, timing, and parent ID |
+| LLM or chat model | Generation with normalized messages, structured assistant output, derived provider/model, timing, parent ID |
+| Tool call | Tool span with input, output **or** soft/hard error, timing, and parent ID |
 | Retriever | Span with query input, output, timing, and parent ID |
+
+`langGraph()` / `langgraph()` is an explicit LangChain-callback adapter — LangGraph
+emits LangChain callback events; Lemma does not use a separate LangGraph tracer.
 
 Use `langGraph({ recordInputs: false, recordOutputs: false })` in TypeScript or
 `langgraph(record_inputs=False, record_outputs=False)` in Python to avoid
-sending prompts, tool inputs, tool outputs, or model output text.
+sending prompts, tool inputs, tool outputs, or model output text while keeping
+span structure and status.
 
 ## Debugging
 

@@ -250,8 +250,8 @@ describe("HTTP tracing integration", () => {
 
     expect(ingest.requests[5].body.trace).toMatchObject({
       name: "langchain-agent",
-      input: { input: "hi" },
-      output: { output: "hello" },
+      input: "hi",
+      output: "hello",
     });
     expect(ingest.requests[5].body.trace.spans[0]).toMatchObject({
       name: "ChatOpenAI",
