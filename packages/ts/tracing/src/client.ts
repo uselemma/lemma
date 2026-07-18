@@ -635,6 +635,16 @@ export class TraceContext {
     this.changed();
   }
 
+  threadId(value: string | undefined) {
+    this.options.threadId = value;
+    this.changed();
+  }
+
+  userId(value: string | undefined) {
+    this.options.userId = value;
+    this.changed();
+  }
+
   duration(durationMs: number) {
     this.options.durationMs = durationMs;
     this.changed();

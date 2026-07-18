@@ -3,7 +3,9 @@ title: "Vercel AI SDK"
 description: "Record Vercel AI SDK model calls and tool executions with Lemma"
 ---
 
-Use `vercelAI()` when your app calls `generateText`, `streamText`, or an AI SDK agent. The integration supports AI SDK v7 and v6. It creates one Lemma trace for each AI SDK run, extracts the prompt or messages as trace input, and records model calls and tool executions as child spans.
+Use `vercelAI()` when your app calls `generateText`, `streamText`, or an AI SDK agent. The integration supports AI SDK v7 and v6. It creates one Lemma trace for each AI SDK run, puts the current user turn on the root, promotes `threadId` / `userId` from telemetry metadata, and records model calls and tool executions as child spans.
+
+Create a **new** `vercelAI()` integration for each AI SDK operation. One integration object owns one in-flight run; concurrent reuse fails fast because AI SDK terminal events do not carry a reliable run ID. Sequential reuse after a completed run is supported.
 
 ## Install
 
@@ -13,7 +15,7 @@ npm install @uselemma/tracing ai zod
 
 ## AI SDK v7
 
-Create the Lemma telemetry integration once, then pass it to the AI SDK `telemetry.integrations` option. Use `telemetry.functionId` for the agent name.
+Pass a fresh Lemma telemetry integration to the AI SDK `telemetry.integrations` option. Use `telemetry.functionId` for the agent name and put conversation identity in `telemetry.metadata`.
 
 ```typescript
 import { generateText, tool } from "ai";
@@ -25,28 +27,33 @@ const lemmaTelemetry = vercelAI({
   projectId: process.env.LEMMA_PROJECT_ID,
 });
 
-const result = await generateText({
-  model,
-  prompt: userMessage,
-  tools: {
-    searchDocs: tool({
-      inputSchema: z.object({
-        query: z.string(),
+try {
+  const result = await generateText({
+    model,
+    prompt: userMessage,
+    tools: {
+      searchDocs: tool({
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: async ({ query }) => searchDocs(query),
       }),
-      execute: async ({ query }) => searchDocs(query),
-    }),
-  },
-  telemetry: {
-    functionId: "support-agent",
-    metadata: {
-      threadId: conversationId,
-      userId: user.id,
     },
-    integrations: [lemmaTelemetry],
-  },
-});
-
-return result.text;
+    telemetry: {
+      functionId: "support-agent",
+      metadata: {
+        threadId: conversationId,
+        userId: user.id,
+      },
+      integrations: [lemmaTelemetry],
+    },
+  });
+  await lemmaTelemetry.flush();
+  return result.text;
+} catch (error) {
+  await lemmaTelemetry.fail(error);
+  throw error;
+}
 ```
 
 ## AI SDK v6
@@ -63,33 +70,38 @@ const lemmaTelemetry = vercelAI({
   projectId: process.env.LEMMA_PROJECT_ID,
 });
 
-const result = await generateText({
-  model,
-  prompt: userMessage,
-  tools: {
-    searchDocs: tool({
-      inputSchema: z.object({
-        query: z.string(),
+try {
+  const result = await generateText({
+    model,
+    prompt: userMessage,
+    tools: {
+      searchDocs: tool({
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: async ({ query }) => searchDocs(query),
       }),
-      execute: async ({ query }) => searchDocs(query),
-    }),
-  },
-  experimental_telemetry: {
-    functionId: "support-agent",
-    metadata: {
-      threadId: conversationId,
-      userId: user.id,
     },
-    integrations: [lemmaTelemetry],
-  },
-});
-
-return result.text;
+    experimental_telemetry: {
+      functionId: "support-agent",
+      metadata: {
+        threadId: conversationId,
+        userId: user.id,
+      },
+      integrations: [lemmaTelemetry],
+    },
+  });
+  await lemmaTelemetry.flush();
+  return result.text;
+} catch (error) {
+  await lemmaTelemetry.fail(error);
+  throw error;
+}
 ```
 
 ## Streaming
 
-Use the same integration with `streamText`.
+Use the same per-operation integration with `streamText`. Call `flush()` after the stream finishes, or `fail()` / `shutdown()` in short-lived runtimes when the process may exit before delivery completes.
 
 ```typescript
 import { streamText } from "ai";
@@ -105,6 +117,10 @@ const result = streamText({
   prompt: userMessage,
   telemetry: {
     functionId: "support-agent",
+    metadata: {
+      threadId: conversationId,
+      userId: user.id,
+    },
     integrations: [lemmaTelemetry],
   },
 });
@@ -112,22 +128,34 @@ const result = streamText({
 for await (const _part of result.fullStream) {
   // stream to your response
 }
+
+await lemmaTelemetry.flush();
 ```
 
 ## What Lemma records
 
 | AI SDK event | Lemma record |
 | --- | --- |
-| Model call | Generation with model, provider, messages, output text, and duration |
-| Tool execution | Tool call with name, input, output or error, and duration |
+| Run start / finish | Root trace with current-turn input, final answer or root error, `thread_id` / `user_id`, and real wall-clock bounds |
+| Model call / step | Generation with model, provider, normalized messages, structured assistant output, and duration |
+| Tool execution | Tool call with name, arguments, result or soft/hard error (never both success output and error), and duration |
 
-AI SDK v7 provides model and tool durations directly. AI SDK v6 provides tool execution durations; model-call durations are inferred from start and finish timestamps when the AI SDK does not provide an explicit duration.
+AI SDK v7 provides model and tool durations directly. AI SDK v6 provides tool execution durations; model-call durations are inferred from start and finish timestamps when the AI SDK does not provide an explicit duration. For v6, `system` + `prompt` are normalized into chat messages on the generation.
 
 Use `telemetry.functionId` / `experimental_telemetry.functionId` for the agent name, or set it on the integration with `vercelAI({ agentName: "support-agent" })`.
 
+Override metadata keys when needed:
+
+```typescript
+vercelAI({
+  threadIdKey: "conversationId",
+  userIdKey: "customerId",
+})
+```
+
 For advanced cases, you can still attach to an existing trace by passing `vercelAI({ trace })` or by calling AI SDK inside a `lemma.trace()` callback. If you use the callback form of `lemma.trace()`, the callback owns trace closure. If you pass a trace handle to `vercelAI({ trace })`, the integration closes it automatically at the end of the AI SDK operation.
 
-Use `recordInputs: false` or `recordOutputs: false` to avoid sending prompts, tool inputs, tool outputs, or model output text.
+Use `recordInputs: false` or `recordOutputs: false` to avoid sending prompts, tool inputs, tool outputs, or model output text. Structure and status are preserved.
 
 ```typescript
 telemetry: {
@@ -137,5 +165,35 @@ telemetry: {
       recordOutputs: false,
     }),
   ],
+}
+```
+
+## Abort, flush, and shutdown
+
+| Method | When to use |
+| --- | --- |
+| `fail(error)` | The AI SDK call threw or was aborted before a terminal telemetry callback |
+| `flush()` | Await outstanding ingest deliveries before returning from a request |
+| `shutdown()` | Flush and clear state in workers / serverless teardown |
+
+```typescript
+const lemmaTelemetry = vercelAI();
+
+try {
+  const result = await generateText({
+    model,
+    prompt: userMessage,
+    telemetry: {
+      functionId: "support-agent",
+      integrations: [lemmaTelemetry],
+    },
+  });
+  await lemmaTelemetry.flush();
+  return result.text;
+} catch (error) {
+  await lemmaTelemetry.fail(error);
+  throw error;
+} finally {
+  await lemmaTelemetry.shutdown();
 }
 ```
