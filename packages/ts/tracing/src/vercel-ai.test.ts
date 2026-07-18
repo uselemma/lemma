@@ -1000,6 +1000,11 @@ describe("vercelAI", () => {
       text: "hi",
     });
 
+    for (let i = 0; i < 10 && !resolveFetch; i++) {
+      await Promise.resolve();
+    }
+    expect(resolveFetch).toBeTypeOf("function");
+
     const flushPromise = integration.flush();
     let flushed = false;
     void flushPromise.then(() => {

@@ -519,12 +519,12 @@ export function vercelAI(
   let managedTrace: TraceHandle | undefined;
   let recordedV6Step = false;
   let sawV7StepZero = false;
-  let usedV7Steps = false;
   let runStartedAt: Date | undefined;
   let runError: string | undefined;
   let endingTrace:
     | {
         fail: (error: unknown) => void;
+        output: (value: unknown) => void;
       }
     | undefined;
 
@@ -542,7 +542,6 @@ export function vercelAI(
     managedTrace = undefined;
     recordedV6Step = false;
     sawV7StepZero = false;
-    usedV7Steps = false;
     runStartedAt = undefined;
     runError = undefined;
     endingTrace = undefined;
@@ -694,12 +693,14 @@ export function vercelAI(
       | {
           end: (outputOrOptions?: unknown) => MaybePromise<void>;
           fail: (error: unknown) => void;
+          output: (value: unknown) => void;
         }
       | undefined;
     if (trace && typeof trace.end === "function") {
       ownedTrace = {
         end: trace.end.bind(trace),
         fail: trace.fail.bind(trace),
+        output: trace.output.bind(trace),
       };
     } else if (managedTrace) {
       ownedTrace = managedTrace;
@@ -715,32 +716,41 @@ export function vercelAI(
       );
     }
 
-    const terminalError =
-      runError ??
-      ("error" in event && event.error != null
+    const eventError =
+      "error" in event && event.error != null
         ? errorMessage(event.error)
-        : undefined);
+        : undefined;
+    if (eventError && !runError) {
+      runError = eventError;
+    }
 
     const endedAt = new Date();
     const startedAt = runStartedAt ?? endedAt;
     const durationMs = Math.max(0, endedAt.getTime() - startedAt.getTime());
-    const output =
-      options.recordOutputs === false || terminalError
-        ? undefined
-        : endOutput(event);
+    const successOutput = endOutput(event);
 
     endingTrace = ownedTrace;
 
     const endPromise = (async () => {
       try {
         if (!ownedTrace) return;
+        // Yield so a racing fail()/trailing callback in this turn can settle.
+        await Promise.resolve();
+        const terminalError = runError;
         if (terminalError) {
           ownedTrace.fail(rootErrorPayload(terminalError));
+          ownedTrace.output(undefined);
+          await ownedTrace.end({ durationMs, endedAt });
+          return;
         }
-        if (output === undefined) {
+        if (options.recordOutputs === false || successOutput === undefined) {
           await ownedTrace.end({ durationMs, endedAt });
         } else {
-          await ownedTrace.end({ output, durationMs, endedAt });
+          await ownedTrace.end({
+            output: successOutput,
+            durationMs,
+            endedAt,
+          });
         }
       } finally {
         // Fully reset so the same integration object can be reused sequentially.
@@ -825,7 +835,6 @@ export function vercelAI(
       }
       sawV7StepZero = true;
     }
-    usedV7Steps = true;
     const resolved = resolveTrace(event);
     if (!resolved) return;
     const { trace } = resolved;
@@ -951,14 +960,17 @@ export function vercelAI(
     onLanguageModelCallStart(event) {
       if (
         phase === "active" &&
-        !usedV7Steps &&
-        v7Steps.size === 0 &&
         generationSpanIdsByCallId.size > 0 &&
         !generationSpanIdsByCallId.has(event.callId)
       ) {
-        // A second model callId without v7 step bookkeeping means another
-        // concurrent generateText/streamText is sharing this integration.
-        throw new Error(CONCURRENT_REUSE_ERROR);
+        const belongsToActiveStep = [...v7Steps.values()].some(
+          (step) => step.event.callId === event.callId,
+        );
+        // Multi-step v7 registers the next callId on step start before the
+        // model callback. Any other new callId is concurrent reuse.
+        if (!belongsToActiveStep) {
+          throw new Error(CONCURRENT_REUSE_ERROR);
+        }
       }
 
       const resolved = resolveTrace(event);
@@ -998,7 +1010,7 @@ export function vercelAI(
     },
 
     onLanguageModelCallEnd(event) {
-      if (phase !== "active") return;
+      if (phase !== "active" && phase !== "ending") return;
       const stored = modelCalls.get(event.callId);
       modelCalls.delete(event.callId);
       if (!stored?.handle) return;
@@ -1150,12 +1162,12 @@ export function vercelAI(
     },
 
     onStepEnd(event) {
-      if (phase !== "active") return;
+      if (phase !== "active" && phase !== "ending") return;
       endV7Generation(event);
     },
 
     onStepFinish(event) {
-      if (phase !== "active") return;
+      if (phase !== "active" && phase !== "ending") return;
       recordedV6Step = true;
       const key = `step:${event.stepNumber}`;
       const stored = v6Steps.get(key);
@@ -1254,6 +1266,7 @@ export function vercelAI(
       if (phase === "ending") {
         // Best-effort: apply before the in-flight terminal send reads error state.
         endingTrace?.fail(rootErrorPayload(message));
+        endingTrace?.output(undefined);
         return;
       }
       if (phase === "idle") {
