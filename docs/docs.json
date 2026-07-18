@@ -95,7 +95,8 @@
               "integrations/openai-agents",
               "integrations/vercel-ai",
               "integrations/langchain",
-              "integrations/langgraph"
+              "integrations/langgraph",
+              "integrations/mastra"
             ]
           },
           {

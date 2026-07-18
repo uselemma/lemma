@@ -47,6 +47,7 @@ When you assemble a trace yourself and deliver it with `ingest()` (queues, worke
 | OpenAI Agents SDK | Use the built-in Lemma OpenAI Agents integration. Do not wrap normal agent runs in `lemma.trace(...)`; the processor/instrumentor creates the Lemma trace from Agents SDK events. |
 | LangChain | Use the built-in Lemma LangChain callback handler. |
 | LangGraph | Use the built-in Lemma LangGraph callback handler; it follows LangChain callback semantics with LangGraph defaults. |
+| Mastra | Use the built-in Lemma Mastra exporter (`LemmaMastraExporter` / `mastra()`). Do not wrap normal Mastra agent/workflow runs in `lemma.trace(...)`; register the exporter in Mastra `Observability` and let it create one Lemma trace per run. See [Mastra](https://docs.uselemma.ai/integrations/mastra). |
 | Streaming or callbacks where one function does not own the whole run | In TypeScript, use a trace handle and call/await `trace.end(...)` from the terminal callback or finalization path. In Python, prefer a callback trace around the owned run and record `start_*` handles inside that callback. |
 | App already has Langfuse | Keep Langfuse only if the customer still needs it, and add Lemma SDK tracing alongside it. Langfuse instrumentation is not sufficient for Lemma because it usually does not produce the Lemma trace contract. Do not route new Lemma work through Langfuse. |
 | Existing OpenTelemetry only | Do not tear it out. Keep it if the user needs it, but use the Lemma SDK for the product trace contract unless the user explicitly asks for OTel export compatibility work. |
@@ -70,6 +71,7 @@ Use docs in this order:
    - OpenAI Agents SDK: `https://docs.uselemma.ai/integrations/openai-agents.md`
    - LangChain: `https://docs.uselemma.ai/integrations/langchain.md`
    - LangGraph: `https://docs.uselemma.ai/integrations/langgraph.md`
+   - Mastra: `https://docs.uselemma.ai/integrations/mastra.md`
    - Trace contract: `https://docs.uselemma.ai/reference/trace-contract.md`
    - Troubleshooting: `https://docs.uselemma.ai/tracing/troubleshooting/common-issues.md`
    - Debug mode: `https://docs.uselemma.ai/tracing/troubleshooting/debug-mode.md`
@@ -88,6 +90,7 @@ Inspect imports, startup files, agent handlers, and model/tool call sites:
 | OpenAI Agents SDK | `@openai/agents`, `openai-agents`, `Agent`, `Runner`, `run`, `addTraceProcessor` |
 | LangChain | `langchain`, `@langchain/*`, `ChatOpenAI`, chains, callbacks |
 | LangGraph | `langgraph`, `@langchain/langgraph`, graph `invoke`/`stream`, callbacks |
+| Mastra | `@mastra/core`, `@mastra/observability`, `new Mastra(...)`, `Observability`, `agent.generate` |
 | Model call | `openai`, `anthropic`, provider adapters, AI SDK model calls |
 | Tool call | functions passed as tools, MCP calls, retrieval/search/order/payment helpers |
 | Trace finalization | callback return, `onEnd`, `onFinish`, SSE close, queue completion, background job completion |

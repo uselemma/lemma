@@ -121,6 +121,34 @@ describe("Lemma", () => {
     expect(body.trace.spans[0].id).toEqual(expect.any(String));
   });
 
+  it("honors explicit root startedAt and endedAt on trace handles", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const trace = lemma.trace({
+      name: "support-agent",
+      input: "hi",
+      startedAt: "2026-06-29T10:00:00.000Z",
+      durationMs: 1500,
+    });
+    await trace.end({
+      output: "hello",
+      endedAt: "2026-06-29T10:00:01.500Z",
+    });
+
+    const body = jsonBody(fetchMock.mock.calls.at(-1)!);
+    expect(body.trace).toMatchObject({
+      started_at: "2026-06-29T10:00:00.000Z",
+      ended_at: "2026-06-29T10:00:01.500Z",
+      duration_ms: 1500,
+      output: "hello",
+    });
+  });
+
   it("supports trace handles with nested span methods", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const lemma = new Lemma({
