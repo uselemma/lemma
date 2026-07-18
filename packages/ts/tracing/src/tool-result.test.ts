@@ -32,4 +32,15 @@ describe("toolResultError", () => {
       ),
     ).toBe("boom");
   });
+
+  it("extracts Mastra ValidationError message from error: true payloads", () => {
+    expect(
+      toolResultError({
+        error: true,
+        message: "Tool input validation failed for ship",
+        validationErrors: { errors: [], fields: {} },
+      }),
+    ).toBe("Tool input validation failed for ship");
+    expect(toolResultError({ error: false, message: "ignored" })).toBeNull();
+  });
 });

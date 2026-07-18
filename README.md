@@ -53,6 +53,7 @@ Lemma includes first-party tracing helpers for common agent stacks:
 | OpenAI Agents SDK | [docs](https://docs.uselemma.ai/integrations/openai-agents) |
 | LangChain | [docs](https://docs.uselemma.ai/integrations/langchain) |
 | LangGraph | [docs](https://docs.uselemma.ai/integrations/langgraph) |
+| Mastra | [docs](https://docs.uselemma.ai/integrations/mastra) |
 
 For manual instrumentation, start with the [tracing overview](https://docs.uselemma.ai/tracing/overview).
 

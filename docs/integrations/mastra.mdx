@@ -1,0 +1,135 @@
+---
+title: "Mastra"
+description: "Record Mastra agent and workflow runs with Lemma"
+---
+
+Use Lemma’s Mastra integration when your app runs agents or workflows through Mastra observability. The integration implements a Mastra `ObservabilityExporter` that creates one Lemma trace for each Mastra `agent_run` / `workflow_run`, maps model generations to Lemma generations, maps tool calls to tools, and preserves nesting (with orphan-safe parent fallback when Mastra hides internal spans).
+
+You do not need to wrap Mastra runs in `lemma.trace()`. Register `LemmaMastraExporter` once in Mastra’s `Observability` config, then run agents normally.
+
+## Install
+
+Install Mastra and the Lemma SDK:
+
+```bash
+npm install @uselemma/tracing @mastra/core @mastra/observability
+```
+
+## Register the exporter
+
+Register the Lemma exporter in your Mastra observability config. By default, credentials are read from `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LemmaMastraExporter } from "@uselemma/tracing";
+
+export const mastra = new Mastra({
+  // agents / workflows...
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-app",
+        exporters: [new LemmaMastraExporter()],
+      },
+    },
+  }),
+});
+```
+
+You can also pass credentials and options directly, or use the `mastra()` factory alias:
+
+```typescript
+import { mastra as lemmaMastra } from "@uselemma/tracing";
+
+exporters: [
+  lemmaMastra({
+    apiKey: process.env.LEMMA_API_KEY,
+    projectId: process.env.LEMMA_PROJECT_ID,
+    baseUrl: process.env.LEMMA_BASE_URL,
+    agentName: "support-agent",
+  }),
+]
+```
+
+Then run your agent normally:
+
+```typescript
+const agent = mastra.getAgent("supportAgent");
+
+export async function callAgent(userMessage: string) {
+  const result = await agent.generate(userMessage);
+  return result.text;
+}
+```
+
+## What Lemma records
+
+Each Mastra span maps to a Lemma record:
+
+| Mastra span | Lemma record |
+| --- | --- |
+| `agent_run` / `workflow_run` (root) | One Lemma trace with current-turn input, final output (or `fail` on error), `threadId`, and `userId` |
+| `model_generation` / `model_step` | Generation with model, provider, full message list as `input` + `llmInputMessages`, output, timing, and parent ID |
+| `tool_call` / `mcp_tool_call` / `client_tool_call` / `provider_tool_call` | Tool call with tool name, input, output or soft/`errorInfo` error, timing, and parent ID |
+| Other span types (`generic`, `processor_run`, `workflow_step`, …) | Regular span with input, output, timing, and parent ID |
+
+Mastra often sets root `input` to `{ messages: [...] }`. Lemma extracts the latest user message as the trace root input so each turn stays readable; generations still carry the full message list Mastra sent to the model.
+
+Every child span — and the root — keeps Mastra’s real `startTime` / `endTime`. If a child’s `parentSpanId` points at a span Mastra never exported, Lemma attaches that child directly under the trace root so parent references never dangle.
+
+## Threads / multi-turn
+
+Each Mastra `agent.generate()` (or workflow run) is one conversation turn and becomes exactly one Lemma trace. Link turns in the same conversation with a shared `threadId`, and set `userId` so Lemma can group by person. See [Instrumenting multi-turn agents](/guides/instrumenting-multi-turn-agents) and [Building high-quality traces](/guides/building-high-quality-traces).
+
+Lemma resolves `threadId` and `userId` from the root span’s `metadata` or `requestContext`, checking `threadId` and `userId` (then Mastra memory’s `resourceId`). Pass them via Mastra memory or `tracingOptions.metadata`:
+
+```typescript
+const result = await agent.generate(userMessage, {
+  memory: {
+    thread: conversationId,
+    resource: user.id,
+  },
+  // Or set explicitly on the root span:
+  tracingOptions: {
+    metadata: {
+      threadId: conversationId,
+      userId: user.id,
+    },
+  },
+});
+```
+
+Override the lookup keys when your app uses different names:
+
+```typescript
+new LemmaMastraExporter({
+  threadIdKey: "conversationId",
+  userIdKey: "customerId",
+})
+```
+
+Root `input` is the current user turn (extracted from Mastra’s `{ messages }` payload when present). Generations carry the full message list sent to that model call (system, prior turns, tool results, and the current user message) as both `input` and `llmInputMessages`.
+
+## Privacy
+
+The integration records prompts, tool inputs, tool outputs, and model output by default. Disable input/output recording when you need structure and timings without payload contents:
+
+```typescript
+new LemmaMastraExporter({
+  recordInputs: false,
+  recordOutputs: false,
+})
+```
+
+## Debugging
+
+Use debug mode to confirm spans are arriving nested under the expected parent:
+
+```typescript
+import { enableDebugMode } from "@uselemma/tracing";
+
+enableDebugMode();
+```
+
+Look for `span recorded` logs. Tool and generation spans should include the expected `parentId` when Mastra exported the parent, or sit directly under the trace when the parent was an internal/hidden span.
