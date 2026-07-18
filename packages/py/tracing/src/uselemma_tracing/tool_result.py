@@ -7,15 +7,21 @@ from typing import Any
 
 
 def tool_result_error(output: Any) -> str | None:
-    """Return an error message for MCP-style ``{isError: true}`` tool results.
+    """Return an error message for MCP/Mastra-style tool failure payloads.
 
-    Failures must be recorded as ``error`` (with no ``output``) per the trace
-    contract. Returns ``None`` when ``output`` is a normal success payload.
+    Detects ``{isError: true}``, ``{is_error: true}``, and Mastra
+    ``{error: true, message}`` results. Failures must be recorded as ``error``
+    (with no ``output``) per the trace contract. Returns ``None`` when
+    ``output`` is a normal success payload.
     """
     record = _as_result_record(output)
     if record is None:
         return None
-    if record.get("isError") is not True and record.get("is_error") is not True:
+    if (
+        record.get("isError") is not True
+        and record.get("is_error") is not True
+        and record.get("error") is not True
+    ):
         return None
 
     content = record.get("content")

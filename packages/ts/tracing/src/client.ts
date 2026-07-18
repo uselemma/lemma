@@ -69,6 +69,8 @@ export type TraceOptions = {
 export type TraceEndOptions = {
   output?: unknown;
   durationMs?: number;
+  /** Wall-clock start override for the root payload (e.g. earliest child span). */
+  startedAt?: Date | string;
   /** Wall-clock end for the root; defaults to `end()` call time. */
   endedAt?: Date | string;
 };
@@ -414,7 +416,10 @@ function isTraceEndOptions(value: unknown): value is TraceEndOptions {
   return (
     typeof value === "object" &&
     value !== null &&
-    ("output" in value || "durationMs" in value || "endedAt" in value)
+    ("output" in value ||
+      "durationMs" in value ||
+      "startedAt" in value ||
+      "endedAt" in value)
   );
 }
 
@@ -824,6 +829,7 @@ export class TraceHandle extends TraceContext {
     // can't duplicate its spans.
     if (this.ended) return this.sendPromise;
     let endedAtOverride: Date | undefined;
+    let startedAtOverride: Date | undefined;
     if (isTraceEndOptions(outputOrOptions)) {
       if ("output" in outputOrOptions) {
         this.output(outputOrOptions.output);
@@ -831,14 +837,16 @@ export class TraceHandle extends TraceContext {
       if (outputOrOptions.durationMs != null) {
         this.duration(outputOrOptions.durationMs);
       }
+      startedAtOverride = coerceDate(outputOrOptions.startedAt);
       endedAtOverride = coerceDate(outputOrOptions.endedAt);
     } else if (arguments.length > 0) {
       this.output(outputOrOptions);
     }
     this.ended = true;
+    const startedAt = startedAtOverride ?? this.startedAt;
     const endedAt = endedAtOverride ?? new Date();
     this.sendPromise = this.sendPromise.then(() =>
-      this.sendFn(this, this.startedAt, endedAt),
+      this.sendFn(this, startedAt, endedAt),
     );
     await this.sendPromise;
   }
