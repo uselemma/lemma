@@ -3,17 +3,17 @@ title: "Common issues"
 description: "Troubleshoot missing traces and trace-quality issues: lost context, invisible tools, blank input/output, and unsupported shapes"
 ---
 
-This page is organized by **symptom**. Most issues are trace-shape problems: the data arrives, but it does not match the [trace contract](/reference/trace-contract). For the ideal happy path and bad → better → best examples, see [Building high-quality traces](/guides/building-high-quality-traces).
+This page is organized by symptom. Each issue below is a trace-shape problem: the data arrives, but it does not match the [trace contract](/reference/trace-contract). For the ideal happy path and bad → better → best examples, see [Building high-quality traces](/guides/building-high-quality-traces).
 
 <Note>
-  When behavior is unclear, first enable [Debug mode](/tracing/troubleshooting/debug-mode) in the same runtime that serves traffic. It shows whether the SDK is running, which trace it tries to send, how many child spans were included, and whether the ingest request succeeds.
+  When behavior is unclear, first enable [Debug mode](/tracing/troubleshooting/debug-mode) in the same runtime that serves traffic. It shows whether the SDK is running, which trace it tries to send, how many child spans it included, and whether the ingest request succeeds.
 </Note>
 
 ## No traces in Lemma
 
-**Cause:** credentials, project ID, base URL, or outbound network access is wrong.
+This happens when credentials, project ID, base URL, or outbound network access is wrong.
 
-**Fix:** create one `Lemma` client with your API key and project ID, then send a tiny test trace.
+To fix it, create one `Lemma` client with your API key and project ID, then send a tiny test trace.
 
 <Tabs>
   <Tab title="TypeScript">
@@ -48,13 +48,13 @@ This page is organized by **symptom**. Most issues are trace-shape problems: the
 - Confirm your runtime can reach `https://api.uselemma.ai`.
 - Pass `baseUrl` / `base_url` only when using a self-hosted or staging endpoint.
 
-**Debug with Debug mode:** enable `LEMMA_DEBUG=1` and run the smoke test again. If you do not see SDK logs, the traced code path is not running in that process. If you see an ingest failure, check the status code, credentials, project ID, and `baseUrl`.
+To debug, enable `LEMMA_DEBUG=1` and run the smoke test again. If you do not see SDK logs, the traced code path is not running in that process. If you see an ingest failure, check the status code, credentials, project ID, and `baseUrl`.
 
 ## Every span appears as a separate trace
 
-**Cause:** child work is being recorded outside the `lemma.trace()` callback, so the SDK cannot attach it to the root trace.
+This happens when you record child work outside the `lemma.trace()` callback, so the SDK cannot attach it to the root trace.
 
-**Fix:** make `lemma.trace()` the boundary around the whole agent run, and record tools, generations, and spans inside that callback.
+To fix it, make `lemma.trace()` the boundary around the whole agent run, and record tools, generations, and spans inside that callback.
 
 <Tabs>
   <Tab title="TypeScript">
@@ -63,7 +63,11 @@ This page is organized by **symptom**. Most issues are trace-shape problems: the
       { name: "support-agent", input: userMessage, threadId, userId },
       async (trace) => {
         const docs = await searchDocs(userMessage);
-        trace.recordTool({ name: "search_docs", input: { query: userMessage }, output: docs });
+        trace.recordTool({
+          name: "search_docs",
+          input: { query: userMessage },
+          output: docs,
+        });
 
         const response = await callModel(userMessage, docs);
         trace.recordGeneration({
@@ -111,13 +115,13 @@ This page is organized by **symptom**. Most issues are trace-shape problems: the
 
 Across queues, workers, or separate services, start a new top-level trace and pass the same `threadId` / `userId` so turns remain connected. If one logical agent execution spans multiple processes, prefer recording the final trace in the coordinator that has the complete input, output, tools, and model calls.
 
-**Debug with Debug mode:** compare logs from the request handler and any background worker. If the child work runs after the `lemma.trace()` callback has returned, it will not attach to the root trace automatically. Move the recording into the callback, or pass trace/span IDs and use the detached `record*` helpers from the coordinator.
+With Debug mode enabled, compare logs from the request handler and any background worker. If the child work runs after the `lemma.trace()` callback has returned, it will not attach to the root trace automatically. Move the recording into the callback, or pass trace/span IDs and use the detached `record*` helpers from the coordinator.
 
 ## Tool calls are missing
 
-**Cause:** provider instrumentation captures model calls but not your application tools, or the tool result is never recorded.
+This happens when provider instrumentation captures model calls but not your application tools, or when you never record the tool result.
 
-**Fix:** call `trace.recordTool()` after each tool completes.
+To fix it, call `trace.recordTool()` after each tool completes.
 
 <Tabs>
   <Tab title="TypeScript">
@@ -166,22 +170,25 @@ For failures, record the error before re-raising:
   </Tab>
 </Tabs>
 
-**Debug with Debug mode:** check the `spanCount` (`span_count` in Python) on the `sending trace` log. If the count does not increase after you add `recordTool(...)`, the tool recording code path is not running or is running outside the trace.
+With Debug mode enabled, check the `spanCount` (`span_count` in Python) on the `sending trace` log. If the count does not increase after you add `recordTool(...)`, the tool recording code path is not running or is running outside the trace.
 
 ## Inputs or outputs are blank
 
-**Cause:** the trace was created without `input`, and the callback did not return or set the final output.
+This happens when you create the trace without `input` and the callback does not return or set the final output.
 
-**Fix:** pass input to `lemma.trace()` and return the final answer. Use `trace.output()` only when the callback return value is not the user-visible output.
+To fix it, pass input to `lemma.trace()` and return the final answer. Use `trace.output()` only when the callback return value is not the user-visible output.
 
 <Tabs>
   <Tab title="TypeScript">
     ```typescript
-    await lemma.trace({ name: "support-agent", input: userMessage }, async (trace) => {
-      const answer = await runAgent(userMessage);
-      trace.output(answer);
-      return answer;
-    });
+    await lemma.trace(
+      { name: "support-agent", input: userMessage },
+      async (trace) => {
+        const answer = await runAgent(userMessage);
+        trace.output(answer);
+        return answer;
+      },
+    );
     ```
   </Tab>
   <Tab title="Python">
@@ -196,28 +203,28 @@ For failures, record the error before re-raising:
   </Tab>
 </Tabs>
 
-**Debug with Debug mode:** confirm the trace logs `trace sent`, then open that trace in Lemma. If root output is still blank, the callback likely returned `undefined`, streamed the answer elsewhere, or exited before setting `trace.output(...)`.
+With Debug mode enabled, confirm the trace logs `trace sent`, then open that trace in Lemma. If root output is still blank, the callback returned `undefined`, streamed the answer elsewhere, or exited before setting `trace.output(...)`.
 
 ## Root input/output is null after a second delivery
 
-**Cause:** the trace was delivered again with a sparse `ingest()` payload — for example a follow-up call that carries a late child span but omits root `input`/`output`. `ingest()` is not an incremental merge API, so omitted root fields do not preserve prior values, and analysis typically already ran once after the first complete delivery.
+This happens when you deliver the trace again with a sparse `ingest()` payload: for example, a follow-up call that carries a late child span but omits root `input`/`output`. `ingest()` is not an incremental merge API, so omitted root fields do not preserve prior values, and analysis typically already ran once after the first complete delivery.
 
-**Fix:** send **one complete trace** when the execution finishes — root input/output, thread/user, and all child spans in a single `ingest()` call. Retries of that same complete payload are safe (already-stored span IDs are skipped). Across queues and workers, assemble the full tree in a coordinator and ingest once rather than streaming partial deliveries under one `trace.id`.
+To fix it, send one complete trace when the execution finishes: root input/output, thread/user, and all child spans in a single `ingest()` call. Retries of that same complete payload are safe (already-stored span IDs are skipped). Across queues and workers, assemble the full tree in a coordinator and ingest once rather than streaming partial deliveries under one `trace.id`.
 
-**Debug with Debug mode:** check the `sending trace` log for each delivery. If a later send has a small `spanCount` (`span_count` in Python) and no root I/O, that sparse payload is overwriting the root fields — consolidate it into the single terminal send.
+With Debug mode enabled, check the `sending trace` log for each delivery. If a later send has a small `spanCount` (`span_count` in Python) and no root I/O, that sparse payload is overwriting the root fields; consolidate it into the single terminal send.
 
 ## Model or content is missing
 
-**Cause:** the LLM call is recorded as a generic span, so Lemma has no model, prompt, or completion to read as a generation.
+This happens when you record the LLM call as a generic span, so Lemma has no model, prompt, or completion to read as a generation.
 
-**Fix:** record model calls with `trace.recordGeneration()`.
+To fix it, record model calls with `trace.recordGeneration()`.
 
 <Tabs>
   <Tab title="TypeScript">
     ```typescript
     trace.recordGeneration({
       name: "draft-reply",
-      model: "gpt-4o",
+      model: "anthropic/claude-opus-4-7",
       input: messages,
       output: response.text,
     });
@@ -227,7 +234,7 @@ For failures, record the error before re-raising:
     ```python
     trace.record_generation(
         name="draft-reply",
-        model="gpt-4o",
+        model="anthropic/claude-opus-4-7",
         input=messages,
         output=response.text,
     )
@@ -237,20 +244,23 @@ For failures, record the error before re-raising:
 
 See [Generations](/tracing/instrumentation/generations).
 
-**Debug with Debug mode:** check whether `spanCount` (`span_count` in Python) increases when the model call runs. If it does but the dashboard still lacks model/content metadata, switch that call site from generic span recording to `recordGeneration()` / `record_generation()` and include `model`, `input`, and `output`.
+With Debug mode enabled, check whether `spanCount` (`span_count` in Python) increases when the model call runs. If it does but the dashboard still lacks model/content metadata, switch that call site from generic span recording to `recordGeneration()` / `record_generation()` and include `model`, `input`, and `output`.
 
 ## Agent name is blank
 
-**Cause:** no stable name is attached to the trace, so traces cannot be grouped or filtered by workflow.
+This happens when you attach no stable name to the trace, so Lemma cannot group or filter traces by workflow.
 
-**Fix:** set `name` on every `lemma.trace()` call.
+To fix it, set `name` on every `lemma.trace()` call.
 
 <Tabs>
   <Tab title="TypeScript">
     ```typescript
-    await lemma.trace({ name: "support-agent", input: userMessage }, async (trace) => {
-      return runAgent(userMessage, trace);
-    });
+    await lemma.trace(
+      { name: "support-agent", input: userMessage },
+      async (trace) => {
+        return runAgent(userMessage, trace);
+      },
+    );
     ```
   </Tab>
   <Tab title="Python">
@@ -264,13 +274,13 @@ See [Generations](/tracing/instrumentation/generations).
   </Tab>
 </Tabs>
 
-**Debug with Debug mode:** check the `name` on `trace started` or `sending trace`. It should be the stable workflow name you expect, not a generated fallback.
+With Debug mode enabled, check the `name` on `trace started` or `sending trace`. It should be the stable workflow name you expect, not a generated fallback.
 
-## Trace Nesting Is Flat
+## Trace nesting is flat
 
-**Cause:** long-running subtasks are recorded as sibling observations when they should have their own parent span.
+This happens when you record long-running subtasks as sibling observations instead of giving them their own parent span.
 
-**Fix:** use `trace.startSpan()` / `trace.start_span()` when a subtask has nested work. In TypeScript, record children from the span handle. In Python, pass the parent span handle's `id` as `parent_id` when starting child work.
+To fix it, use `trace.startSpan()` / `trace.start_span()` when a subtask has nested work. In TypeScript, record children from the span handle. In Python, pass the parent span handle’s `id` as `parent_id` when starting child work.
 
 <Tabs>
   <Tab title="TypeScript">
@@ -314,21 +324,21 @@ support-agent
 └─ answer
 ```
 
-**Debug with Debug mode:** confirm `spanCount` (`span_count` in Python) includes both the parent span and the child tool, then inspect the trace in Lemma. If they appear as siblings, record the child from the parent span handle in TypeScript, or pass `parent_id=retrieve.id` when starting the child in Python, before ending the parent span.
+With Debug mode enabled, confirm `spanCount` (`span_count` in Python) includes both the parent span and the child tool, then inspect the trace in Lemma. If they appear as siblings, record the child from the parent span handle in TypeScript, or pass `parent_id=retrieve.id` when starting the child in Python, before ending the parent span.
 
 ## Serverless traces are delayed or missing
 
-**Cause:** the request exits before the SDK request finishes, or a background task records work after the trace callback has returned.
+This happens when the request exits before the SDK request finishes, or when a background task records work after the trace callback returns.
 
-**Fix:** `await lemma.trace(...)` inside the handler and keep trace recording inside the callback. The SDK sends the completed payload before `lemma.trace()` resolves.
+To fix it, `await lemma.trace(...)` inside the handler and keep trace recording inside the callback. The SDK sends the completed payload before `lemma.trace()` resolves.
 
-**Debug with Debug mode:** check whether the ingest log appears before the function returns. If it appears after the response is sent, or never appears, await the trace promise and avoid detached background recording unless you explicitly end the trace handle.
+With Debug mode enabled, check whether the ingest log appears before the function returns. If it appears after the response is sent, or never appears, await the trace promise and avoid detached background recording unless you explicitly end the trace handle.
 
 ## Traces render but there are no issues or incidents
 
-**Cause:** the trace renders, but it is not in a shape Lemma recognizes for automated issue detection.
+This happens when the trace renders but is not in a shape Lemma recognizes for automated issue detection.
 
-**Fix:** match the contract: one root trace, input/output, typed generation children, typed tool children, error states, and thread/user context where available.
+To fix it, match the contract: one root trace, input/output, typed generation children, typed tool children, error states, and thread/user context where available.
 
 - Use `lemma.trace()` for the root.
 - Use `trace.recordGeneration()` / `trace.record_generation()` for model calls.
@@ -336,4 +346,4 @@ support-agent
 - Use `trace.recordSpan()` / `trace.record_span()` for completed app work or `trace.startSpan()` / `trace.start_span()` for live app work.
 - Pass `threadId` / `thread_id` and `userId` / `user_id` for multi-turn analysis.
 
-**Debug with Debug mode:** confirm the SDK logs `trace sent` with the expected trace name and child `spanCount` (`span_count` in Python), then compare the dashboard trace against the contract.
+With Debug mode enabled, confirm the SDK logs `trace sent` with the expected trace name and child `spanCount` (`span_count` in Python), then compare the dashboard trace against the contract.

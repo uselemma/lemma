@@ -3,13 +3,15 @@ title: "Traces"
 description: "Wrap one agent execution in one trace with input and output"
 ---
 
-A **trace** is one end-to-end agent execution, from the user's input to the final response. Everything your agent does inside that execution (LLM calls, tool calls, retrieval, app logic) is recorded as child work inside the trace.
+A **trace** is one end-to-end agent execution, from the user’s input to the final response. The trace records everything your agent does inside that execution (LLM calls, tool calls, retrieval, app logic) as child work.
 
 <Note>
   **One agent execution = one trace.** Use `lemma.trace()` as the boundary around the run.
 </Note>
 
 ## The root trace
+
+Wrap the whole run in `lemma.trace()` and return the agent’s final answer:
 
 <Tabs>
   <Tab title="TypeScript">
@@ -74,7 +76,7 @@ Use the callback form when one function owns the whole run. In TypeScript, use a
     });
     span.end({ output: { count: docs.length } });
 
-    await trace.end({ output: "Here is what I found...", durationMs: 1234 });
+    await trace.end({ output: "Here is what I found…", durationMs: 1234 });
     ```
   </Tab>
   <Tab title="Python">
@@ -89,7 +91,7 @@ Use the callback form when one function owns the whole run. In TypeScript, use a
         )
         tool.end(output=docs)
         span.end(output={"count": len(docs)})
-        trace.output("Here is what I found...")
+        trace.output("Here is what I found…")
 
     lemma.trace(
         "support-agent",
@@ -129,7 +131,7 @@ Detached handle calls require `traceId`. If a detached span, generation, or tool
 
 ## Send a trace you built yourself
 
-`lemma.trace()` assumes the client owns the trace lifecycle within a single process. When the producer lives elsewhere — a cross-process buffer, a queue worker, a batch backfill — build a `TraceContext` yourself and deliver it with `ingest()`. Give it a stable `id` so retries address the same trace.
+`lemma.trace()` assumes the client owns the trace lifecycle within a single process. When the producer lives elsewhere (a cross-process buffer, a queue worker, or a batch backfill), build a `TraceContext` yourself and deliver it with `ingest()`. Give it a stable `id` so retries address the same trace.
 
 <Tabs>
   <Tab title="TypeScript">
@@ -145,7 +147,7 @@ Detached handle calls require `traceId`. If a detached span, generation, or tool
       threadId: conversationId,
     });
     context.recordTool({ name: "search_docs", input: query, output: docs, durationMs: 25 });
-    context.recordGeneration({ name: "answer", model: "gpt-4o", output: finalAnswer });
+    context.recordGeneration({ name: "answer", model: "anthropic/claude-opus-4-7", output: finalAnswer });
     context.output(finalAnswer);
 
     await lemma.ingest(context, { startedAt });
@@ -164,7 +166,7 @@ Detached handle calls require `traceId`. If a detached span, generation, or tool
         thread_id=conversation_id,
     )
     context.record_tool(name="search_docs", input=query, output=docs, duration_ms=25)
-    context.record_generation(name="answer", model="gpt-4o", output=final_answer)
+    context.record_generation(name="answer", model="anthropic/claude-opus-4-7", output=final_answer)
     context.output(final_answer)
 
     lemma.ingest(context, started_at=started_at)
@@ -172,9 +174,9 @@ Detached handle calls require `traceId`. If a detached span, generation, or tool
   </Tab>
 </Tabs>
 
-`ingest()` POSTs one payload. Deliver **one complete trace** when the execution (agent turn) finishes: root input/output, thread/user, and all child spans in one call. This is required — patching a trace over time is not currently supported.
+`ingest()` POSTs one payload. Deliver one complete trace when the execution (agent turn) finishes: root input/output, thread/user, and all child spans in one call. This is required; patching a trace over time is not currently supported.
 
-`ingest()` is not an incremental merge API: omitted root fields do not preserve prior values, and after Lemma processes the trace once, a later re-delivery does not re-run issue extraction (occasional late child spans may still append to the tree for display). Retries of the same complete payload are safe — already-stored span IDs are skipped — so a failed send can be retried as-is. It raises on a non-2xx response and never mutates the trace's status.
+`ingest()` is not an incremental merge API: omitted root fields do not preserve prior values, and after Lemma processes the trace once, a later re-delivery does not re-run issue extraction (occasional late child spans may still append to the tree for display). Retries of the same complete payload are safe (already-stored span IDs are skipped), so a failed send can be retried as-is. It raises on a non-2xx response and never mutates the trace’s status.
 
 <Warning>
   Across queues and workers, assemble the full tree in a coordinator and `ingest()` once when the turn is done. Do not stream partial deliveries under one `trace.id`.
@@ -182,7 +184,7 @@ Detached handle calls require `traceId`. If a detached span, generation, or tool
 
 ## Override output or record errors
 
-Return values are captured automatically. Use `trace.output()` only when the recorded output should differ from the return value.
+The SDK captures return values automatically. Use `trace.output()` only when the recorded output should differ from the return value.
 
 <Tabs>
   <Tab title="TypeScript">
@@ -249,11 +251,13 @@ Pass the trace context into nested helper functions that need to record child wo
 
 Avoid relying on ambient trace state. A process can coordinate multiple traces at once, so helpers should receive the trace or span handle they need explicitly.
 
-## Add the work inside
+## Record work inside the trace
 
-- [Generations](/tracing/instrumentation/generations) for LLM calls (model, prompt, completion).
-- [Tool calls](/tracing/instrumentation/tool-calls) for tool invocations (name, args, result).
-- [Spans](/tracing/instrumentation/spans) for everything else (retrieval, ranking, app logic).
+Record each kind of child work with its dedicated helper:
+
+- [Generations](/tracing/instrumentation/generations) for LLM calls (model, prompt, completion)
+- [Tool calls](/tracing/instrumentation/tool-calls) for tool invocations (name, args, result)
+- [Spans](/tracing/instrumentation/spans) for everything else (retrieval, ranking, app logic)
 
 ```text
 support-agent              <- trace root (input, output)

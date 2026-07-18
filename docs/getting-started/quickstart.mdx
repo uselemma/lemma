@@ -17,7 +17,7 @@ support-agent              <- trace root (input, output)
 `- search_docs             <- tool call (args, result)
 ```
 
-## Steps
+## Instrument your first trace
 
 <Steps>
   <Step title="Optional: install the Lemma tracing skill">
@@ -49,8 +49,8 @@ support-agent              <- trace root (input, output)
     Find these in [Lemma project settings](https://platform.uselemma.ai).
 
     ```bash
-    export LEMMA_API_KEY="lma_..."
-    export LEMMA_PROJECT_ID="proj_..."
+    export LEMMA_API_KEY="lma_your_key_here"
+    export LEMMA_PROJECT_ID="proj_your_id_here"
     ```
   </Step>
 
@@ -84,7 +84,7 @@ support-agent              <- trace root (input, output)
               name: "draft-reply",
               input: response.messages,
               output: response.text,
-              model: "gpt-4o",
+              model: "anthropic/claude-opus-4-7",
             });
 
             return response.text;
@@ -111,7 +111,7 @@ support-agent              <- trace root (input, output)
                 name="draft-reply",
                 input=response.messages,
                 output=response.text,
-                model="gpt-4o",
+                model="anthropic/claude-opus-4-7",
             )
 
             return response.text
@@ -129,16 +129,16 @@ support-agent              <- trace root (input, output)
   </Step>
 
   <Step title="Verify in Lemma">
-    Open the [Lemma dashboard](https://platform.uselemma.ai) -> **Traces**. Within seconds you should see:
+    Open the [Lemma dashboard](https://platform.uselemma.ai), then select **Traces**. You should see:
 
-    - One trace for the whole execution.
-    - The root trace with input and output.
-    - A nested generation with model metadata.
-    - A nested tool call with arguments and result.
+    - One trace for the whole execution
+    - The root trace with input and output
+    - A nested generation with model metadata
+    - A nested tool call with arguments and result
   </Step>
 </Steps>
 
-## What's next
+## What’s next
 
 <CardGroup cols={2}>
   <Card title="Trace contract" icon="/icons/file-check.svg" href="/reference/trace-contract">
@@ -146,9 +146,6 @@ support-agent              <- trace root (input, output)
   </Card>
   <Card title="Concepts" icon="/icons/book.svg" href="/getting-started/concepts">
     Traces, spans, generations, and threads.
-  </Card>
-  <Card title="Lemma tracing skill" icon="/icons/bot.svg" href="/getting-started/agent-skill">
-    Install the Lemma skill from the public repo.
   </Card>
   <Card title="Threads & context" icon="/icons/users.svg" href="/tracing/instrumentation/context">
     Group conversations and attach users.

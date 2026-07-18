@@ -3,12 +3,12 @@ title: "Introduction"
 description: "Lemma is an observability platform for AI agents"
 ---
 
-Lemma is an observability platform for AI agents. You send one trace per agent execution, and Lemma lets you search, debug, and monitor what your agents actually did in production - and automatically surfaces silent failures.
+Lemma is an observability platform for AI agents. You send one trace per agent execution, and Lemma lets you search, debug, and monitor what your agents did in production, and automatically surfaces silent failures.
 
-You instrument with the Lemma SDK; Lemma reads the result and owns the analysis. Follow Lemma's [trace contract](/reference/trace-contract) so every run is complete and easy to debug.
+You instrument with the Lemma SDK; Lemma reads the result and owns the analysis. Follow Lemma’s [trace contract](/reference/trace-contract) so every run is complete and easy to debug.
 
 <Note>
-  **The one rule:** one agent execution = one trace. LLM calls and tool calls are child spans of that trace, not separate traces.
+  **One agent execution = one trace.** LLM calls and tool calls are child spans of that trace, not separate traces.
 </Note>
 
 ## Get started
@@ -17,9 +17,6 @@ You instrument with the Lemma SDK; Lemma reads the result and owns the analysis.
   <Card title="Quickstart" icon="/icons/rocket.svg" href="/getting-started/quickstart">
     Install the SDK, point it at Lemma, and send your first trace in a few minutes.
   </Card>
-  <Card title="Lemma tracing skill" icon="/icons/bot.svg" href="/getting-started/agent-skill">
-    Let a coding agent install the SDK and add tracing from the public Lemma repo.
-  </Card>
   <Card title="Building high-quality traces" icon="/icons/circle-check.svg" href="/guides/building-high-quality-traces">
     The ideal instrumentation path, with bad → better → best examples.
   </Card>
@@ -27,9 +24,9 @@ You instrument with the Lemma SDK; Lemma reads the result and owns the analysis.
 
 ## How it works
 
-1. **Instrument with the SDK.** Wrap one agent execution in `lemma.trace()`, and record generation, tool, and app work inside it.
-2. **The SDK sends to Lemma** over HTTPS, using your Lemma credentials.
-3. **Lemma reads the trace shape** to show inputs and outputs, model calls, tool calls, threads, and to run automated issue detection.
+1. **Instrument with the SDK**: wrap one agent execution in `lemma.trace()`, and record generation, tool, and app work inside it.
+2. **Send over HTTPS**: the SDK delivers the trace to Lemma using your Lemma credentials.
+3. **Lemma reads the trace shape**: it shows inputs and outputs, model calls, tool calls, threads, and runs automated issue detection.
 
 ## What to instrument
 
@@ -47,11 +44,11 @@ See [Building high-quality traces](/guides/building-high-quality-traces) for wha
 
 ## What you can do with Lemma
 
-**Trace agents** - see the full execution tree for every trace: LLM calls, tools, retrieval, latency, and errors.
+Lemma covers three core workflows:
 
-**Debug failures** - inspect inputs, outputs, and errors across nested spans; filter by user, session, and custom attributes.
-
-**Connect your IDE** - use the [Lemma MCP server](/connections/mcp) to query traces from Cursor, Claude Desktop, or Claude Code.
+- **Trace agents**: see the full execution tree for every trace, including LLM calls, tools, retrieval, latency, and errors.
+- **Debug failures**: inspect inputs, outputs, and errors across nested spans; filter by user, session, and custom attributes.
+- **Connect your IDE**: use the [Lemma MCP server](/connections/mcp) to query traces from Cursor, Claude Desktop, or Claude Code.
 
 ## Choose your path
 

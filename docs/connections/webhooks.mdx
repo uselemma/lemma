@@ -3,16 +3,18 @@ title: "Webhooks"
 description: "Receive signed HTTP POST requests when incidents are detected, analyzed, or resolved"
 ---
 
-Webhooks let you react to incident events in real time. When something happens in Lemma — a new incident, a completed RCA, a resolution — Lemma POSTs a signed JSON payload to your endpoint. Use this to trigger your own agents, send alerts, or update external systems.
+Webhooks let you react to incident events in real time. When something happens in Lemma, such as a new incident, a completed root cause analysis (RCA), or a resolution, Lemma POSTs a signed JSON payload to your endpoint. Use this to trigger your own agents, send alerts, or update external systems.
 
 ## Events
 
+Lemma fires these webhook events over an incident’s lifecycle:
+
 | Event | When it fires |
 |-------|---------------|
-| `incident.created` | A new incident has been detected by a monitor |
-| `incident.analyzed` | RCA is complete — includes root cause and suggested fix |
-| `incident.resolved` | The incident has been marked as resolved |
-| `incident.dismissed` | The incident has been dismissed |
+| `incident.created` | A monitor detects a new incident |
+| `incident.analyzed` | RCA completes, including root cause and suggested fix |
+| `incident.resolved` | You mark the incident as resolved |
+| `incident.dismissed` | You dismiss the incident |
 
 ## Setup
 
@@ -24,9 +26,9 @@ Webhooks let you react to incident events in real time. When something happens i
   </Step>
 
   <Step title="Save your signing secret">
-    After creating the endpoint, Lemma shows your signing secret **once**. Copy it immediately and store it securely — you won't be able to retrieve it again.
+    After creating the endpoint, Lemma shows your signing secret only once. Copy it immediately and store it securely. You won’t be able to retrieve it again.
 
-    If you lose it, you can regenerate a new secret from the endpoint's edit dialog.
+    If you lose it, you can regenerate a new secret from the endpoint’s edit dialog.
   </Step>
 
   <Step title="Verify signatures">
@@ -68,7 +70,7 @@ Webhooks let you react to incident events in real time. When something happens i
     </Tabs>
 
     <Warning>
-      Always use the **raw request body** for signature verification. Parsing and re-serializing the JSON will change whitespace and break the signature check.
+      Always use the raw request body for signature verification. Parsing and re-serializing the JSON will change whitespace and break the signature check.
     </Warning>
   </Step>
 </Steps>
@@ -81,7 +83,7 @@ All events share a common envelope:
 {
   "event": "incident.analyzed",
   "timestamp": "2025-04-07T12:00:00.000Z",
-  "projectId": "39e9c46a-...",
+  "projectId": "39e9c46a-1234-5678-9012-000000000000",
   "incident": {
     "id": "abc123",
     "status": "unresolved",
@@ -96,9 +98,9 @@ The `incident` object is present on all event types. The `rootCause` field is on
 
 ## Delivery and retries
 
-Lemma considers a delivery successful if your endpoint responds with a `2xx` status within **10 seconds**. Failed deliveries are retried with exponential backoff.
+Lemma considers a delivery successful if your endpoint responds with a `2xx` status within **10 seconds**. Lemma retries failed deliveries with exponential backoff.
 
-You can view the full delivery history — including request bodies, response codes, and latency — for each endpoint in **Settings → Developer → Webhooks → Delivery log**.
+You can view the full delivery history, including request bodies, response codes, and latency, for each endpoint in **Settings → Developer → Webhooks → Delivery log**.
 
 ## Testing
 
@@ -109,4 +111,4 @@ Use the **Send test ping** button (paper plane icon) next to any endpoint to sen
 - Always verify the `X-Lemma-Signature` header before processing
 - Use HTTPS endpoints only
 - Store your signing secret in an environment variable, never in source code
-- Return `2xx` quickly — offload any slow processing to a background job to avoid timeouts
+- Return `2xx` within the 10-second window, and offload any slow processing to a background job

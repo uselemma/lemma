@@ -3,29 +3,29 @@ title: "From Raindrop to Lemma"
 description: "Map Raindrop's event- and signal-centric model onto Lemma's trace contract, and re-instrument your agent to emit conforming Lemma traces"
 ---
 
-[Raindrop](https://www.raindrop.ai) is an AI-native observability platform for production agents. Its model is **event-centric**: you emit an *AI event* per interaction, group related events into a conversation, and Raindrop surfaces quality *signals*, individual failures (*stumbles*), and recurring failures (*issues*) on top of that stream.
+[Raindrop](https://www.raindrop.ai) is an AI-native observability platform for production agents. Its model centers on events: you emit an *AI event* per interaction, group related events into a conversation, and Raindrop surfaces quality *signals*, individual failures (*stumbles*), and recurring failures (*issues*) on top of that stream.
 
-Lemma models the same reality differently. It is **trace-centric**: one agent execution is one trace — a nested tree of typed spans — and Lemma runs automated issue detection on complete, correctly typed traces. Migrating is mostly a re-instrumentation: instead of emitting an event (and optional spans) per interaction, you wrap each execution in `lemma.trace()` and record its LLM calls and tools as typed children.
+Lemma models the same reality differently. It centers on traces: one agent execution is one trace, a nested tree of typed spans, and Lemma runs automated issue detection on complete, correctly typed traces. Migrating is mostly a re-instrumentation: instead of emitting an event (and optional spans) per interaction, you wrap each execution in `lemma.trace()` and record its LLM calls and tools as typed children.
 
 <Note>
-  **One agent execution = one trace.** In Raindrop you often emit one event per interaction and group by `convoId`; in Lemma you emit one trace per execution and group multi-turn conversations by `threadId`. See the [trace contract](/reference/trace-contract).
+  One agent execution = one trace. In Raindrop you emit one event per interaction and group by `convoId`; in Lemma you emit one trace per execution and group multi-turn conversations by `threadId`. See the [trace contract](/reference/trace-contract).
 </Note>
 
 ## How the two models differ
 
-Raindrop starts from the *event* — a single tracked AI interaction created with `trackAi()` (single-shot) or `begin()` / `finish()` (the interaction API) — and layers tracing spans, signals, and feedback onto it. Conversations are formed by sharing a `convoId` across events.
+Raindrop starts from the *event*: a single tracked AI interaction created with `trackAi()` (single-shot) or `begin()` / `finish()` (the interaction API). Onto that event it layers tracing spans, signals, and feedback. You form conversations by sharing a `convoId` across events.
 
-Lemma starts from the *trace* — one end-to-end execution — and requires its structure to be explicit:
+Lemma starts from the *trace*, one end-to-end execution, and requires its structure to be explicit:
 
-- **One root trace per agent execution** carrying the current user input and the final output or error.
-- **Typed children** — generations, tools, and generic spans, not undifferentiated records.
-- **Per-generation message history** — the full ordered message list sent to each LLM call.
+- **One root trace per agent execution**: carries the current user input and the final output or error
+- **Typed children**: generations, tools, and generic spans, not undifferentiated records
+- **Per-generation message history**: the full ordered message list sent to each LLM call
 
 Because Lemma is an opinionated sink that reads a [specific trace shape](/reference/trace-contract), the migration is to produce that shape explicitly with the Lemma SDK. See [Overview](/tracing/overview) for how Lemma reads your traces.
 
 ## Concept mapping
 
-The structural intuition transfers cleanly. What changes is that Lemma needs its children **typed** and its root **complete**.
+The structural intuition transfers cleanly. What changes is that Lemma needs its children typed and its root complete.
 
 | Raindrop concept | Closest Lemma primitive | What Lemma needs |
 | --- | --- | --- |
@@ -43,7 +43,7 @@ The structural intuition transfers cleanly. What changes is that Lemma needs its
 | Stumbles / issues | Lemma [issue detection](/reference/trace-contract#issue-detection) | Complete, correctly typed trees improve automated issue extraction |
 
 <Note>
-  `type` is a discriminator. Setting a `model` on an untyped span does not make it a generation — you must set `type: "generation"`. The SDK typed helpers (`recordGeneration` / `recordTool` / `recordSpan` and their Python equivalents) do this for you.
+  `type` is a discriminator. Setting a `model` on an untyped span does not make it a generation: you must set `type: "generation"`. The SDK typed helpers (`recordGeneration` / `recordTool` / `recordSpan` and their Python equivalents) do this for you.
 </Note>
 
 For per-interaction context such as feature flags or arbitrary properties, attach it as trace or span [`metadata`](/reference/trace-contract#trace-record).
@@ -53,6 +53,8 @@ For per-interaction context such as feature flags or arbitrary properties, attac
 </Warning>
 
 ## Migration path
+
+Migrate in five steps, from installing the SDK to confirming the trace shape:
 
 <Steps>
   <Step title="Install the Lemma SDK">
@@ -75,19 +77,19 @@ For per-interaction context such as feature flags or arbitrary properties, attac
     Replace the Raindrop `begin()` / `finish()` (or `trackAi()`) that bracketed one interaction with a single `lemma.trace()` around the whole execution. Put the current user turn on `input` and let the callback return the final answer.
   </Step>
   <Step title="Record generations and tools as typed children">
-    Emit each LLM call with `recordGeneration` / `record_generation` and each tool call with `recordTool` / `record_tool`. This is the Lemma equivalent of Raindrop's auto-instrumented LLM spans, `withTool`, and `trackTool`.
+    Emit each LLM call with `recordGeneration` / `record_generation` and each tool call with `recordTool` / `record_tool`. This is the Lemma equivalent of Raindrop’s auto-instrumented LLM spans, `withTool`, and `trackTool`.
   </Step>
   <Step title="Add thread and user context">
     Map `convoId` to `threadId` / `thread_id` and `userId` to `userId` / `user_id` on the trace so multi-turn conversations group correctly. See [Threads & context](/tracing/instrumentation/context).
   </Step>
   <Step title="Confirm the shape">
-    Turn on [debug mode](/tracing/troubleshooting/debug-mode) (`LEMMA_DEBUG=1`) and check the `sending trace` log's `spanCount` (`span_count` in Python) to confirm your generations and tools were recorded. Cross-check fields against the [trace contract](/reference/trace-contract).
+    Turn on [debug mode](/tracing/troubleshooting/debug-mode) (`LEMMA_DEBUG=1`) and check the `sending trace` log’s `spanCount` (`span_count` in Python) to confirm your generations and tools were recorded. Cross-check fields against the [trace contract](/reference/trace-contract).
   </Step>
 </Steps>
 
 ## Re-instrumenting an interaction
 
-The example below is the Lemma equivalent of a Raindrop `begin()` → tool tracking → `finish()` flow: one trace, a typed tool, and a generation carrying the full message list. Install and configure the SDK first — see [Setup](/tracing/instrumentation/setup).
+The example below is the Lemma equivalent of a Raindrop `begin()` → tool tracking → `finish()` flow: one trace, a typed tool, and a generation carrying the full message list. Install and configure the SDK first: see [Setup](/tracing/instrumentation/setup).
 
 <Tabs>
   <Tab title="TypeScript">
@@ -123,7 +125,7 @@ The example below is the Lemma equivalent of a Raindrop `begin()` → tool track
         const response = await callModel(messages);
         trace.recordGeneration({
           name: "answer",
-          model: "gpt-4o",             // Raindrop event `model`
+          model: "anthropic/claude-opus-4-7", // Raindrop event `model`
           input: messages,
           output: response.text,
           llmInputMessages: messages,
@@ -162,7 +164,7 @@ The example below is the Lemma equivalent of a Raindrop `begin()` → tool track
         response = call_model(messages)
         trace.record_generation(
             name="answer",
-            model="gpt-4o",              # Raindrop event model
+            model="anthropic/claude-opus-4-7",  # Raindrop event model
             input=messages,
             output=response.text,
             llm_input_messages=messages,
@@ -181,22 +183,24 @@ The example below is the Lemma equivalent of a Raindrop `begin()` → tool track
   </Tab>
 </Tabs>
 
-Pass the **full ordered message list** for each call as both `input` and `llmInputMessages` / `llm_input_messages`. The root trace `input` is only the current user turn. For live handles that measure real duration, error recording, and nesting a tool under a measured parent span, see [Generations](/tracing/instrumentation/generations) and [Tool calls](/tracing/instrumentation/tool-calls).
+Pass the full ordered message list for each call as both `input` and `llmInputMessages` / `llm_input_messages`. The root trace `input` is only the current user turn. For live handles that measure real duration, error recording, and nesting a tool under a measured parent span, see [Generations](/tracing/instrumentation/generations) and [Tool calls](/tracing/instrumentation/tool-calls).
 
 If your run spans streaming callbacks or helpers rather than one function, use a TypeScript trace handle and end it from the terminal callback. See [Traces](/tracing/instrumentation/traces).
 
-## Pitfalls
+## Common migration mistakes
 
 <Warning>
   Record complete inputs and outputs only when safe. Redact secrets, credentials, and sensitive user data before tracing them.
 </Warning>
 
+Watch for these pitfalls when re-instrumenting from Raindrop:
+
 | Pitfall | Fix |
 | --- | --- |
 | Emitting one Lemma trace per LLM call, mirroring per-event tracking | Wrap the whole execution in one `lemma.trace()`; record each LLM call as a `generation` child. |
-| Using `convoId` semantics as the trace identity | `convoId` maps to `threadId` / `thread_id`, which groups turns — it is not the per-execution trace id. |
+| Using `convoId` semantics as the trace identity | `convoId` maps to `threadId` / `thread_id`, which groups turns; it is not the per-execution trace id. |
 | Putting `model` on the root instead of a generation | Model belongs on a typed `generation` span; a `model` on an untyped span does not become a generation. |
-| Missing message history | Put the full ordered message list on each generation's `input` and `llmInputMessages` / `llm_input_messages`, not just the latest user string. |
+| Missing message history | Put the full ordered message list on each generation’s `input` and `llmInputMessages` / `llm_input_messages`, not only the latest user string. |
 | Untyped children | Record LLM calls with `recordGeneration` and tools with `recordTool` so they render and filter as generations and tools. |
 
 ## Related pages

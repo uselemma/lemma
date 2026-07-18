@@ -46,22 +46,20 @@ You can also enable it without code:
 export LEMMA_DEBUG=1
 ```
 
-`LEMMA_DEBUG=true` is also accepted for backwards compatibility.
-
 After init, debug mode prints a one-time config banner:
 
 ```text
 [LEMMA:client] initialized
   baseUrl: https://api.uselemma.ai
-  projectId: <your-project-id>
-  apiKey: ...<last4>
+  projectId: 39e9c46a-1234-5678-9012-000000000000
+  apiKey: ****cdef
   ingestPath: /traces/ingest
   expectedSuccessStatus: 201
 ```
 
-If `baseUrl` is not production or `projectId` is not a valid UUID, the banner includes `warnings`.
+If `baseUrl` is not production or `projectId` is not a valid universally unique identifier, the banner includes `warnings`.
 
-Verify logs and `debugSmokeTest().ingestStatus` reflect whether **this specific trace** was enqueued / ingested / ready — not whether the project has any ready traces.
+Verify logs and `debugSmokeTest().ingestStatus` reflect whether this specific trace was enqueued, ingested, or ready, not whether the project has any ready traces.
 
 ## Run a smoke test
 
@@ -114,14 +112,14 @@ If the trace uses a handle, you should see `trace handle created`, then `sending
 
 ## Verify ingest enqueue
 
-After a successful 201, optionally poll the API to confirm **this specific trace** was enqueued (or already ingested/ready). This requires **both** debug mode and verify:
+After a successful 201, optionally poll the API to confirm this specific trace was enqueued (or already ingested or ready). This requires both debug mode and verify:
 
 ```bash
 export LEMMA_DEBUG=1
 export LEMMA_DEBUG_VERIFY=1
 ```
 
-`true` is also accepted for both flags.
+Both flags also accept `true`.
 
 With both enabled, the SDK calls `GET /traces/ingest-status?project_id=...&otel_trace_id=...` after ingest (polls immediately, then every 1s for up to 15s) and logs one of:
 
@@ -129,22 +127,24 @@ With both enabled, the SDK calls `GET /traces/ingest-status?project_id=...&otel_
 [LEMMA:verify] ingest accepted (201), trace enqueued (status=enqueued)
 [LEMMA:verify] ingest accepted (201), trace visible (ingested) (status=ingested)
 [LEMMA:verify] ingest accepted (201), trace visible (ready) (status=ready)
-[LEMMA:verify] ingest accepted (201), ingest-status=not_found after 15s — may be processing lag or downstream issue
+[LEMMA:verify] ingest accepted (201), ingest-status=not_found after 15s: may be processing lag or downstream issue
 [LEMMA:verify] ingest accepted (201), ingest-status check failed (status/network)
 ```
 
-`enqueued` means the OTLP worker accepted the payload and wrote it to the ingest queue — it does **not** require the dashboard to show the trace yet (useful during backlog).
+`enqueued` means the OpenTelemetry Protocol worker accepted the payload and wrote it to the ingest queue. It does not require the dashboard to show the trace yet (useful during backlog).
 
 ## Confirming delivery reached Lemma
 
+Match the SDK log against the server-side signal to find where delivery stopped:
+
 | SDK log | Server-side (Dash0) | Meaning |
 | --- | --- | --- |
-| `trace sent` status 201 | `otlp.ingest.received` → `enqueued` | Full success |
-| `trace sent` status 201 | No `otlp.ingest.*` logs | Not hitting Lemma production — wrong URL or proxy |
-| `trace sent` status 200 | — | Wrong endpoint (`/otel/v1/traces` or mock) |
+| `trace sent` status 201 | `otlp.ingest.received`, then `enqueued` | Full success |
+| `trace sent` status 201 | No `otlp.ingest.*` logs | Not hitting Lemma production: wrong URL or proxy |
+| `trace sent` status 200 | n/a | Wrong endpoint (`/otel/v1/traces` or mock) |
 | `trace sent` status 201 | `received` but no `enqueued` | Worker-side failure after accept |
 | `trace sent` status 201 + verify `status=enqueued` | `enqueued` | Accepted into ingest queue (may still be backlog) |
-| `trace sent` status 201 + verify `not_found` | missing enqueue index / CH row | Downstream lag or failure |
+| `trace sent` status 201 + verify `not_found` | missing enqueue index or ClickHouse row | Downstream lag or failure |
 
 Support bundle to request from customers:
 
@@ -159,11 +159,13 @@ Use the first missing log line to narrow the problem.
 | What you see | What it means | What to check |
 | --- | --- | --- |
 | No Lemma logs | Debug mode is not enabled in this process, or this code path is not running | Set `LEMMA_DEBUG=1` in the runtime that serves traffic |
-| `trace started`, but no `sending trace` | The callback did not finish, or the trace handle was never ended | Await `lemma.trace(...)`, call `trace.end(...)`, and check thrown errors |
+| `trace started`, but no `sending trace` | The callback did not finish, or you never ended the trace handle | Await `lemma.trace(...)`, call `trace.end(...)`, and check thrown errors |
 | `sending trace`, then `trace ingest failed` | The SDK reached the endpoint, but ingest rejected the request | Check status code, `hint` field, API key, project ID, `baseUrl`, and network policy |
 | `trace sent`, but the dashboard looks wrong | Delivery worked; the issue is likely trace shape | Compare `spanCount` (`span_count` in Python), tool/generation calls, and the [trace contract](/reference/trace-contract) |
 
 ## Debug common issues
+
+Match the symptom to the checks below.
 
 ### Missing traces
 
@@ -174,7 +176,11 @@ If it logs `trace ingest failed`, check:
 - `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` are from the same project.
 - `baseUrl` / `base_url` points at a server that implements `POST /traces/ingest`.
 - Your runtime can make outbound HTTPS requests.
-- The `hint` field on `trace ingest failed` (401 → API key, 403 → project mismatch, 429 → rate limit, 404 → wrong host).
+- The `hint` field on `trace ingest failed` names the cause:
+    - 401: API key
+    - 403: project mismatch
+    - 429: rate limit
+    - 404: wrong host
 
 ### Missing tools or generations
 
@@ -208,7 +214,7 @@ If a parent span exists but its children appear as siblings, debug the order of 
   </Tab>
 </Tabs>
 
-The child call should happen before `retrieve.end(...)`. In TypeScript, make it from the parent span handle. In Python, pass the parent handle's `id` as `parent_id` when starting the child.
+The child call should happen before `retrieve.end(...)`. In TypeScript, make it from the parent span handle. In Python, pass the parent handle’s `id` as `parent_id` when starting the child.
 
 ### Serverless or streaming handlers
 

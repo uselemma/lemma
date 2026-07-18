@@ -5,13 +5,21 @@ description: "Build a complete Lemma trace one piece at a time"
 
 This guide starts with an untraced support agent and adds Lemma SDK calls step by step. Each step adds one visible part of the trace.
 
-The per-primitive pages go deeper on each piece: [Traces](/tracing/instrumentation/traces), [Generations](/tracing/instrumentation/generations), [Tool calls](/tracing/instrumentation/tool-calls), [Spans](/tracing/instrumentation/spans), and [Threads & context](/tracing/instrumentation/context).
+The per-primitive pages go deeper on each piece:
+
+- [Traces](/tracing/instrumentation/traces)
+- [Generations](/tracing/instrumentation/generations)
+- [Tool calls](/tracing/instrumentation/tool-calls)
+- [Spans](/tracing/instrumentation/spans)
+- [Threads & context](/tracing/instrumentation/context)
 
 <Note>
-  The rule is simple: one agent execution = one `lemma.trace()` call. Record model calls, tool calls, and app work inside that trace.
+  The rule: one agent execution = one `lemma.trace()` call. Record model calls, tool calls, and app work inside that trace.
 </Note>
 
-## What you'll build
+## What you’ll build
+
+The finished trace nests each piece of work under one root:
 
 ```text
 support-agent                  <- trace root (input, output, agent name, thread, user)
@@ -23,7 +31,7 @@ support-agent                  <- trace root (input, output, agent name, thread,
 
 ## Before you start
 
-The examples assume you already have an agent shaped roughly like this:
+The examples assume you already have an agent shaped like this:
 
 <Tabs>
   <Tab title="TypeScript">
@@ -44,7 +52,9 @@ The examples assume you already have an agent shaped roughly like this:
   </Tab>
   <Tab title="Python">
     ```python
-    def handle_support_request(message: str, conversation_id: str, user_id: str) -> str:
+    def handle_support_request(
+        message: str, conversation_id: str, user_id: str
+    ) -> str:
         docs = search_docs(message)
         order = lookup_order(user_id)
         messages = build_prompt(message, docs, order)
@@ -55,7 +65,7 @@ The examples assume you already have an agent shaped roughly like this:
   </Tab>
 </Tabs>
 
-## Steps
+## Instrument the agent step by step
 
 <Steps>
   <Step title="Install the SDK">
@@ -272,7 +282,7 @@ The examples assume you already have an agent shaped roughly like this:
   </Step>
 
   <Step title="Record root trace duration when the run is done">
-    Callback traces are measured automatically when the callback returns. For trace handles, record root duration when you call `trace.end(...)`.
+    The SDK measures callback traces automatically when the callback returns. For trace handles, record root duration when you call `trace.end(...)`.
 
     <Tabs>
       <Tab title="TypeScript">
@@ -300,7 +310,7 @@ The examples assume you already have an agent shaped roughly like this:
       </Tab>
     </Tabs>
 
-    For open handles, leave duration blank until the work is actually finished. The SDK cannot know the final elapsed time until `span.end(...)`, `trace.end(...)`, or the callback returns.
+    For open handles, leave duration blank until the work is finished. The SDK cannot know the final elapsed time until `span.end(...)`, `trace.end(...)`, or the callback returns.
   </Step>
 
   <Step title="Mark failures where you catch them">

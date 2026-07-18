@@ -3,9 +3,11 @@ title: "Generations"
 description: "Capture LLM calls with model, prompt, completion, and timing"
 ---
 
-A **generation** is a single LLM call inside a trace. Record it with `trace.recordGeneration()` / `trace.record_generation()` after the model call completes.
+A _generation_ is a single LLM call inside a trace. Record it with `trace.recordGeneration()` / `trace.record_generation()` after the model call completes.
 
 ## Record a generation
+
+Record a generation once the model call returns, passing the model, prompt, and completion:
 
 <Tabs>
   <Tab title="TypeScript">
@@ -17,7 +19,7 @@ A **generation** is a single LLM call inside a trace. Record it with `trace.reco
         name: "draft-reply",
         input: messages,
         output: response.text,
-        model: "gpt-4o",
+        model: "anthropic/claude-opus-4-7",
         llmInputMessages: messages,
         llmInvocationParameters: { temperature: 0.2 },
       });
@@ -35,7 +37,7 @@ A **generation** is a single LLM call inside a trace. Record it with `trace.reco
             name="draft-reply",
             input=messages,
             output=response.text,
-            model="gpt-4o",
+            model="anthropic/claude-opus-4-7",
             llm_input_messages=messages,
             llm_invocation_parameters={"temperature": 0.2},
         )
@@ -47,7 +49,7 @@ A **generation** is a single LLM call inside a trace. Record it with `trace.reco
   </Tab>
 </Tabs>
 
-Pass the **full ordered message list** for that call as both `input` and `llmInputMessages` / `llm_input_messages`. The root trace input is only the current user turn; the generation should include system, prior turns, tool results, and the current user message.
+Pass the complete, ordered message list for that call as both `input` and `llmInputMessages` / `llm_input_messages`. The root trace input is only the current user turn; the generation should include the system prompt, prior turns, tool results, and the current user message.
 
 ## Measure a live generation
 
@@ -59,7 +61,7 @@ Use `startGeneration()` / `start_generation()` when you want a handle before the
     const generation = trace.startGeneration({
       name: "draft-reply",
       input: messages,
-      model: "gpt-4o",
+      model: "anthropic/claude-opus-4-7",
     });
 
     try {
@@ -80,7 +82,7 @@ Use `startGeneration()` / `start_generation()` when you want a handle before the
     generation = trace.start_generation(
         name="draft-reply",
         input=messages,
-        model="gpt-4o",
+        model="anthropic/claude-opus-4-7",
     )
 
     try:
@@ -99,6 +101,8 @@ Use `startGeneration()` / `start_generation()` when you want a handle before the
 
 ## What the SDK records
 
+The client sends these fields; Lemma’s ingest normalizes them to OpenInference-style attributes:
+
 | Field | Client sends | Ingest normalizes to |
 | --- | --- | --- |
 | Generation kind | `type: "generation"` | `openinference.span.kind: "llm"` |
@@ -109,7 +113,7 @@ Use `startGeneration()` / `start_generation()` when you want a handle before the
 
 See [Native contract props](/reference/trace-contract#native-contract-props) and [Client fields vs ingest normalization](/reference/trace-contract#client-fields-vs-ingest-normalization).
 
-## Errors
+## Record a failed generation
 
 If a model call fails, record a failed generation before rethrowing:
 

@@ -3,13 +3,9 @@ title: "OpenAI Agents SDK"
 description: "Record OpenAI Agents SDK traces with Lemma"
 ---
 
-Use Lemma's OpenAI Agents integration when your app uses the OpenAI Agents SDK
-trace processor system. The integration creates one Lemma trace for each OpenAI
-Agents trace, maps model calls to generations, maps function calls to tools, and
-preserves parent IDs so child spans stay nested correctly.
+Use Lemma’s OpenAI Agents integration when your app uses the OpenAI Agents SDK trace processor system. The integration creates one Lemma trace for each OpenAI Agents trace, maps model calls to generations, maps function calls to tools, and preserves parent IDs so child spans stay nested correctly.
 
-You do not need to wrap agent runs in `lemma.trace()`. Register the processor
-once, then run OpenAI Agents normally.
+You do not need to wrap agent runs in `lemma.trace()`. Register the processor once, then run OpenAI Agents normally.
 
 ## TypeScript
 
@@ -19,8 +15,7 @@ Install both packages:
 npm install @uselemma/tracing @openai/agents
 ```
 
-Register the Lemma processor before running agents. By default, credentials are
-read from `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`:
+Register the Lemma processor before running agents. By default, credentials are read from `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`:
 
 ```typescript
 import { addTraceProcessor } from "@openai/agents";
@@ -65,8 +60,7 @@ Install the Python extra:
 pip install "uselemma-tracing[openai-agents]" openai-agents
 ```
 
-Register the Lemma processor before running agents. By default, credentials are
-read from `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`:
+Register the Lemma processor before running agents. By default, credentials are read from `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`:
 
 ```python
 from uselemma_tracing import instrument_openai_agents
@@ -105,6 +99,8 @@ async def call_agent(user_message: str):
 
 ## What Lemma records
 
+Each OpenAI Agents event maps to a Lemma record:
+
 | OpenAI Agents event | Lemma record |
 | --- | --- |
 | Trace start/end | One Lemma trace named from the OpenAI Agents trace |
@@ -112,14 +108,11 @@ async def call_agent(user_message: str):
 | Function span | Tool call with tool name, input, output or error, timing, and parent ID |
 | Other span types | Regular span with OpenAI trace/span fields preserved in attributes |
 
-OpenAI Agents trace `group_id` is recorded as the Lemma `threadId`, so runs in
-the same conversation stay grouped.
+OpenAI Agents trace `group_id` is recorded as the Lemma `threadId`, so runs in the same conversation stay grouped.
 
 ## Privacy
 
-The integration records prompts, tool inputs, tool outputs, and model output by
-default. Disable input/output recording when you need structure and timings
-without payload contents:
+The integration records prompts, tool inputs, tool outputs, and model output by default. Disable input/output recording when you need structure and timings without payload contents:
 
 ```typescript
 addTraceProcessor(openAIAgents({ recordInputs: false, recordOutputs: false }));
@@ -133,8 +126,7 @@ instrument_openai_agents(record_inputs=False, record_outputs=False)
 
 ## Debugging
 
-Use debug mode to confirm spans are arriving live and nested under the expected
-parent:
+Use debug mode to confirm spans are arriving live and nested under the expected parent:
 
 ```typescript
 import { enableDebugMode } from "@uselemma/tracing";
@@ -148,6 +140,4 @@ from uselemma_tracing import enable_debug_mode
 enable_debug_mode()
 ```
 
-Look for `span started` and `span ended` logs. Tool/function spans should include
-the generation or agent span ID as `parentId` in TypeScript or `parent_id` in
-Python.
+Look for `span started` and `span ended` logs. Tool/function spans should include the generation or agent span ID as `parentId` in TypeScript or `parent_id` in Python.

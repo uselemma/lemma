@@ -3,7 +3,7 @@ title: "Trace contract"
 description: "What clients send to Lemma, what ingest requires, and which fields unlock product behavior"
 ---
 
-Lemma traces are JSON trees delivered to `POST /traces/ingest`. A **trace** is one agent execution: the root record carries the current input, final output or error, agent name, optional thread/user context, and timing. All other work is **child spans** in `trace.spans[]`, typed as `span`, `generation`, or `tool`, optionally nested via `parent_id`.
+Lemma traces are JSON trees delivered to `POST /traces/ingest`. A trace is one agent execution: the root record carries the current input, final output or error, agent name, optional thread/user context, and timing. All other work is child spans in `trace.spans[]`, typed as `span`, `generation`, or `tool`, optionally nested via `parent_id`.
 
 The SDK builds this payload for you. This page defines what Lemma accepts, what each field means, how ingest normalizes it, and which fields unlock which product behavior.
 
@@ -13,6 +13,8 @@ The SDK builds this payload for you. This page defines what Lemma accepts, what 
 
 ## Mental model
 
+Four concepts map onto the fields a client sends:
+
 | Concept | What it is | Client field |
 | --- | --- | --- |
 | **Trace** | One end-to-end agent execution | The root `trace` object |
@@ -20,9 +22,11 @@ The SDK builds this payload for you. This page defines what Lemma accepts, what 
 | **Generation** | A single LLM call | `spans[]` entry with `type: "generation"` |
 | **Tool call** | A single tool invocation | `spans[]` entry with `type: "tool"` |
 
-The SDK sends a **trace record** plus child spans. At ingest, Lemma creates a synthetic root span (`{traceId}:root`) that carries root-level fields for storage and display. Producers should target the trace record; they do not create the synthetic root themselves.
+The SDK sends a trace record plus child spans. At ingest, Lemma creates a synthetic root span (`{traceId}:root`) that carries root-level fields for storage and display. Producers should target the trace record; they do not create the synthetic root themselves.
 
 ## Requirement tiers
+
+Lemma reads trace fields at three tiers, from the minimum ingest needs to full instrumentation fidelity:
 
 | Tier | Meaning | Examples |
 | --- | --- | --- |
@@ -33,6 +37,8 @@ The SDK sends a **trace record** plus child spans. At ingest, Lemma creates a sy
 Ingest accepts a name-only trace. Semantic fields are not HTTP-required, but without them Lemma can only render timing and a sparse tree. For the pedagogical ideal path, see [Building high-quality traces](/guides/building-high-quality-traces).
 
 ## Ingest payload
+
+A complete ingest body carries the project ID, the trace record, and its child spans:
 
 ```json
 {
@@ -69,7 +75,7 @@ Ingest accepts a name-only trace. Semantic fields are not HTTP-required, but wit
         "id": "span-answer",
         "name": "answer",
         "type": "generation",
-        "model": "gpt-4o",
+        "model": "anthropic/claude-opus-4-7",
         "input": [
           { "role": "system", "content": "You are a support agent." },
           { "role": "user", "content": "Where is my order #1843?" }
@@ -88,29 +94,33 @@ Ingest accepts a name-only trace. Semantic fields are not HTTP-required, but wit
 
 ### Envelope and validation
 
+Ingest checks the envelope before accepting the trace:
+
 | Field | Ingest rule |
 | --- | --- |
 | Body | Must be a JSON object |
-| `project_id` | Required UUID |
+| `project_id` | Required universally unique identifier |
 | `trace` | Required object |
 | `trace.name` | Required non-empty string |
 | `trace.spans[].name` | Required non-empty string for each span |
 | Span `id` values | Must be unique within the payload when provided |
 | Authorization | Required; missing credentials return `401` |
 
-Successful ingest returns **201**. Invalid shape returns **400**. Missing `trace.id` or span `id` values are generated server-side. Missing or invalid `spans[].type` defaults to `"span"`. Missing `parent_id` attaches the child under the synthetic root.
+Successful ingest returns `201`. Invalid shape returns `400`. Ingest generates missing `trace.id` or span `id` values server-side, defaults a missing or invalid `spans[].type` to `"span"`, and attaches a child with a missing `parent_id` under the synthetic root.
 
 ### Delivery and retries
 
-Deliver **one complete trace** when the execution (agent turn) finishes. This is required; patching a trace over time is not currently supported. Treat `ingest` as a single delivery, not an incremental merge API.
+Deliver one complete trace when the execution (agent turn) finishes. This is required; patching a trace over time is not currently supported. Treat `ingest` as a single delivery, not an incremental merge API.
 
-- **Required:** one complete delivery per execution — root input/output, thread/user, and all child spans in one payload, sent when the turn is done.
-- **Retries:** re-sending the same payload with the same span IDs is idempotent; spans whose IDs already exist are skipped.
-- **Not a merge API:** omitted root fields do **not** preserve prior values. There is no field-level upsert, and patching a trace across calls is not supported.
-- **Processing:** after an idle window Lemma processes the trace once; a later successful re-delivery does not restart `processTrace` / `extractSignals`. Late new span IDs may still append for display.
-- Do not reuse one `trace.id` across conversation turns — see [Instrumenting multi-turn agents](/guides/instrumenting-multi-turn-agents).
+- **Required**: one complete delivery per execution, covering root input/output, thread/user, and all child spans in one payload, sent when the turn is done.
+- **Retries**: re-sending the same payload with the same span IDs is idempotent; spans whose IDs already exist are skipped.
+- **Not a merge API**: omitted root fields do not preserve prior values. There is no field-level upsert, and patching a trace across calls is not supported.
+- **Processing**: after an idle window Lemma processes the trace once; a later successful re-delivery does not restart `processTrace` / `extractSignals`. Late new span IDs may still append for display.
+- Don’t reuse one `trace.id` across conversation turns; see [Instrumenting multi-turn agents](/guides/instrumenting-multi-turn-agents).
 
 ## Trace record
+
+The trace record holds the root-level fields for the execution:
 
 | Field | Role |
 | --- | --- |
@@ -125,7 +135,7 @@ Deliver **one complete trace** when the execution (agent turn) finishes. This is
 | `metadata` | Arbitrary JSON attached to the root |
 | `spans` | Child work |
 
-**Semantic guidance:** include root `input` and either `output` or `error`. Without them, the dashboard can show timing but not what the user asked or whether the run succeeded.
+For semantic completeness, include root `input` and either `output` or `error`. Without them, the dashboard can show timing but not what the user asked or whether the run succeeded.
 
 Callback traces set `output` from the return value unless you override it with `trace.output(...)`. Uncaught exceptions mark the root as failed and still send the trace.
 
@@ -148,6 +158,8 @@ Every child is a named object in `trace.spans[]`.
 
 ### Typed children
 
+Each child type carries its own semantic fields:
+
 | Type | Use for | Semantic fields |
 | --- | --- | --- |
 | `span` | Retrieval, ranking, planning, app logic | `input` + `output` (or `error`) |
@@ -169,12 +181,12 @@ support-agent              ← trace record
 
 ## Generations and message history
 
-`trace.input` is the **current user turn**. A generation should record the **full ordered message list sent to that LLM call**, including system prompt, prior turns, tool results, and the current user message.
+`trace.input` is the current user turn. A generation should record the full ordered message list sent to that LLM call, including system prompt, prior turns, tool results, and the current user message.
 
 Prefer both:
 
-- `input` — the prompt payload for that call
-- `llmInputMessages` / `llm_input_messages` — structured messages flattened into `llm.input_messages.{index}.message.*`
+- `input`: the prompt payload for that call
+- `llmInputMessages` / `llm_input_messages`: structured messages flattened into `llm.input_messages.{index}.message.*`
 
 `model` is the primary model identifier. Native generation props such as `llmProvider`, `llmInvocationParameters`, and `llmOutputMessages` populate OpenInference-style attributes.
 
@@ -182,9 +194,9 @@ Prefer both:
 
 Tool spans should carry:
 
-- `name` — stable tool identifier
-- `input` — arguments
-- `output` or `error` — result or failure
+- `name`: stable tool identifier
+- `input`: arguments
+- `output` or `error`: result or failure
 - optional `toolParameters` / `tool_parameters` for the schema
 
 Ingest uses `tool_name` when present, otherwise the span `name`, and normalizes tool I/O into tool-call aliases for display.
@@ -193,7 +205,7 @@ Ingest uses `tool_name` when present, otherwise the span `name`, and normalizes 
 
 Record a failure on the exact span, generation, or tool where it happened:
 
-- Keep the **input** that led to the failure when it is safe to record.
+- Keep the `input` that led to the failure when it is safe to record.
 - Pass `error` instead of inventing an output.
 - End the failed child so timing is preserved.
 - Rethrow when the whole execution should fail; leave the root successful when the agent recovers.
@@ -274,6 +286,8 @@ Clients send first-class JSON fields. Ingest generates display and analysis alia
 Do not hand-build the normalized aliases unless you are bypassing the SDK. Prefer native SDK props and first-class fields.
 
 ## SDK mapping
+
+Each contract field maps to an SDK call and the client field it sets:
 
 <Tabs>
   <Tab title="TypeScript">
@@ -361,9 +375,11 @@ Use native props instead of hand-building flattened attribute names. In Python, 
   </Tab>
 </Tabs>
 
-`model` also populates `llm.model_name` for generation records. Object and array attribute values are serialized where Lemma expects string-valued attributes. For fields without a native prop, pass raw `attributes`.
+`model` also populates `llm.model_name` for generation records. Lemma serializes object and array attribute values where it expects string-valued attributes. For fields without a native prop, pass raw `attributes`.
 
 ## Semantic requirements
+
+These fields are not ingest gates, but Lemma needs them to render its product features:
 
 | Field | Why it matters |
 | --- | --- |
@@ -379,7 +395,7 @@ Use native props instead of hand-building flattened attribute names. In Python, 
 
 ## Issue detection
 
-Complete, correctly typed trees improve classification and automated issue extraction. Root I/O, model fields, and tool payloads are **not** general ingest gates. Some environments may further restrict issue extraction to specific framework shapes; treat that as an environment policy, not as the base SDK contract.
+Complete, correctly typed trees improve classification and automated issue extraction. Root I/O, model fields, and tool payloads are not general ingest gates. Some environments may further restrict issue extraction to specific framework shapes; treat that as an environment policy, not as the base SDK contract.
 
 ## Privacy
 

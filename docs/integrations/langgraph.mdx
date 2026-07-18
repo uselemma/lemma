@@ -3,14 +3,9 @@ title: "LangGraph"
 description: "Record LangGraph graph runs with Lemma callback handlers"
 ---
 
-LangGraph uses LangChain's callback system, so Lemma's LangGraph integration is
-a LangChain callback handler with LangGraph defaults. It creates one Lemma trace
-for each graph invocation, records graph nodes as child spans, records model
-calls as generations, records tools as tool calls, and preserves parent run IDs
-so nested nodes stay nested correctly.
+LangGraph uses LangChain’s callback system, so Lemma’s LangGraph integration is a LangChain callback handler with LangGraph defaults. It creates one Lemma trace for each graph invocation, records graph nodes as child spans, records model calls as generations, records tools as tool calls, and preserves parent run IDs so nested nodes stay nested correctly.
 
-You do not need to wrap graph calls in `lemma.trace()`. Pass the callback
-handler through the graph invoke config.
+You do not need to wrap graph calls in `lemma.trace()`. Pass the callback handler through the graph invoke config.
 
 ## TypeScript
 
@@ -110,6 +105,8 @@ def call_graph(user_message: str):
 
 ## What Lemma records
 
+Each LangGraph callback maps to a Lemma record:
+
 | LangGraph callback | Lemma record |
 | --- | --- |
 | Root graph run | One Lemma trace named from `agentName` or the graph run name |
@@ -118,14 +115,11 @@ def call_graph(user_message: str):
 | Tool call | Tool span with input, output or error, timing, and parent ID |
 | Retriever | Span with query input, output, timing, and parent ID |
 
-Use `langGraph({ recordInputs: false, recordOutputs: false })` in TypeScript or
-`langgraph(record_inputs=False, record_outputs=False)` in Python to avoid
-sending prompts, tool inputs, tool outputs, or model output text.
+Use `langGraph({ recordInputs: false, recordOutputs: false })` in TypeScript or `langgraph(record_inputs=False, record_outputs=False)` in Python to avoid sending prompts, tool inputs, tool outputs, or model output text.
 
 ## Debugging
 
-Enable debug mode while developing to confirm that spans arrive live and parent
-IDs are attached:
+Enable debug mode while developing to confirm that spans arrive live and parent IDs are attached:
 
 ```typescript
 import { enableDebugMode } from "@uselemma/tracing";
