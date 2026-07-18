@@ -62,11 +62,15 @@ export type TraceOptions = {
   metadata?: Record<string, unknown>;
   threadId?: string;
   userId?: string;
+  /** Wall-clock start for the root; defaults to construction time. */
+  startedAt?: Date | string;
 };
 
 export type TraceEndOptions = {
   output?: unknown;
   durationMs?: number;
+  /** Wall-clock end for the root; defaults to `end()` call time. */
+  endedAt?: Date | string;
 };
 
 export type SpanType = "span" | "generation" | "tool";
@@ -410,8 +414,17 @@ function isTraceEndOptions(value: unknown): value is TraceEndOptions {
   return (
     typeof value === "object" &&
     value !== null &&
-    ("output" in value || "durationMs" in value)
+    ("output" in value || "durationMs" in value || "endedAt" in value)
   );
+}
+
+function coerceDate(value: Date | string | undefined): Date | undefined {
+  if (value == null) return undefined;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }
 
 export class SpanHandle {
@@ -771,6 +784,7 @@ export class TraceContext {
 export class TraceHandle extends TraceContext {
   private sendPromise: Promise<void> = Promise.resolve();
   private ended = false;
+  private readonly startedAt: Date;
 
   constructor(
     options: TraceOptions,
@@ -779,9 +793,11 @@ export class TraceHandle extends TraceContext {
       startedAt: Date,
       endedAt: Date,
     ) => Promise<void>,
-    private readonly startedAt = new Date(),
+    startedAt?: Date,
   ) {
     super(options);
+    this.startedAt =
+      startedAt ?? coerceDate(options.startedAt) ?? new Date();
     // A trace is delivered only when it is explicitly ended (`end()`). We
     // deliberately do NOT auto-send on construction or on every recorded span:
     // the ingest API is append-only and treats each submission's spans as new,
@@ -797,6 +813,7 @@ export class TraceHandle extends TraceContext {
     // Ending is idempotent: a trace is sent exactly once so a second end()
     // can't duplicate its spans.
     if (this.ended) return this.sendPromise;
+    let endedAtOverride: Date | undefined;
     if (isTraceEndOptions(outputOrOptions)) {
       if ("output" in outputOrOptions) {
         this.output(outputOrOptions.output);
@@ -804,11 +821,12 @@ export class TraceHandle extends TraceContext {
       if (outputOrOptions.durationMs != null) {
         this.duration(outputOrOptions.durationMs);
       }
+      endedAtOverride = coerceDate(outputOrOptions.endedAt);
     } else if (arguments.length > 0) {
       this.output(outputOrOptions);
     }
     this.ended = true;
-    const endedAt = new Date();
+    const endedAt = endedAtOverride ?? new Date();
     this.sendPromise = this.sendPromise.then(() =>
       this.sendFn(this, this.startedAt, endedAt),
     );

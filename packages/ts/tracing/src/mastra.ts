@@ -4,6 +4,7 @@ import {
   type SpanOptions,
   type TraceHandle,
 } from "./client";
+import { toolResultError } from "./tool-result";
 
 /** Mastra AI-tracing span type strings (structural; no @mastra/* dependency). */
 export type MastraSpanType =
@@ -80,8 +81,8 @@ export type MastraIntegrationOptions = {
 export type LemmaMastraIntegrationOptions = MastraIntegrationOptions;
 
 type BufferedTrace = {
-  root?: MastraExportedSpan;
   children: MastraExportedSpan[];
+  childIds: Set<string>;
 };
 
 const GENERATION_TYPES = new Set(["model_generation", "model_step"]);
@@ -141,6 +142,35 @@ function asOutputMessages(output: unknown): unknown[] | undefined {
   return [{ role: "assistant", content: output }];
 }
 
+function messageContent(message: unknown): unknown {
+  if (!message || typeof message !== "object") return message;
+  const record = message as Record<string, unknown>;
+  if ("content" in record) return record.content;
+  return message;
+}
+
+/**
+ * Prefer the current user turn for the Lemma root input.
+ * Mastra agent_run roots usually set `input: { messages: [...] }`.
+ */
+function rootTraceInput(input: unknown): unknown {
+  if (typeof input === "string") return input;
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+
+  const record = input as Record<string, unknown>;
+  const messages = record.messages;
+  if (!Array.isArray(messages) || messages.length === 0) return input;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!message || typeof message !== "object") continue;
+    const role = (message as Record<string, unknown>).role;
+    if (role === "user") return messageContent(message);
+  }
+
+  return messageContent(messages[messages.length - 1]);
+}
+
 function resolveParentId(
   parentSpanId: string | undefined,
   rootSpanId: string | undefined,
@@ -149,6 +179,14 @@ function resolveParentId(
   if (!parentSpanId || parentSpanId === rootSpanId) return undefined;
   if (!recordedIds.has(parentSpanId)) return undefined;
   return parentSpanId;
+}
+
+function childErrorMessage(span: MastraExportedSpan): string | undefined {
+  if (span.errorInfo?.message) return span.errorInfo.message;
+  if (TOOL_TYPES.has(span.type)) {
+    return toolResultError(span.output) ?? undefined;
+  }
+  return undefined;
 }
 
 export class LemmaMastraExporter {
@@ -174,13 +212,21 @@ export class LemmaMastraExporter {
   private bufferFor(traceId: string): BufferedTrace {
     const existing = this.buffers.get(traceId);
     if (existing) return existing;
-    const created: BufferedTrace = { children: [] };
+    const created: BufferedTrace = { children: [], childIds: new Set() };
     this.buffers.set(traceId, created);
     return created;
   }
 
   private pushChild(span: MastraExportedSpan) {
     const buffer = this.bufferFor(span.traceId);
+    // Client-observability paths can emit both SPAN_STARTED and SPAN_ENDED for
+    // the same event span; keep the latest payload for each id.
+    if (buffer.childIds.has(span.id)) {
+      const index = buffer.children.findIndex((child) => child.id === span.id);
+      if (index >= 0) buffer.children[index] = span;
+      return;
+    }
+    buffer.childIds.add(span.id);
     buffer.children.push(span);
   }
 
@@ -210,7 +256,7 @@ export class LemmaMastraExporter {
     const startedAt = toDate(span.startTime) ?? new Date();
     const endedAt =
       toDate(span.endTime) ?? (span.isEvent ? startedAt : new Date());
-    const errorMessage = span.errorInfo?.message;
+    const errorMessage = childErrorMessage(span);
     const recordInputs = this.options.recordInputs !== false;
     const recordOutputs = this.options.recordOutputs !== false;
     const input = recordInputs ? span.input : undefined;
@@ -283,7 +329,7 @@ export class LemmaMastraExporter {
     const trace = this.getLemma().trace({
       id: root.traceId,
       name: this.options.agentName ?? root.name,
-      input: recordInputs ? root.input : undefined,
+      input: recordInputs ? rootTraceInput(root.input) : undefined,
       metadata: {
         ...this.options.metadata,
         ...(root.metadata ?? {}),
@@ -294,6 +340,7 @@ export class LemmaMastraExporter {
       threadId: this.resolveThreadId(root),
       userId: this.resolveUserId(root),
       durationMs: durationMs(startedAt, endedAt),
+      startedAt,
     });
 
     for (const child of children) {
@@ -310,8 +357,12 @@ export class LemmaMastraExporter {
 
     const endPromise = trace.end(
       recordOutputs && !root.errorInfo?.message
-        ? { output: root.output, durationMs: durationMs(startedAt, endedAt) }
-        : { durationMs: durationMs(startedAt, endedAt) },
+        ? {
+            output: root.output,
+            durationMs: durationMs(startedAt, endedAt),
+            endedAt,
+          }
+        : { durationMs: durationMs(startedAt, endedAt), endedAt },
     );
 
     this.pending.add(endPromise);

@@ -394,6 +394,147 @@ describe("mastra / LemmaMastraExporter", () => {
     });
   });
 
+  it("dedupes event spans that arrive on both span_started and span_ended", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await emit(
+      exporter,
+      "span_started",
+      span({
+        id: "event_dup",
+        name: "chunk",
+        type: "model_chunk",
+        parentSpanId: "root_dup",
+        isEvent: true,
+        endTime: undefined,
+        output: { text: "partial" },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "event_dup",
+        name: "chunk",
+        type: "model_chunk",
+        parentSpanId: "root_dup",
+        isEvent: true,
+        output: { text: "final" },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "root_dup",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        input: "hi",
+        output: "hello",
+      }),
+    );
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans).toHaveLength(1);
+    expect(body.trace.spans[0]).toMatchObject({
+      id: "event_dup",
+      output: { text: "final" },
+    });
+  });
+
+  it("marks soft MCP tool errors as ERROR without inventing output", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "mcp_1",
+        name: "lookup",
+        type: "mcp_tool_call",
+        parentSpanId: "root_mcp",
+        input: { id: "1843" },
+        output: {
+          isError: true,
+          content: [{ type: "text", text: "order not found" }],
+        },
+        attributes: { toolId: "lookup" },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "root_mcp",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        input: "find my order",
+        output: "failed",
+      }),
+    );
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      type: "tool",
+      status: "ERROR",
+      error: "order not found",
+      input: { id: "1843" },
+    });
+    expect(body.trace.spans[0]).not.toHaveProperty("output");
+  });
+
+  it("extracts the latest user message as root input and preserves Mastra wall times", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "root_messages",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        startTime: "2026-06-29T10:00:00.000Z",
+        endTime: "2026-06-29T10:00:02.500Z",
+        input: {
+          messages: [
+            { role: "system", content: "You are helpful." },
+            { role: "user", content: "first turn" },
+            { role: "assistant", content: "ok" },
+            { role: "user", content: "Where is my order #1843?" },
+          ],
+        },
+        output: "It arrives Friday.",
+      }),
+    );
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace).toMatchObject({
+      input: "Where is my order #1843?",
+      output: "It arrives Friday.",
+      duration_ms: 2500,
+      started_at: "2026-06-29T10:00:00.000Z",
+      ended_at: "2026-06-29T10:00:02.500Z",
+    });
+  });
+
   it("awaits outstanding deliveries on flush/shutdown", async () => {
     let resolveFetch: ((value: Response) => void) | undefined;
     const fetchMock = vi.fn(
