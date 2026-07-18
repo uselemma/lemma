@@ -3,17 +3,17 @@ title: "Instrumenting multi-turn agents"
 description: "Give each conversation turn its own trace and link the turns with a shared thread id"
 ---
 
-A multi-turn agent has a back-and-forth with one user: the user asks something, the agent answers, the user follows up, and the agent answers again with the earlier turns in mind. The instinct is to record the whole conversation as one long trace. Don't. Each turn is a separate agent execution, so each turn is its own trace, and the turns are linked by a shared `threadId` / `thread_id`.
+A multi-turn agent has a back-and-forth with one user: the user asks something, the agent answers, the user follows up, and the agent answers again with the earlier turns in mind. The instinct is to record the whole conversation as one long trace. Don’t. Each turn is a separate agent execution, so each turn is its own trace, and the turns are linked by a shared `threadId` / `thread_id`.
 
 This page explains how to model that. For the exact fields and normalization, see the [trace contract](/reference/trace-contract). For the ideal per-trace shape, see [Building high-quality traces](/guides/building-high-quality-traces).
 
 <Note>
-  **One agent execution = one trace still holds.** A conversation turn is one execution — one trace. The `threadId` groups the turns; it does not merge them into a single trace.
+  **One agent execution = one trace still holds.** A conversation turn is one execution: one trace. The `threadId` groups the turns; it does not merge them into a single trace.
 </Note>
 
 ## The core rule
 
-When one user has a conversation with your agent, each turn — one user message and the agent's response — is a complete execution. Wrap each turn in its own `lemma.trace()` and give every turn in the same conversation the same thread id. Lemma groups traces that share a `threadId` / `thread_id` into one conversation.
+When one user has a conversation with your agent, each turn, one user message and the agent’s response, is a complete execution. Wrap each turn in its own `lemma.trace()` and give every turn in the same conversation the same thread id. Lemma groups traces that share a `threadId` / `thread_id` into one conversation.
 
 ```text
 thread: conversation-42
@@ -24,20 +24,20 @@ thread: conversation-42
     └── answer              generation  (system + prior turns + tool result + current user)
 ```
 
-Two turns, two traces, one thread. Everything a single turn does — LLM calls, tools, retrieval, app logic — still nests inside that turn's trace, exactly as it would for a one-shot agent.
+Two turns, two traces, one thread. Everything a single turn does still nests inside that turn’s trace: LLM calls, tools, retrieval, and app logic, exactly as it would for a one-shot agent.
 
-## What goes where
+## Root input versus generation messages
 
-The split that trips people up is between the **root input** and the **generation's message history**.
+The split that trips people up is between the root `input` and the generation’s message history.
 
-- **Root `input`** is the **current user turn** only — the single message that started this execution.
-- **The generation** carries the **full ordered message list sent to that model call**: system prompt, prior conversation turns, tool results, and the current user message. That list is what the model actually saw.
+- **Root `input`**: the current user turn only, the single message that started this execution.
+- **The generation**: the full ordered message list sent to that model call, including the system prompt, prior conversation turns, tool results, and the current user message. That list is what the model saw.
 
-Put the full history on the generation, not on the root. The root stays a clean record of "what did the user ask this turn"; the generation stays a faithful record of "what did the model see for this call." Pass that full list as both `input` and `llmInputMessages` / `llm_input_messages`. See [Generations and message history](/reference/trace-contract#generations-and-message-history) and [Generations](/tracing/instrumentation/generations).
+Put the full history on the generation, not on the root. The root stays a clean record of “what did the user ask this turn”; the generation stays a faithful record of “what did the model see for this call.” Pass that full list as both `input` and `llmInputMessages` / `llm_input_messages`. See [Generations and message history](/reference/trace-contract#generations-and-message-history) and [Generations](/tracing/instrumentation/generations).
 
 ## Users
 
-Set `userId` / `user_id` on each turn's trace so Lemma can slice a conversation — and every conversation — by the person on the other side. Set it on every turn in the thread, since each turn is a separate trace.
+Set `userId` / `user_id` on each turn’s trace so Lemma can slice a conversation, and every conversation, by the person on the other side. Set it on every turn in the thread, since each turn is a separate trace.
 
 | Context | SDK option | Client field |
 | --- | --- | --- |
@@ -48,14 +48,14 @@ See [Threads & context](/tracing/instrumentation/context) for the full reference
 
 ## Multi-process and async turns
 
-Turns often do not run in the same process: a request handler answers turn 1, a queue worker answers turn 2, or turns are processed asynchronously. The rule is unchanged — **start a new top-level trace per turn** — but you must carry the thread id (and user id) across the boundary so the new process can reattach the turn to the conversation.
+Turns may run in different processes: a request handler answers turn 1, a queue worker answers turn 2, or turns run asynchronously. The rule is unchanged: start a new top-level trace per turn, but pass the thread id (and user id) across the boundary so the new process can reattach the turn to the conversation.
 
 Persist the thread id wherever you persist the conversation (session store, database row, queue message), then read it back when the next turn runs.
 
 <Tabs>
   <Tab title="TypeScript">
     ```typescript
-    // Producer: hand the thread id to the job that will answer the turn.
+    // Producer: pass the thread id to the job that will answer the turn.
     await queue.add("turn", {
       threadId: conversationId,
       userId: user.id,
@@ -76,7 +76,7 @@ Persist the thread id wherever you persist the conversation (session store, data
   </Tab>
   <Tab title="Python">
     ```python
-    # Producer: hand the thread id to the job that will answer the turn.
+    # Producer: pass the thread id to the job that will answer the turn.
     queue.add("turn", {
         "thread_id": conversation_id,
         "user_id": user.id,
@@ -99,12 +99,12 @@ Persist the thread id wherever you persist the conversation (session store, data
 </Tabs>
 
 <Warning>
-  Do not reuse one trace id across processes to "continue" a conversation. Repeated deliveries for the same `trace.id` are append-only, so a second turn under the same id would graft onto the first turn's tree instead of becoming its own turn. Use a new trace per turn and the same `threadId`.
+  Do not reuse one trace id across processes to “continue” a conversation. Repeated deliveries for the same `trace.id` are append-only, so a second turn under the same id would graft onto the first turn’s tree instead of becoming its own turn. Use a new trace per turn and the same `threadId`.
 </Warning>
 
 ## Example: two turns of one thread
 
-Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a plain answer. Turn 2 calls a tool and sends the growing message history — system prompt, the turn 1 exchange, the tool result, and the current user message — to the model.
+Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a plain answer. Turn 2 calls a tool and sends the growing message history to the model: system prompt, the turn 1 exchange, the tool result, and the current user message.
 
 <Tabs>
   <Tab title="TypeScript">
@@ -129,7 +129,7 @@ Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a 
         const response = await callModel(messages);
         trace.recordGeneration({
           name: "answer",
-          model: "gpt-4o",
+          model: "anthropic/claude-opus-4-7",
           input: messages,
           llmInputMessages: messages,
           output: response.text,
@@ -138,7 +138,7 @@ Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a 
       },
     );
 
-    // Turn 2 — new trace, same thread
+    // Turn 2: new trace, same thread
     await lemma.trace(
       {
         name: "support-agent",
@@ -164,7 +164,7 @@ Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a 
 
         const generation = trace.startGeneration({
           name: "answer",
-          model: "gpt-4o",
+          model: "anthropic/claude-opus-4-7",
           input: messages,
           llmInputMessages: messages,
         });
@@ -190,7 +190,7 @@ Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a 
         response = call_model(messages)
         trace.record_generation(
             name="answer",
-            model="gpt-4o",
+            model="anthropic/claude-opus-4-7",
             input=messages,
             llm_input_messages=messages,
             output=response.text,
@@ -205,7 +205,7 @@ Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a 
         user_id=user_id,
     )
 
-    # Turn 2 — new trace, same thread
+    # Turn 2: new trace, same thread
     def turn_two(trace):
         lookup = trace.start_tool(
             name="lookup_order",
@@ -224,7 +224,7 @@ Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a 
 
         generation = trace.start_generation(
             name="answer",
-            model="gpt-4o",
+            model="anthropic/claude-opus-4-7",
             input=messages,
             llm_input_messages=messages,
         )
@@ -243,25 +243,25 @@ Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a 
   </Tab>
 </Tabs>
 
-## What good looks like
+## Checklist for multi-turn traces
 
-- One trace per turn, each wrapped in its own `lemma.trace()`.
-- The same `threadId` / `thread_id` on every turn of the conversation, so Lemma groups them.
-- `userId` / `user_id` set on every turn for per-user slicing.
-- Root `input` is the current user message only; the final answer (or error) is the root output.
-- Each turn's generation carries the full message history for that call, including prior turns and tool results, as `input` and `llmInputMessages` / `llm_input_messages`.
-- The thread id (and user id) travels with the work across queues, workers, and async boundaries.
+- One trace per turn, each wrapped in its own `lemma.trace()`
+- The same `threadId` / `thread_id` on every turn of the conversation, so Lemma groups them
+- `userId` / `user_id` set on every turn for per-user slicing
+- Root `input` is the current user message only; the final answer (or error) is the root output
+- Each turn’s generation carries the full message history for that call, including prior turns and tool results, as `input` and `llmInputMessages` / `llm_input_messages`
+- The thread id (and user id) travels with the work across queues, workers, and async boundaries
 
-## Pitfalls
+## Patterns that break conversation grouping
 
 <Warning>
   These patterns break conversation grouping or hide what the model saw:
 
-  - **Cramming every turn into one trace.** A conversation is not one execution. One giant trace loses per-turn timing, inputs, and outputs, and grows unbounded.
-  - **Losing the thread id across processes.** If a worker or async turn starts a trace without the conversation's `threadId`, that turn detaches from the conversation.
-  - **Putting the full history only on the root.** The root `input` is the current turn. Prior turns and tool results belong on the generation's message list — otherwise you can't see what the model actually received.
-  - **Reusing one trace id to "continue" a conversation.** Ingest is append-only per `trace.id`; reuse grafts turns together instead of grouping separate traces by thread.
-  - **Incremental-ingesting one turn.** Send each turn as one complete trace when it finishes; do not stream sparse partial deliveries under the same `trace.id` expecting later calls to patch the root or re-run analysis. Retries of the same complete payload are safe.
+  - **Cramming every turn into one trace**: a conversation is not one execution. One giant trace loses per-turn timing, inputs, and outputs, and grows unbounded.
+  - **Losing the thread id across processes**: if a worker or async turn starts a trace without the conversation’s `threadId`, that turn detaches from the conversation.
+  - **Putting the full history only on the root**: the root `input` is the current turn. Prior turns and tool results belong on the generation’s message list, otherwise you can’t see what the model received.
+  - **Reusing one trace id to “continue” a conversation**: ingest is append-only per `trace.id`; reuse grafts turns together instead of grouping separate traces by thread.
+  - **Incremental-ingesting one turn**: send each turn as one complete trace when it finishes; don’t stream sparse partial deliveries under the same `trace.id` expecting later calls to patch the root or re-run analysis. Retries of the same complete payload are safe.
 </Warning>
 
 ## Related pages
@@ -274,7 +274,7 @@ Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a 
     The exact shape and fields Lemma reads.
   </Card>
   <Card title="Building high-quality traces" icon="/icons/circle-check.svg" href="/guides/building-high-quality-traces">
-    Bad → better → best examples for the ideal instrumentation path.
+    Bad, better, and best examples for the ideal instrumentation path.
   </Card>
   <Card title="Generations" icon="/icons/sparkles.svg" href="/tracing/instrumentation/generations">
     Capture model, full messages, and completion.

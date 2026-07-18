@@ -3,9 +3,18 @@ title: "Spans"
 description: "Trace retrieval, ranking, and app logic as child spans"
 ---
 
-A **span** is a unit of work inside a trace that is not an LLM call or a tool call: retrieval, reranking, planning, validation, parsing, a database query, or any app operation you want to see and time.
+A _span_ is a unit of work inside a trace that is not a large language model (LLM) call or a tool call. Record a span for any app operation you want to see and time:
+
+- retrieval
+- reranking
+- planning
+- validation
+- parsing
+- a database query
 
 ## Record a completed span
+
+Record a span once the work has finished and you already have its input and output:
 
 <Tabs>
   <Tab title="TypeScript">
@@ -94,19 +103,18 @@ The shorter handle form is useful when you also want to attach child work to the
     span = trace.start_span(name="retrieve-context")
 
     docs = search_docs(query)
-    tool = trace.start_tool(
+    span.record_tool(
         name="search_docs",
         input={"query": query},
-        parent_id=span.id,
+        output=docs,
     )
-    tool.end(output=docs)
 
     span.end(output={"count": len(docs)}, duration_ms=250)
     ```
   </Tab>
 </Tabs>
 
-Pass `durationMs` / `duration_ms` on `trace.recordSpan(...)` / `trace.record_span(...)`, `trace.recordGeneration(...)` / `trace.record_generation(...)`, `trace.recordTool(...)` / `trace.record_tool(...)`, or span `end(...)` when you already measured the operation. If you omit child duration, Lemma splits the parent span's remaining unclaimed duration equally across siblings that also omitted duration. For handle spans, duration is only finalized when the handle ends.
+Pass `durationMs` / `duration_ms` when you already measured the operation. It works on the record helpers (`recordSpan`, `recordGeneration`, `recordTool` and their snake_case forms) and on span `end(...)`. If you omit child duration, Lemma splits the parent span’s remaining unclaimed duration equally across siblings that also omitted duration. For handle spans, duration is only finalized when the handle ends.
 
 The same handle pattern exists for typed children: use `trace.startTool(...)` / `trace.start_tool(...)` for live tool calls and `trace.startGeneration(...)` / `trace.start_generation(...)` for live model calls.
 

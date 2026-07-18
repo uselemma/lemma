@@ -9,7 +9,7 @@ Every agent execution becomes a **trace**: a complete record of what happened, h
   **One agent execution = one trace.** The root is the trace record; LLM calls, tool calls, and app logic are child spans inside it. See the [trace contract](/reference/trace-contract).
 </Note>
 
-## The model
+## How a trace is structured
 
 A trace is a tree of spans:
 
@@ -20,11 +20,11 @@ support-agent              <- trace root (input, output)
 `- final-answer            <- generation
 ```
 
-- [Traces](/tracing/instrumentation/traces) - the root record for one execution.
-- [Generations](/tracing/instrumentation/generations) - LLM calls.
-- [Tool calls](/tracing/instrumentation/tool-calls) - tool invocations.
-- [Spans](/tracing/instrumentation/spans) - retrieval, ranking, app logic.
-- [Threads & context](/tracing/instrumentation/context) - conversations, users, metadata.
+- [Traces](/tracing/instrumentation/traces): the root record for one execution
+- [Generations](/tracing/instrumentation/generations): LLM calls
+- [Tool calls](/tracing/instrumentation/tool-calls): tool invocations
+- [Spans](/tracing/instrumentation/spans): retrieval, ranking, app logic
+- [Threads & context](/tracing/instrumentation/context): conversations, users, metadata
 
 ## Pick your path
 
@@ -36,11 +36,11 @@ support-agent              <- trace root (input, output)
 
 ## How Lemma reads your traces
 
-Lemma is an opinionated sink: it reads a specific trace shape to power input/output display, model visibility, timing, tool visibility, threads, and automated issue detection. The [trace contract](/reference/trace-contract) documents exactly what it reads and how each SDK helper maps to it.
+Lemma reads a specific trace shape to power input/output display, model visibility, timing, tool visibility, threads, and automated issue detection. The [trace contract](/reference/trace-contract) documents exactly what it reads and how each SDK helper maps to it.
 
 ## Next steps
 
-- [Setup](/tracing/instrumentation/setup) - install the SDK and point it at Lemma.
-- [Trace contract](/reference/trace-contract) - the exact shape Lemma reads.
-- [Building high-quality traces](/guides/building-high-quality-traces) - the ideal instrumentation path, with bad → better → best examples.
-- [Troubleshooting](/tracing/troubleshooting/common-issues) - fix missing spans, flat traces, and delayed exports.
+- [Setup](/tracing/instrumentation/setup): install the SDK and point it at Lemma
+- [Trace contract](/reference/trace-contract): the exact shape Lemma reads
+- [Building high-quality traces](/guides/building-high-quality-traces): the ideal instrumentation path, with bad → better → best examples
+- [Troubleshooting](/tracing/troubleshooting/common-issues): fix missing spans, flat traces, and delayed exports

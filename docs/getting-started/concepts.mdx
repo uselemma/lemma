@@ -3,7 +3,7 @@ title: "Concepts"
 description: "Core concepts and terminology in Lemma"
 ---
 
-Four nouns describe everything in Lemma. They are the same words used in the dashboard and across these docs.
+Six terms describe everything in Lemma: trace, span, generation, tool call, thread, and project. They are the same words used in the dashboard and across these docs.
 
 <Note>
   **One agent execution = one trace.** The root is the trace record; LLM calls, tool calls, and app logic are child spans inside it.
@@ -48,13 +48,13 @@ A single agent execution produces a tree. The root is the trace record; everythi
 
 ## Trace
 
-A **trace** is a single end-to-end execution of your agent, from the user's input to the final response. It carries the input, the output (or error), timing, and the tree of spans inside it. Each trace has a unique trace ID.
+A **trace** is a single end-to-end execution of your agent, from the user’s input to the final response. It records the input, the output (or error), timing, and the tree of spans inside it. Each trace has a unique trace ID.
 
 If every model or tool call shows up as its own trace, the child work ran without the root trace handle or trace IDs. Create the root trace first, then record child spans through that trace or an explicit parent span handle. See [Traces](/tracing/instrumentation/traces).
 
 ## Span
 
-A **span** is one unit of work inside a trace - retrieval, ranking, parsing, a database query, or any app operation. Spans nest: a parent span can contain child spans, forming the execution tree. See [Spans](/tracing/instrumentation/spans).
+A **span** is one unit of work inside a trace: retrieval, ranking, parsing, a database query, or any app operation. Spans nest: a parent span can contain child spans, forming the execution tree. See [Spans](/tracing/instrumentation/spans).
 
 ## Generation
 
@@ -62,7 +62,7 @@ A **generation** is a span that represents a single LLM call. Typing a span as a
 
 ## Tool call
 
-A **tool call** is a span that represents a single tool invocation - its name, arguments, and result. Tool execution usually happens in your code, so it must be recorded explicitly to be visible. See [Tool calls](/tracing/instrumentation/tool-calls).
+A **tool call** is a span that represents a single tool invocation: its name, arguments, and result. Tool execution happens in your code, so you must record it explicitly to make it visible. See [Tool calls](/tracing/instrumentation/tool-calls).
 
 ## Thread
 

@@ -3,15 +3,22 @@ title: "Building high-quality traces"
 description: "The ideal instrumentation path, with bad → better → best examples for structure, timing, nesting, generations, and tools"
 ---
 
-A high-quality Lemma trace is not just “data arrived.” It is a complete, nested record of one agent execution: every span has real timing, every successful span has input and output, generations carry the full message list sent to the model, and tools show what they were asked and what they returned.
+A high-quality Lemma trace is more than “data arrived.” It is a complete, nested record of one agent execution:
+
+- Every span has real timing
+- Every successful span has input and output
+- Generations carry the full message list sent to the model
+- Tools show what they were asked and what they returned
 
 This page is the pedagogical ideal path. For the exact ingest fields, validation rules, and client-vs-normalization mapping, see the [trace contract](/reference/trace-contract). Use [Common issues](/tracing/troubleshooting/common-issues) when something is missing or malformed.
 
 <Note>
-  **One agent execution = one trace.** Child LLM calls, tool calls, retrieval, and app logic belong inside that root — not as separate top-level traces.
+  **One agent execution = one trace.** Child large language model (LLM) calls, tool calls, retrieval, and app logic belong inside that root, not as separate top-level traces.
 </Note>
 
 ## The ideal trace
+
+Here is one agent execution recorded to the ideal standard, from the root down to each tool and generation:
 
 <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px 18px", margin: "20px 0", fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace", fontSize: 12.5, lineHeight: 1.5 }}>
 
@@ -35,7 +42,7 @@ This page is the pedagogical ideal path. For the exact ingest fields, validation
         <span style={{ background: "#fffbeb", color: "#d97706", border: "1px solid #fde68a", borderRadius: 6, padding: "1px 8px", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap" }}>span</span>
         <span style={{ fontWeight: 600, color: "#b45309" }}>retrieve-context</span>
         <span style={{ flex: 1 }} />
-        <span style={{ color: "#9ca3af", fontSize: 11, whiteSpace: "nowrap" }}>412ms</span>
+        <span style={{ color: "#9ca3af", fontSize: 11, whiteSpace: "nowrap" }}>412 ms</span>
       </div>
       <div style={{ marginTop: 2, fontSize: 11, color: "#6b7280" }}>
         <div><span style={{ color: "#9ca3af" }}>input:&nbsp;&nbsp;</span>{'{ "query": "order 1843 status" }'}</div>
@@ -50,7 +57,7 @@ This page is the pedagogical ideal path. For the exact ingest fields, validation
           <span style={{ background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: 6, padding: "1px 8px", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap" }}>tool</span>
           <span style={{ fontWeight: 600, color: "#15803d" }}>search_docs</span>
           <span style={{ flex: 1 }} />
-          <span style={{ color: "#9ca3af", fontSize: 11, whiteSpace: "nowrap" }}>183ms</span>
+          <span style={{ color: "#9ca3af", fontSize: 11, whiteSpace: "nowrap" }}>183 ms</span>
         </div>
         <div style={{ marginTop: 2, fontSize: 11, color: "#6b7280" }}>
           <div><span style={{ color: "#9ca3af" }}>args:&nbsp;&nbsp;&nbsp;</span>{'{ "query": "order 1843 status" }'}</div>
@@ -63,7 +70,7 @@ This page is the pedagogical ideal path. For the exact ingest fields, validation
           <span style={{ background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: 6, padding: "1px 8px", fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap" }}>tool</span>
           <span style={{ fontWeight: 600, color: "#15803d" }}>lookup_order</span>
           <span style={{ flex: 1 }} />
-          <span style={{ color: "#9ca3af", fontSize: 11, whiteSpace: "nowrap" }}>96ms</span>
+          <span style={{ color: "#9ca3af", fontSize: 11, whiteSpace: "nowrap" }}>96 ms</span>
         </div>
         <div style={{ marginTop: 2, fontSize: 11, color: "#6b7280" }}>
           <div><span style={{ color: "#9ca3af" }}>args:&nbsp;&nbsp;&nbsp;</span>{'{ "orderId": "1843" }'}</div>
@@ -81,7 +88,7 @@ This page is the pedagogical ideal path. For the exact ingest fields, validation
         <span style={{ color: "#9ca3af", fontSize: 11, whiteSpace: "nowrap" }}>1.87s</span>
       </div>
       <div style={{ marginTop: 2, fontSize: 11, color: "#6b7280" }}>
-        <div><span style={{ color: "#9ca3af" }}>model:&nbsp;&nbsp;&nbsp;&nbsp;</span>gpt-4o</div>
+        <div><span style={{ color: "#9ca3af" }}>model:&nbsp;&nbsp;&nbsp;&nbsp;</span>anthropic/claude-opus-4-7</div>
         <div><span style={{ color: "#9ca3af" }}>messages:&nbsp;</span>[system, prior turns, user, tool results]</div>
         <div><span style={{ color: "#9ca3af" }}>output:&nbsp;&nbsp;&nbsp;</span>"It ships tomorrow and arrives Friday."</div>
       </div>
@@ -93,11 +100,13 @@ This page is the pedagogical ideal path. For the exact ingest fields, validation
 
 What “ideal” means on each node:
 
-- **Root** — current user input, final answer (or error), measured duration
-- **Spans / tools** — real input and output, nested under the step that caused them, measured start → end
-- **Generations** — model name plus the **full message list** sent to that call (system, prior turns, tool results, current user), not just the latest user string
+- **Root**: current user input, final answer (or error), measured duration
+- **Spans / tools**: real input and output, nested under the step that caused them, measured start → end
+- **Generations**: model name plus the full message list sent to that call (system, prior turns, tool results, current user), not only the latest user string
 
 ## Quality checklist
+
+Every high-quality trace holds to these rules:
 
 | Rule | Why it matters |
 | --- | --- |
@@ -117,7 +126,7 @@ What “ideal” means on each node:
 
 ## Structure and nesting
 
-**Bad** — each call is its own top-level trace:
+The worst version makes each call its own top-level trace:
 
 ```text
 draft-reply                ← separate trace
@@ -125,7 +134,7 @@ search_docs                ← separate trace
 final-answer               ← separate trace
 ```
 
-**Better** — one root, but everything is flat under it:
+A better version keeps one root, but everything stays flat under it:
 
 ```text
 support-agent
@@ -136,7 +145,7 @@ support-agent
 └── final-answer
 ```
 
-**Best** — one root, children nested under the step that performed them:
+The best version nests each child under the step that performed it:
 
 ```text
 support-agent
@@ -152,19 +161,19 @@ Wrap the run with `lemma.trace()` and record children from the trace or span han
 
 ## Input / output
 
-**Bad** — named span with nothing useful:
+The worst version is a named span with nothing useful:
 
 ```text
 retrieve-context           ← no input, no output
 ```
 
-**Better** — partial payload:
+A better version carries a partial payload:
 
 ```text
 retrieve-context           ← input only (or output only)
 ```
 
-**Best** — every successful span carries both sides:
+The best version gives every successful span both sides:
 
 ```text
 retrieve-context           ← input + output
@@ -174,19 +183,19 @@ Failures should still keep the input and record the error instead of an output. 
 
 ## Timing
 
-**Bad** — no duration at all:
+The worst version has no duration at all:
 
 ```text
 retrieve-context           ← duration missing
 ```
 
-**Better** — duration inferred from the parent:
+A better version infers duration from the parent:
 
 ```text
 retrieve-context           ← duration inferred
 ```
 
-**Best** — measured from real start → end:
+The best version measures duration from real start → end:
 
 ```text
 retrieve-context           ← duration from start → end
@@ -198,20 +207,20 @@ Prefer live handles (`startSpan` / `start_span`, and the matching tool and gener
 
 Record a failure on the exact span, generation, or tool where it happened. Keep the input, pass the error instead of an output, and end the span so timing remains accurate.
 
-**Bad** — the exception is swallowed and the failed operation is missing:
+The worst version swallows the exception and omits the failed operation:
 
 ```text
 support-agent              ← lookup_order failed, but no failed span
 ```
 
-**Better** — the root fails, but the source is unclear:
+A better version fails the root, but leaves the source unclear:
 
 ```text
 support-agent              ← error: "Order service unavailable"
 └── lookup_order           ← no error recorded here
 ```
 
-**Best** — the child records its input, error, and duration; the root also fails when the execution cannot recover:
+The best version records the child’s input, error, and duration, and fails the root when the execution cannot recover:
 
 ```text
 support-agent              ← error: "Order service unavailable"
@@ -224,21 +233,21 @@ See [Errors in the trace contract](/reference/trace-contract#errors) for the exa
 
 ## Generations
 
-For each LLM call, record the **full ordered message list sent to that call** — system prompt, prior conversation turns, tool results, and the current user message — not only the latest user string. That list is what the model saw; the root trace input is only the current user turn.
+For each LLM call, record the full ordered message list sent to that call (system prompt, prior conversation turns, tool results, and the current user message), not only the latest user string. That list is what the model saw; the root trace input is only the current user turn.
 
-**Bad** — little more than a name:
+The worst version is little more than a name:
 
 ```text
 answer                     ← generation (name only)
 ```
 
-**Better** — model and latest user string only:
+A better version adds the model and the latest user string only:
 
 ```text
 answer                     ← model + current message + output
 ```
 
-**Best** — model, complete message history for this call, and the response:
+The best version records the model, the complete message history for this call, and the response:
 
 ```text
 answer                     ← model + full messages + output + duration
@@ -248,7 +257,7 @@ answer                     ← model + full messages + output + duration
 [
   { "role": "system", "content": "You are a support agent." },
   { "role": "user", "content": "Hi, I ordered last week" },
-  { "role": "assistant", "content": "Happy to help — what's the order id?" },
+  { "role": "assistant", "content": "Happy to help, what's the order id?" },
   { "role": "user", "content": "Where is my order #1843?" },
   { "role": "tool", "content": "{\"status\":\"shipped\",\"eta\":\"Fri\"}" }
 ]
@@ -258,7 +267,7 @@ In the SDK, pass that full list as both `input` and `llmInputMessages` / `llm_in
 
 ## Tool calls
 
-**Bad** — tools ran but were never recorded:
+The worst version runs tools but never records them:
 
 ```text
 support-agent
@@ -266,13 +275,13 @@ support-agent
 └── final-answer           ← search_docs ran, but no tool span
 ```
 
-**Better** — tool span exists, but opaque:
+A better version has a tool span, but leaves it opaque:
 
 ```text
 search_docs                ← tool (name only)
 ```
 
-**Best** — typed tool under the correct parent, with args and result:
+The best version records a typed tool under the correct parent, with args and result:
 
 ```text
 retrieve-context
@@ -283,7 +292,7 @@ Record each completed tool with `trace.recordTool({ name, input, output })` / `t
 
 ## Happy-path example
 
-Use live handles so start → end establishes timing. Put the **current user message** on the root, and the **full model message list** on the generation.
+Use live handles so start → end establishes timing. Put the current user message on the root, and the full model message list on the generation.
 
 <Tabs>
   <Tab title="TypeScript">
@@ -322,7 +331,7 @@ Use live handles so start → end establishes timing. Put the **current user mes
 
         const generation = trace.startGeneration({
           name: "answer",
-          model: "gpt-4o",
+          model: "anthropic/claude-opus-4-7",
           input: messages,
           llmInputMessages: messages,
         });
@@ -366,7 +375,7 @@ Use live handles so start → end establishes timing. Put the **current user mes
 
         generation = trace.start_generation(
             name="answer",
-            model="gpt-4o",
+            model="anthropic/claude-opus-4-7",
             input=messages,
             llm_input_messages=messages,
         )

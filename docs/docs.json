@@ -53,7 +53,6 @@
             "pages": [
               "getting-started/introduction",
               "getting-started/quickstart",
-              "getting-started/agent-skill",
               "getting-started/concepts"
             ]
           },
@@ -268,6 +267,10 @@
     {
       "source": "/mcp/reference",
       "destination": "/connections/mcp"
+    },
+    {
+      "source": "/getting-started/agent-skill",
+      "destination": "/getting-started/quickstart"
     }
   ]
 }

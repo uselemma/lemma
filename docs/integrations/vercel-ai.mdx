@@ -7,6 +7,8 @@ Use `vercelAI()` when your app calls `generateText`, `streamText`, or an AI SDK 
 
 ## Install
 
+Install the tracing package alongside the AI SDK and Zod:
+
 ```bash
 npm install @uselemma/tracing ai zod
 ```
@@ -116,12 +118,14 @@ for await (const _part of result.fullStream) {
 
 ## What Lemma records
 
+Each AI SDK event maps to a Lemma record:
+
 | AI SDK event | Lemma record |
 | --- | --- |
 | Model call | Generation with model, provider, messages, output text, and duration |
 | Tool execution | Tool call with name, input, output or error, and duration |
 
-AI SDK v7 provides model and tool durations directly. AI SDK v6 provides tool execution durations; model-call durations are inferred from start and finish timestamps when the AI SDK does not provide an explicit duration.
+AI SDK v7 reports model and tool durations directly. AI SDK v6 reports tool execution durations; model-call durations are inferred from start and finish timestamps when the AI SDK does not report an explicit duration.
 
 Use `telemetry.functionId` / `experimental_telemetry.functionId` for the agent name, or set it on the integration with `vercelAI({ agentName: "support-agent" })`.
 

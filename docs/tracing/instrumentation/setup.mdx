@@ -5,81 +5,83 @@ description: "Install the Lemma SDK and send traces directly to the Lemma API"
 
 The Lemma SDK sends trace JSON directly to the Lemma API.
 
-## 1. Install
+<Steps>
+  <Step title="Install the SDK">
+    <Tabs>
+      <Tab title="TypeScript">
+        ```bash
+        npm install @uselemma/tracing
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```bash
+        pip install uselemma-tracing
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
 
-<Tabs>
-  <Tab title="TypeScript">
+  <Step title="Set environment variables">
+    Find your API key and project ID in [Lemma project settings](https://platform.uselemma.ai).
+
     ```bash
-    npm install @uselemma/tracing
+    export LEMMA_API_KEY="lma_your_key_here"
+    export LEMMA_PROJECT_ID="proj_your_id_here"
     ```
-  </Tab>
-  <Tab title="Python">
-    ```bash
-    pip install uselemma-tracing
-    ```
-  </Tab>
-</Tabs>
 
-## 2. Set environment variables
+    <Note>
+      The SDK sends to `https://api.uselemma.ai` by default. Pass `baseUrl` to `new Lemma({ baseUrl })` only when you need a custom endpoint.
+    </Note>
+  </Step>
 
-Find your API key and project ID in [Lemma project settings](https://platform.uselemma.ai).
+  <Step title="Create a client">
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript
+        import { Lemma } from "@uselemma/tracing";
 
-```bash
-export LEMMA_API_KEY="lma_..."
-export LEMMA_PROJECT_ID="proj_..."
-```
+        export const lemma = new Lemma();
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        from uselemma_tracing import Lemma
 
-<Note>
-  The SDK sends to `https://api.uselemma.ai` by default. Pass `baseUrl` to `new Lemma({ baseUrl })` only when you need a custom endpoint.
-</Note>
+        lemma = Lemma()
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
 
-## 3. Create a client
+  <Step title="Send your first trace">
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript
+        await lemma.trace(
+          {
+            name: "hello-agent",
+            input: "What is the capital of France?",
+          },
+          async () => {
+            return "Paris.";
+          },
+        );
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        lemma.trace(
+            "hello-agent",
+            lambda trace: "Paris.",
+            input="What is the capital of France?",
+        )
+        ```
+      </Tab>
+    </Tabs>
 
-<Tabs>
-  <Tab title="TypeScript">
-    ```typescript
-    import { Lemma } from "@uselemma/tracing";
-
-    export const lemma = new Lemma();
-    ```
-  </Tab>
-  <Tab title="Python">
-    ```python
-    from uselemma_tracing import Lemma
-
-    lemma = Lemma()
-    ```
-  </Tab>
-</Tabs>
-
-## 4. Send your first trace
-
-<Tabs>
-  <Tab title="TypeScript">
-    ```typescript
-    await lemma.trace(
-      {
-        name: "hello-agent",
-        input: "What is the capital of France?",
-      },
-      async () => {
-        return "Paris.";
-      },
-    );
-    ```
-  </Tab>
-  <Tab title="Python">
-    ```python
-    lemma.trace(
-        "hello-agent",
-        lambda trace: "Paris.",
-        input="What is the capital of France?",
-    )
-    ```
-  </Tab>
-</Tabs>
-
-Open the [Lemma dashboard](https://platform.uselemma.ai) -> **Traces**. Your trace appears within seconds.
+    Open the Lemma dashboard and select **Traces**. Your trace appears at the top of the list.
+  </Step>
+</Steps>
 
 ## Next steps
 

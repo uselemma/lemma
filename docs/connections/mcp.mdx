@@ -3,7 +3,7 @@ title: "MCP"
 description: "Connect your AI coding tools to Lemma using the Model Context Protocol"
 ---
 
-Give your coding agent direct access to your traces, metrics, and monitors. Instead of switching between your editor and the Lemma dashboard, your agent can pull the exact runs and errors it needs to understand what's going wrong and fix it in place.
+Give your coding agent direct access to your traces, metrics, and monitors. Instead of switching between your editor and the Lemma dashboard, your agent can pull the exact runs and errors it needs to understand what’s going wrong and fix it in place.
 
 ## Prerequisites
 
@@ -17,7 +17,7 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
     Go to your project settings in the Lemma dashboard and copy your API key.
 
     <Warning>
-      Copy your key immediately after creating it — you won't be able to see it again.
+      Copy your key immediately after creating it. You won’t be able to see it again.
     </Warning>
   </Step>
 
@@ -32,7 +32,7 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
             "lemma": {
               "url": "https://api.uselemma.ai/mcp",
               "headers": {
-                "Authorization": "Bearer <your-api-key>"
+                "Authorization": "Bearer your_api_key_here"
               }
             }
           }
@@ -50,7 +50,7 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
               "type": "http",
               "url": "https://api.uselemma.ai/mcp",
               "headers": {
-                "Authorization": "Bearer <your-api-key>"
+                "Authorization": "Bearer your_api_key_here"
               }
             }
           }
@@ -66,7 +66,7 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
         ```bash
         claude mcp add --transport http lemma \
           https://api.uselemma.ai/mcp \
-          --header "Authorization: Bearer <your-api-key>"
+          --header "Authorization: Bearer your_api_key_here"
         ```
       </Tab>
 
@@ -79,7 +79,7 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
             "lemma": {
               "url": "https://api.uselemma.ai/mcp",
               "headers": {
-                "Authorization": "Bearer <your-api-key>"
+                "Authorization": "Bearer your_api_key_here"
               }
             }
           }
@@ -88,13 +88,13 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
       </Tab>
     </Tabs>
 
-    Replace `<your-api-key>` with the key from your project settings.
+    Replace `your_api_key_here` with the key from your project settings.
   </Step>
 
   <Step title="Try it out">
     Ask your agent:
 
-    ```
+    ```text
     Use Lemma to show me my last 5 traces, including any errors.
     ```
   </Step>

@@ -3,14 +3,9 @@ title: "LangChain"
 description: "Record LangChain runs with Lemma callback handlers"
 ---
 
-Use Lemma's LangChain integration when your app runs chains, chat models,
-retrievers, tools, or agents through LangChain callbacks. The integration
-creates one Lemma trace for the root run, records LLM calls as generations,
-tools as tool calls, retrievers as spans, and nested
-chains as child spans.
+Use Lemma’s LangChain integration when your app runs chains, chat models, retrievers, tools, or agents through LangChain callbacks. The integration creates one Lemma trace for the root run, records LLM calls as generations, tools as tool calls, retrievers as spans, and nested chains as child spans.
 
-You do not need to wrap LangChain calls in `lemma.trace()`. Pass the callback
-handler through LangChain's `callbacks` option.
+You do not need to wrap LangChain calls in `lemma.trace()`. Pass the callback handler through LangChain’s `callbacks` option.
 
 ## TypeScript
 
@@ -28,7 +23,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import { langChain } from "@uselemma/tracing";
 
 const model = new ChatOpenAI({
-  model: "gpt-4o",
+  model: "anthropic/claude-opus-4-7",
   callbacks: [
     langChain({
       apiKey: process.env.LEMMA_API_KEY,
@@ -61,7 +56,7 @@ from langchain_openai import ChatOpenAI
 from uselemma_tracing import langchain
 
 model = ChatOpenAI(
-    model="gpt-4o",
+    model="anthropic/claude-opus-4-7",
     callbacks=[
         langchain(
             api_key=os.environ["LEMMA_API_KEY"],
@@ -79,6 +74,8 @@ def call_agent(user_message: str):
 
 ## What Lemma records
 
+Each LangChain callback maps to a Lemma record:
+
 | LangChain callback | Lemma record |
 | --- | --- |
 | Root chain start/end | One Lemma trace named from `agentName` or the LangChain run name |
@@ -87,14 +84,11 @@ def call_agent(user_message: str):
 | Retriever start/end | Span with query input, output, timing, and parent ID |
 | Nested chain start/end | Child span preserving LangChain parent run IDs |
 
-Use `langChain({ recordInputs: false, recordOutputs: false })` in TypeScript or
-`langchain(record_inputs=False, record_outputs=False)` in Python to avoid
-sending prompts, tool inputs, tool outputs, or model output text.
+Use `langChain({ recordInputs: false, recordOutputs: false })` in TypeScript or `langchain(record_inputs=False, record_outputs=False)` in Python to avoid sending prompts, tool inputs, tool outputs, or model output text.
 
 ## Debugging
 
-Enable debug mode while developing to confirm that spans arrive live and stay
-nested under the expected parent:
+Enable debug mode while developing to confirm that spans arrive live and stay nested under the expected parent:
 
 ```typescript
 import { enableDebugMode } from "@uselemma/tracing";
