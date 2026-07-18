@@ -33,6 +33,16 @@ export {
   type LemmaLangGraphIntegrationOptions,
 } from "./langchain";
 export {
+  LemmaMastraExporter,
+  mastra,
+  type LemmaMastraIntegrationOptions,
+  type MastraErrorInfo,
+  type MastraExportedSpan,
+  type MastraIntegrationOptions,
+  type MastraSpanType,
+  type MastraTracingEvent,
+} from "./mastra";
+export {
   openAIAgents,
   type OpenAIAgentsIntegrationOptions,
   type OpenAIAgentsSpan,
