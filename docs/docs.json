@@ -23,9 +23,6 @@
       "source": "/fonts/britti-sans-regular.woff2"
     }
   },
-  "icons": {
-    "library": "lucide"
-  },
   "logo": {
     "light": "/logo-light.svg",
     "dark": "/logo-dark.svg"
@@ -51,7 +48,7 @@
         "groups": [
           {
             "group": "Getting Started",
-            "icon": "rocket",
+            "icon": "/icons/rocket.svg",
             "expanded": true,
             "pages": [
               "getting-started/introduction",
@@ -62,7 +59,7 @@
           },
           {
             "group": "Instrumentation",
-            "icon": "workflow",
+            "icon": "/icons/workflow.svg",
             "expanded": true,
             "pages": [
               "tracing/overview",
@@ -92,7 +89,7 @@
           },
           {
             "group": "Integrations",
-            "icon": "plug-zap",
+            "icon": "/icons/plug-zap.svg",
             "expanded": true,
             "pages": [
               "integrations/openai-agents",
@@ -103,7 +100,7 @@
           },
           {
             "group": "Connections",
-            "icon": "plug",
+            "icon": "/icons/plug.svg",
             "expanded": true,
             "pages": [
               "connections/mcp",
@@ -124,7 +121,7 @@
           },
           {
             "group": "Migration guides",
-            "icon": "arrow-right-left",
+            "icon": "/icons/arrow-right-left.svg",
             "pages": [
               "guides/migrations/raindrop",
               "guides/migrations/langfuse",
