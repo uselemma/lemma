@@ -159,7 +159,7 @@ await lemma.ingest(context, { startedAt });
 
 ## Vercel AI SDK
 
-Pass `vercelAI()` to the AI SDK telemetry integrations option. The integration creates and closes the Lemma trace for the AI SDK run, extracts the prompt/messages as trace input, and records model calls and tool executions as child spans. AI SDK v7 uses `telemetry`; AI SDK v6 uses `experimental_telemetry`.
+Pass a fresh `vercelAI()` to the AI SDK telemetry integrations option for each operation. The integration creates and closes the Lemma trace for the AI SDK run, puts the current user turn on the root, promotes `threadId` / `userId` from telemetry metadata, and records model calls and tool executions as child spans. AI SDK v7 uses `telemetry`; AI SDK v6 uses `experimental_telemetry`.
 
 ```typescript
 import { generateText } from "ai";
@@ -170,16 +170,25 @@ const lemmaTelemetry = vercelAI({
   projectId: process.env.LEMMA_PROJECT_ID,
 });
 
-const result = await generateText({
-  model,
-  prompt: userMessage,
-  telemetry: {
-    functionId: "support-agent",
-    integrations: [lemmaTelemetry],
-  },
-});
-
-return result.text;
+try {
+  const result = await generateText({
+    model,
+    prompt: userMessage,
+    telemetry: {
+      functionId: "support-agent",
+      metadata: {
+        threadId: conversationId,
+        userId: user.id,
+      },
+      integrations: [lemmaTelemetry],
+    },
+  });
+  await lemmaTelemetry.flush();
+  return result.text;
+} catch (error) {
+  await lemmaTelemetry.fail(error);
+  throw error;
+}
 ```
 
 For AI SDK v6, pass the same helper through `experimental_telemetry`:
@@ -190,6 +199,10 @@ await generateText({
   prompt: userMessage,
   experimental_telemetry: {
     functionId: "support-agent",
+    metadata: {
+      threadId: conversationId,
+      userId: user.id,
+    },
     integrations: [lemmaTelemetry],
   },
 });
@@ -198,6 +211,8 @@ await generateText({
 Use `telemetry.functionId` / `experimental_telemetry.functionId` for the agent name, or set it on the integration with `vercelAI({ agentName: "support-agent" })`.
 
 Use `vercelAI({ recordInputs: false, recordOutputs: false })` to avoid sending prompts, tool inputs, tool outputs, or model output text.
+
+Call `fail(error)` when the AI SDK call throws before a terminal callback, `flush()` to await ingest delivery, and `shutdown()` in short-lived runtimes. Do not share one integration across concurrent AI SDK operations.
 
 For advanced cases, you can still attach to an existing trace by passing `vercelAI({ trace })` or by calling AI SDK inside a `lemma.trace()` callback. When you pass a trace handle, the integration ends it from the AI SDK terminal callback: `onEnd` in AI SDK v7 and `onFinish` in AI SDK v6. When you use the callback form of `lemma.trace()`, the callback owns trace closure.
 
