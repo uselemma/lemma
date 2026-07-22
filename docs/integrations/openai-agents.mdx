@@ -29,7 +29,7 @@ import { openAIAgents } from "@uselemma/tracing";
 addTraceProcessor(openAIAgents());
 ```
 
-You can also pass credentials directly:
+You can also pass credentials and identity options directly:
 
 ```typescript
 addTraceProcessor(
@@ -37,6 +37,9 @@ addTraceProcessor(
     apiKey: process.env.LEMMA_API_KEY,
     projectId: process.env.LEMMA_PROJECT_ID,
     baseUrl: process.env.LEMMA_BASE_URL,
+    metadata: { service: "support" },
+    threadIdKey: "threadId",
+    userIdKey: "userId",
   }),
 );
 ```
@@ -74,7 +77,7 @@ from uselemma_tracing import instrument_openai_agents
 instrument_openai_agents()
 ```
 
-You can also pass credentials directly:
+You can also pass credentials and identity options directly:
 
 ```python
 import os
@@ -85,6 +88,9 @@ instrument_openai_agents(
     api_key=os.environ["LEMMA_API_KEY"],
     project_id=os.environ["LEMMA_PROJECT_ID"],
     base_url=os.getenv("LEMMA_BASE_URL", "https://api.uselemma.ai"),
+    metadata={"service": "support"},
+    thread_id_key="thread_id",
+    user_id_key="user_id",
 )
 ```
 
@@ -103,23 +109,61 @@ async def call_agent(user_message: str):
     return result.final_output
 ```
 
+## Root input, output, user, and thread
+
+Both TypeScript and Python processors promote the same root fields on the Lemma
+trace:
+
+| Field | Source |
+| --- | --- |
+| Root input | First generation/response messages — last user message content |
+| Root output | Last successful generation/response output |
+| Root error | Hard errors on terminal span types (`agent`, `task`, `guardrail`, `custom`) — not recovered soft tool errors |
+| `threadId` / `thread_id` | OpenAI Agents `group_id`, then configurable metadata key |
+| `userId` / `user_id` | Metadata (`userId`, `user_id`, or `resourceId` by default; override with `userIdKey` / `user_id_key`) |
+
+Soft tool failures (`isError` / `is_error` / Mastra `error: true`) mark the tool
+span as `ERROR` without failing the root when a later generation succeeds.
+
+## Flush and shutdown
+
+Call `forceFlush()` / `force_flush()` (or `shutdown()`) to finalize any still-open
+traces exactly once. A later `onTraceEnd` / `on_trace_end` for a flushed trace is
+a no-op, so spans are never duplicated in the append-only ingest store.
+
+```typescript
+const processor = openAIAgents();
+addTraceProcessor(processor);
+// ...
+await processor.forceFlush();
+```
+
+```python
+from uselemma_tracing import openai_agents
+
+processor = openai_agents()
+# register processor, run agents...
+processor.force_flush()
+```
+
 ## What Lemma records
 
 | OpenAI Agents event | Lemma record |
 | --- | --- |
-| Trace start/end | One Lemma trace named from the OpenAI Agents trace |
+| Trace start/end | One Lemma trace named from the OpenAI Agents trace, with root I/O and timing from span bounds |
 | Generation or response span | Generation with model, input, output, timing, and OpenAI span attributes |
 | Function span | Tool call with tool name, input, output or error, timing, and parent ID |
 | Other span types | Regular span with OpenAI trace/span fields preserved in attributes |
 
-OpenAI Agents trace `group_id` is recorded as the Lemma `threadId`, so runs in
+OpenAI Agents trace `group_id` is recorded as the Lemma thread id, so runs in
 the same conversation stay grouped.
 
 ## Privacy
 
 The integration records prompts, tool inputs, tool outputs, and model output by
 default. Disable input/output recording when you need structure and timings
-without payload contents:
+without payload contents. When `recordOutputs` / `record_outputs` is false, root
+error status is kept but the message is redacted to `"error"`.
 
 ```typescript
 addTraceProcessor(openAIAgents({ recordInputs: false, recordOutputs: false }));

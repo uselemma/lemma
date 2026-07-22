@@ -224,13 +224,21 @@ Register the Lemma processor with the OpenAI Agents SDK tracing provider:
 import { addTraceProcessor } from "@openai/agents";
 import { openAIAgents } from "@uselemma/tracing";
 
-addTraceProcessor(openAIAgents());
+const processor = openAIAgents({
+  metadata: { service: "support" },
+});
+addTraceProcessor(processor);
 ```
 
-The processor creates one Lemma trace for each OpenAI Agents trace. OpenAI
-generation spans become Lemma generations, function spans become Lemma tool
-spans, and other OpenAI Agents spans are preserved as regular spans with the
-original OpenAI trace/span fields in attributes.
+The processor creates one Lemma trace for each OpenAI Agents trace with root
+current-turn input, final output or terminal error, promoted `threadId` /
+`userId`, and wall-clock bounds from child spans. OpenAI generation/response
+spans become Lemma generations, function spans become Lemma tool spans, and
+other OpenAI Agents spans are preserved as regular spans.
+
+Put conversation identity on the OpenAI Agents trace (`groupId` → `thread_id`,
+metadata `userId` → `user_id`). Call `forceFlush()` / `shutdown()` to finalize
+open traces once; a late `onTraceEnd` after flush is a no-op.
 
 Function spans stay nested under their OpenAI parent span. To verify nesting
 locally, enable debug mode and check that the tool span log includes the

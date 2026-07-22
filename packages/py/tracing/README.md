@@ -151,10 +151,16 @@ async def call_agent(user_message: str):
     return result.final_output
 ```
 
-The processor creates one Lemma trace for each OpenAI Agents trace. Generation
-spans become Lemma generations, function spans become Lemma tool spans, and
-parent IDs are preserved so tools stay nested under the generation or agent
-span that called them.
+The processor creates one Lemma trace for each OpenAI Agents trace with root
+current-turn input, final output or terminal error, promoted `thread_id` /
+`user_id`, and wall-clock bounds from child spans. Generation/response spans
+become Lemma generations, function spans become Lemma tool spans, and parent
+IDs are preserved so tools stay nested under the generation or agent span that
+called them.
+
+Pass OpenAI Agents `group_id` for `thread_id` and metadata `user_id` /
+`userId` for `user_id`. Call `force_flush()` / `shutdown()` to finalize open
+traces once.
 
 Enable debug mode to validate live span shape while developing:
 
