@@ -255,23 +255,37 @@ sending prompts, tool inputs, tool outputs, or model output text.
 
 ## LangChain and LangGraph
 
-Pass `langChain()` as a LangChain callback handler. The handler creates one
-Lemma trace for the root run, records LLM calls as generations, tools as tool
-spans, retrievers as spans, and nested chains as child spans.
+Pass `langChain()` as a LangChain callback handler. Each root run (chain, standalone
+LLM/tool/retriever) owns one Lemma trace with current-turn input, final output or
+root error, promoted `threadId` / `userId`, and real wall-clock bounds. Nested
+chains, generations, tools, and retrievers keep typed parent IDs with orphan-safe
+fallback. Call `flush()` / `shutdown()` to finalize open traces.
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
 import { langChain } from "@uselemma/tracing";
 
+const callbacks = [
+  langChain({
+    agentName: "support-agent",
+    threadIdKey: "conversation_id",
+    userIdKey: "user_id",
+  }),
+];
+
 const model = new ChatOpenAI({
   model: "gpt-4o",
-  callbacks: [langChain({ agentName: "support-agent" })],
+  callbacks,
 });
 
-const response = await model.invoke(userMessage);
+const response = await model.invoke(userMessage, {
+  metadata: { conversation_id: threadId, user_id: userId },
+});
+await callbacks[0].flush();
 ```
 
-LangGraph uses LangChain callbacks too:
+`langGraph()` is the same LangChain callback adapter with a LangGraph default
+trace name (`langgraph-agent`):
 
 ```typescript
 import { langGraph } from "@uselemma/tracing";
@@ -284,7 +298,8 @@ const result = await graph.invoke(
 
 Use `langChain({ recordInputs: false, recordOutputs: false })` or
 `langGraph({ recordInputs: false, recordOutputs: false })` to avoid sending
-prompts, tool inputs, tool outputs, or generated text.
+prompts, tool inputs, tool outputs, or generated text while keeping span
+structure and status.
 
 When a helper only has IDs, use the client-level methods:
 

@@ -20,10 +20,20 @@ graph = (
     .compile()
 )
 
+# langgraph() is a LangChain callback adapter with LangGraph defaults.
+lemma_handler = langgraph(
+    agent_name="support-graph",
+    thread_id_key="thread_id",
+)
 
-def call_langgraph(user_message: str):
-    result = graph.invoke(
-        {"input": user_message},
-        {"callbacks": [langgraph(agent_name="support-graph")]},
-    )
+
+def call_langgraph(user_message: str, thread_id: str | None = None):
+    config: dict = {"callbacks": [lemma_handler]}
+    if thread_id:
+        config["metadata"] = {"thread_id": thread_id}
+    result = graph.invoke({"input": user_message}, config)
     return result["output"]
+
+
+def shutdown_langgraph():
+    lemma_handler.shutdown()

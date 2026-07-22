@@ -14,11 +14,27 @@ const graph = new StateGraph<GraphState>()
   .addEdge("answer", END)
   .compile();
 
-export async function callLangGraph(userMessage: string) {
+/** langGraph() is a LangChain callback adapter with LangGraph defaults. */
+const lemmaHandler = langGraph({
+  agentName: "support-graph",
+  threadIdKey: "thread_id",
+});
+
+export async function callLangGraph(
+  userMessage: string,
+  threadId?: string,
+) {
   const result = await graph.invoke(
     { input: userMessage },
-    { callbacks: [langGraph({ agentName: "support-graph" })] },
+    {
+      callbacks: [lemmaHandler],
+      metadata: threadId ? { thread_id: threadId } : undefined,
+    },
   );
 
   return result.output;
+}
+
+export async function shutdownLangGraph() {
+  await lemmaHandler.shutdown();
 }
