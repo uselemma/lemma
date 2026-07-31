@@ -7,6 +7,7 @@
 | Skill | Description |
 |---|---|
 | [`lemma-tracing`](./lemma-tracing/SKILL.md) | Integrate Lemma tracing into any codebase — supports the direct SDK, Vercel AI SDK v6/v7, OpenAI Agents SDK, LangChain, LangGraph, Langfuse side-by-side installs, trace handles, debug mode, and manual instrumentation |
+| [`lemma-mcp`](./lemma-mcp/SKILL.md) | Drive the Lemma MCP from the terminal — triage issues, read occurrence evidence, and record confirm / dismiss / resolve verdicts with explicit user consent |
 
 ## Installation
 
@@ -14,12 +15,14 @@
 
 ```bash
 npx skills add uselemma/lemma --skill "lemma-tracing"
+npx skills add uselemma/lemma --skill "lemma-mcp"
 ```
 
 ### Cursor
 
 ```bash
 npx skills add uselemma/lemma --skill "lemma-tracing" --target cursor
+npx skills add uselemma/lemma --skill "lemma-mcp" --target cursor
 ```
 
 Or install manually into your project's `.cursor/rules/` directory:
@@ -34,6 +37,7 @@ curl -o .cursor/rules/lemma-tracing.md \
 
 ```bash
 npx skills add uselemma/lemma --skill "lemma-tracing" --target claude
+npx skills add uselemma/lemma --skill "lemma-mcp" --target claude
 ```
 
 ## Usage
@@ -44,6 +48,7 @@ Once installed, the agent will automatically use these skills when relevant — 
 - Choosing the right path for Vercel AI SDK, OpenAI Agents SDK, LangChain, LangGraph, or manual SDK tracing
 - Adding Lemma tracing alongside existing Langfuse or OpenTelemetry instrumentation
 - Debugging instrumentation issues
+- Triaging Lemma issues from the terminal ("any urgent lemma issues?", bulk dismiss / validate)
 
 ## Versioning
 
