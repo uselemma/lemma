@@ -74,6 +74,8 @@ Each Mastra span maps to a Lemma record:
 | `tool_call` / `mcp_tool_call` / `client_tool_call` / `provider_tool_call` | Tool call with tool name, input, output or soft/`errorInfo` error, timing, and parent ID |
 | Other span types (`generic`, `processor_run`, `workflow_step`, …) | Regular span with input, output, timing, and parent ID |
 
+The trace name is the Mastra agent or workflow id (`entityId`), falling back to its display name (`entityName`), then to the id parsed out of run span names like `agent run: 'support-agent'` / `workflow run: 'nightly-report'`. Set `agentName` on the exporter to override it.
+
 Mastra often sets root `input` to `{ messages: [...] }`. Lemma extracts the latest user message as the trace root input so each turn stays readable; generations still carry the full message list Mastra sent to the model.
 
 Every child span — and the root — keeps Mastra’s real `startTime` / `endTime`. If a child’s `parentSpanId` points at a span Mastra never exported, Lemma attaches that child directly under the trace root so parent references never dangle.

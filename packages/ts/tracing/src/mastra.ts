@@ -176,6 +176,22 @@ function resolveToolName(span: MastraExportedSpan): string {
   return toolNameFromSpanName(span.name) ?? span.name;
 }
 
+/** Parse `agent run: 'id'` / `workflow run: "id"` style Mastra root span names. */
+function agentNameFromSpanName(name: string): string | undefined {
+  const match = /^(?:agent|workflow)\s+run:\s*['"]([^'"]+)['"]\s*$/i.exec(
+    name.trim(),
+  );
+  return match?.[1] || undefined;
+}
+
+function resolveAgentName(span: MastraExportedSpan): string {
+  if (typeof span.entityId === "string" && span.entityId) return span.entityId;
+  if (typeof span.entityName === "string" && span.entityName) {
+    return span.entityName;
+  }
+  return agentNameFromSpanName(span.name) ?? span.name;
+}
+
 function messageContent(message: unknown): unknown {
   if (!message || typeof message !== "object") return message;
   const record = message as Record<string, unknown>;
@@ -384,7 +400,7 @@ export class LemmaMastraExporter {
 
     const trace = this.getLemma().trace({
       id: root.traceId,
-      name: this.options.agentName ?? root.name,
+      name: this.options.agentName ?? resolveAgentName(root),
       input: recordInputs ? rootTraceInput(root.input) : undefined,
       metadata: {
         ...this.options.metadata,
