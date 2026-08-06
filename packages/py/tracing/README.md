@@ -79,6 +79,32 @@ trace.record_generation(
 )
 ```
 
+### User-facing messaging tools
+
+When a tool delivers the agent's response to the end user, pass the exact
+display text as `user_facing_message`. Lemma renders that text as an assistant
+message while preserving the complete tool input and output in the span detail:
+
+```python
+tool_input = {
+    "message": "Your order arrives Friday.",
+    "send_as_voice_note": False,
+    "should_terminate": True,
+}
+
+trace.record_tool(
+    name="send_whatsapp",
+    input=tool_input,
+    output={"delivered": True},
+    user_facing_message=tool_input["message"],
+)
+```
+
+The tool's own schema can call the value `message`, `text`, `body`, or anything
+else. Lemma never guesses which input field the user saw. Omit
+`user_facing_message` for internal tools; their payload and rendering are
+unchanged.
+
 The same handle pattern is available for tool calls and generations:
 
 ```python
@@ -231,7 +257,7 @@ Use native SDK keyword arguments for OpenInference-style fields:
 - LLM: `llm_model_name`, `llm_provider`, `llm_system`,
   `llm_invocation_parameters`, `llm_input_messages`, `llm_output_messages`,
   `llm_tools`, token counts, and prompt template fields
-- tools: `tool_description`, `tool_parameters`
+- tools: `tool_description`, `tool_parameters`, `user_facing_message`
 - embeddings and rerankers: `embedding_model_name`,
   `embedding_invocation_parameters`, `embedding_embeddings`,
   `reranker_model_name`, `reranker_input_documents`,

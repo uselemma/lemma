@@ -13,7 +13,11 @@ import {
   pickResponseHeaders,
   sleep,
 } from "./debug-delivery";
-import { isDebugModeEnabled, isDebugVerifyEnabled, lemmaDebug } from "./debug-mode";
+import {
+  isDebugModeEnabled,
+  isDebugVerifyEnabled,
+  lemmaDebug,
+} from "./debug-mode";
 
 export type JsonValue =
   | string
@@ -117,7 +121,14 @@ export type SpanOptions = {
 };
 
 export type GenerationOptions = Omit<SpanOptions, "type" | "toolName">;
-export type ToolOptions = Omit<SpanOptions, "type" | "model">;
+export type ToolOptions = Omit<SpanOptions, "type" | "model"> & {
+  /** Exact text this tool delivered to the end user. */
+  userFacingMessage?: string;
+};
+
+type NormalizedSpanOptions = SpanOptions & {
+  userFacingMessage?: string;
+};
 
 export type DetachedSpanOptions = Partial<SpanOptions> & { traceId?: string };
 export type DetachedGenerationOptions = Partial<GenerationOptions> & {
@@ -306,7 +317,9 @@ function flattenDocument(
   );
 }
 
-function contractAttributes(options: SpanOptions): Record<string, unknown> {
+function contractAttributes(
+  options: NormalizedSpanOptions,
+): Record<string, unknown> {
   const attributes: Record<string, unknown> = {};
   addDefined(attributes, "input.mime_type", options.inputMimeType);
   addDefined(attributes, "output.mime_type", options.outputMimeType);
@@ -344,6 +357,10 @@ function contractAttributes(options: SpanOptions): Record<string, unknown> {
     "tool.parameters",
     serializeAttribute(options.toolParameters),
   );
+  if (options.userFacingMessage !== undefined) {
+    attributes["lemma.tool.kind"] = "user_message";
+    attributes["lemma.tool.message"] = options.userFacingMessage;
+  }
   addDefined(attributes, "embedding.model_name", options.embeddingModelName);
   addDefined(
     attributes,
@@ -374,7 +391,7 @@ function contractAttributes(options: SpanOptions): Record<string, unknown> {
 }
 
 function spanAttributes(
-  options: SpanOptions,
+  options: NormalizedSpanOptions,
 ): Record<string, unknown> | undefined {
   const attributes = {
     ...(options.attributes ?? {}),
@@ -384,7 +401,7 @@ function spanAttributes(
 }
 
 function normalizeSpan(
-  options: SpanOptions,
+  options: NormalizedSpanOptions,
   fallbackType: SpanType,
 ): SdkTraceSpanPayload {
   const startedAt = options.startedAt ?? new Date();
@@ -438,7 +455,7 @@ export class SpanHandle {
 
   constructor(
     private readonly trace: TraceContext,
-    private readonly options: SpanOptions,
+    private readonly options: NormalizedSpanOptions,
     payload?: SdkTraceSpanPayload,
     private ended = false,
   ) {
@@ -748,7 +765,12 @@ export class TraceContext {
   }
 
   startTool(options: Omit<ToolOptions, "endedAt" | "type">): SpanHandle {
-    return this.startSpan({ ...options, type: "tool" });
+    return new SpanHandle(this, {
+      ...options,
+      type: "tool",
+      id: options.id ?? crypto.randomUUID(),
+      startedAt: options.startedAt ?? new Date(),
+    });
   }
 
   /** @deprecated Use startSpan() or recordSpan(). */
@@ -811,8 +833,7 @@ export class TraceHandle extends TraceContext {
     startedAt?: Date,
   ) {
     super(options);
-    this.startedAt =
-      startedAt ?? coerceDate(options.startedAt) ?? new Date();
+    this.startedAt = startedAt ?? coerceDate(options.startedAt) ?? new Date();
     // A trace is delivered only when it is explicitly ended (`end()`). We
     // deliberately do NOT auto-send on construction or on every recorded span:
     // the ingest API is append-only and treats each submission's spans as new,
@@ -939,7 +960,9 @@ export class Lemma {
       if (hint) hints.push(hint);
     }
     if (!responseHeaders["cf-ray"]) {
-      hints.push("missing cf-ray response header (may not be Lemma production)");
+      hints.push(
+        "missing cf-ray response header (may not be Lemma production)",
+      );
     }
 
     const ingest = {
