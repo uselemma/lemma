@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from uselemma_tracing.client import Lemma, TraceContext
+from uselemma_tracing.client import Lemma, SpanHandle, TraceContext
 from uselemma_tracing.debug_mode import disable_debug_mode, enable_debug_mode
 
 PROJECT_ID = "10000000-0000-0000-0000-000000000001"
@@ -192,6 +192,28 @@ def test_live_tool_preserves_user_facing_message():
         "lemma.tool.kind": "user_message",
         "lemma.tool.message": "I found it.",
     }
+
+
+def test_span_handle_preserves_existing_positional_constructor_order():
+    trace = TraceContext("support-agent")
+    started_at = datetime.now(timezone.utc)
+    handle = SpanHandle(
+        trace,
+        "draft",
+        None,
+        None,
+        None,
+        "generation",
+        "span-1",
+        None,
+        started_at,
+        "gpt-4o",
+        None,
+        "openai",
+    )
+
+    assert handle.llm_provider == "openai"
+    assert handle.user_facing_message is None
 
 
 def test_lemma_trace_flushes_errors_and_reraises():

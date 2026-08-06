@@ -224,13 +224,13 @@ class SpanHandle:
     started_at: datetime = field(default_factory=_now)
     model: str | None = None
     tool_name: str | None = None
-    user_facing_message: str | None = None
     llm_provider: str | None = None
     llm_invocation_parameters: Any = None
     llm_input_messages: list[Any] | None = None
     llm_tools: Any = None
     payload: dict[str, Any] | None = None
     ended: bool = False
+    user_facing_message: str | None = None
 
     def end(
         self,
