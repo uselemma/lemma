@@ -658,6 +658,95 @@ describe("mastra / LemmaMastraExporter", () => {
     ]);
   });
 
+  it("resolves the trace name from entityId, entityName, or the run span name", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const roots = [
+      {
+        expected: "slack-agent",
+        traceId: "trace_entity_id",
+        id: "root_entity_id",
+        name: "agent run: 'slack-agent'",
+        type: "agent_run",
+        entityId: "slack-agent",
+        entityName: "Slack Agent",
+      },
+      {
+        expected: "Behavior Issue Explorer",
+        traceId: "trace_entity_name",
+        id: "root_entity_name",
+        name: "agent run: 'slack-agent'",
+        type: "agent_run",
+        entityName: "Behavior Issue Explorer",
+      },
+      {
+        expected: "slack-agent",
+        traceId: "trace_agent_span_name",
+        id: "root_agent_span_name",
+        name: "agent run: 'slack-agent'",
+        type: "agent_run",
+      },
+      {
+        expected: "learn-agent-investigation",
+        traceId: "trace_workflow_span_name",
+        id: "root_workflow_span_name",
+        name: "workflow run: 'learn-agent-investigation'",
+        type: "workflow_run",
+      },
+      {
+        expected: "agent-run",
+        traceId: "trace_unparseable",
+        id: "root_unparseable",
+        name: "agent-run",
+        type: "agent_run",
+      },
+    ];
+
+    for (const { expected: _expected, ...root } of roots) {
+      await emit(
+        exporter,
+        "span_ended",
+        span({ isRootSpan: true, input: "hi", output: "hello", ...root }),
+      );
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(roots.length);
+    roots.forEach(({ expected }, index) => {
+      expect(jsonBody(fetchMock.mock.calls[index]).trace.name).toBe(expected);
+    });
+  });
+
+  it("lets the agentName option override the resolved trace name", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+      agentName: "support-agent",
+    });
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "root_override",
+        name: "agent run: 'slack-agent'",
+        type: "agent_run",
+        isRootSpan: true,
+        entityId: "slack-agent",
+        input: "hi",
+        output: "hello",
+      }),
+    );
+
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.name).toBe("support-agent");
+  });
+
   it("marks attributes.success false tool spans as ERROR with output message", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const exporter = mastra({
