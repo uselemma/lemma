@@ -158,6 +158,7 @@ def _span_attributes(
     llm_prompt_template_version: str | None = None,
     tool_description: str | None = None,
     tool_parameters: Any = None,
+    user_facing_message: str | None = None,
     embedding_model_name: str | None = None,
     embedding_invocation_parameters: Any = None,
     embedding_embeddings: Any = None,
@@ -186,6 +187,9 @@ def _span_attributes(
     _add_defined(attrs, "llm.prompt_template.version", llm_prompt_template_version)
     _add_defined(attrs, "tool.description", tool_description)
     _add_defined(attrs, "tool.parameters", _serialize_attribute(tool_parameters))
+    if user_facing_message is not None:
+        attrs["lemma.tool.kind"] = "user_message"
+        attrs["lemma.tool.message"] = user_facing_message
     _add_defined(attrs, "embedding.model_name", embedding_model_name)
     _add_defined(
         attrs,
@@ -226,6 +230,7 @@ class SpanHandle:
     llm_tools: Any = None
     payload: dict[str, Any] | None = None
     ended: bool = False
+    user_facing_message: str | None = None
 
     def end(
         self,
@@ -262,6 +267,7 @@ class SpanHandle:
             attributes=attributes or self.attributes,
             model=model or self.model,
             tool_name=tool_name or self.tool_name,
+            user_facing_message=self.user_facing_message,
             input_mime_type=input_mime_type,
             output_mime_type=output_mime_type,
             llm_provider=llm_provider or self.llm_provider,
@@ -434,6 +440,7 @@ class TraceContext:
         attributes: dict[str, Any] | None = None,
         model: str | None = None,
         tool_name: str | None = None,
+        user_facing_message: str | None = None,
         input_mime_type: str | None = None,
         output_mime_type: str | None = None,
         llm_provider: str | None = None,
@@ -477,6 +484,7 @@ class TraceContext:
                     llm_input_messages=llm_input_messages,
                     llm_output_messages=llm_output_messages,
                     llm_tools=llm_tools,
+                    user_facing_message=user_facing_message,
                     embedding_model_name=embedding_model_name,
                     embedding_invocation_parameters=embedding_invocation_parameters,
                     embedding_embeddings=embedding_embeddings,
@@ -570,6 +578,7 @@ class TraceContext:
         output_mime_type: str | None = None,
         tool_description: str | None = None,
         tool_parameters: Any = None,
+        user_facing_message: str | None = None,
         duration_ms: int | None = None,
         status: Status | None = None,
         error: Any = None,
@@ -588,6 +597,7 @@ class TraceContext:
                     output_mime_type=output_mime_type,
                     tool_description=tool_description,
                     tool_parameters=tool_parameters,
+                    user_facing_message=user_facing_message,
                 ),
                 "duration_ms": duration_ms,
                 "status": status or ("ERROR" if error else None),
@@ -713,6 +723,7 @@ class TraceContext:
         parent_id: str | None = None,
         started_at: datetime | str | None = None,
         tool_name: str | None = None,
+        user_facing_message: str | None = None,
     ) -> SpanHandle:
         handle = SpanHandle(
             trace=self,
@@ -725,6 +736,7 @@ class TraceContext:
             parent_id=parent_id,
             started_at=_datetime_or_now(started_at),
             tool_name=tool_name,
+            user_facing_message=user_facing_message,
         )
         handle.payload = _compact(
             {
@@ -734,7 +746,9 @@ class TraceContext:
                 "type": "tool",
                 "input": input,
                 "metadata": metadata,
-                "attributes": _span_attributes(attributes),
+                "attributes": _span_attributes(
+                    attributes, user_facing_message=user_facing_message
+                ),
                 "tool_name": tool_name,
                 "started_at": _iso(handle.started_at),
                 "ended_at": None,

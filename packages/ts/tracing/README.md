@@ -78,6 +78,32 @@ trace.recordGeneration({
 
 Pass contract fields as native props such as `llmInputMessages`, `llmInvocationParameters`, and `toolParameters`. Use `attributes` only when you need to send raw span attributes that do not yet have a native SDK prop.
 
+### User-facing messaging tools
+
+When a tool delivers the agent's response to the end user, pass the exact
+display text as `userFacingMessage`. Lemma renders that text as an assistant
+message while preserving the complete tool input and output in the span detail:
+
+```typescript
+const input = {
+  message: "Your order arrives Friday.",
+  sendAsVoiceNote: false,
+  shouldTerminate: true,
+};
+
+trace.recordTool({
+  name: "send_whatsapp",
+  input,
+  output: { delivered: true },
+  userFacingMessage: input.message,
+});
+```
+
+The tool's own schema can call the value `message`, `text`, `body`, or anything
+else. Lemma never guesses which input field the user saw. Omit
+`userFacingMessage` for internal tools; their payload and rendering are
+unchanged.
+
 ## Live Spans
 
 Use `startSpan()`, `startTool()`, or `startGeneration()` when you want the SDK to measure work from a handle and finish it later:
@@ -376,7 +402,7 @@ Use native SDK props for OpenInference-style fields:
 - LLM: `llmModelName`, `llmProvider`, `llmSystem`,
   `llmInvocationParameters`, `llmInputMessages`, `llmOutputMessages`,
   `llmTools`, token counts, and prompt template fields
-- tools: `toolName`, `toolDescription`, `toolParameters`
+- tools: `toolName`, `toolDescription`, `toolParameters`, `userFacingMessage`
 - embeddings and rerankers: `embeddingModelName`,
   `embeddingInvocationParameters`, `embeddingEmbeddings`,
   `rerankerModelName`, `rerankerInputDocuments`, `rerankerOutputDocuments`

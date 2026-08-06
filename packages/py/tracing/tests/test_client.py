@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from uselemma_tracing.client import Lemma, TraceContext
+from uselemma_tracing.client import Lemma, SpanHandle, TraceContext
 from uselemma_tracing.debug_mode import disable_debug_mode, enable_debug_mode
 
 PROJECT_ID = "10000000-0000-0000-0000-000000000001"
@@ -131,6 +131,89 @@ def test_lemma_trace_supports_record_aliases_and_live_tool_generation_handles():
     assert spans[2]["duration_ms"] == 30
     assert spans[3]["type"] == "generation"
     assert spans[3]["duration_ms"] == 40
+
+
+def test_user_facing_tool_message_preserves_raw_input():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    def run(trace):
+        tool_input = {
+            "message": "Your order arrives Friday.",
+            "sendAsVoiceNote": False,
+        }
+        trace.record_tool(
+            name="send_whatsapp",
+            input=tool_input,
+            output={"delivered": True},
+            user_facing_message=tool_input["message"],
+        )
+        trace.record_tool(name="write_audit_log", input={"orderId": "123"})
+
+    lemma.trace("support-agent", run)
+
+    spans = calls[0]["trace"]["spans"]
+    assert spans[0]["input"] == {
+        "message": "Your order arrives Friday.",
+        "sendAsVoiceNote": False,
+    }
+    assert spans[0]["attributes"] == {
+        "lemma.tool.kind": "user_message",
+        "lemma.tool.message": "Your order arrives Friday.",
+    }
+    assert "attributes" not in spans[1]
+
+
+def test_live_tool_preserves_user_facing_message():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    def run(trace):
+        tool = trace.start_tool(
+            name="send_message",
+            input={"body": "I found it."},
+            user_facing_message="I found it.",
+        )
+        tool.end(output={"delivered": True})
+
+    lemma.trace("support-agent", run)
+
+    assert calls[0]["trace"]["spans"][0]["attributes"] == {
+        "lemma.tool.kind": "user_message",
+        "lemma.tool.message": "I found it.",
+    }
+
+
+def test_span_handle_preserves_existing_positional_constructor_order():
+    trace = TraceContext("support-agent")
+    started_at = datetime.now(timezone.utc)
+    handle = SpanHandle(
+        trace,
+        "draft",
+        None,
+        None,
+        None,
+        "generation",
+        "span-1",
+        None,
+        started_at,
+        "gpt-4o",
+        None,
+        "openai",
+    )
+
+    assert handle.llm_provider == "openai"
+    assert handle.user_facing_message is None
 
 
 def test_lemma_trace_flushes_errors_and_reraises():

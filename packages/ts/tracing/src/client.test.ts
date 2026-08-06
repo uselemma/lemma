@@ -238,6 +238,72 @@ describe("Lemma", () => {
     ]);
   });
 
+  it("records an explicit user-facing tool message without changing its raw input", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await lemma.trace("support-agent", async (trace) => {
+      const input = {
+        message: "Your order arrives Friday.",
+        sendAsVoiceNote: false,
+      };
+      trace.recordTool({
+        name: "send_whatsapp",
+        input,
+        output: { delivered: true },
+        userFacingMessage: input.message,
+      });
+      trace.recordTool({ name: "write_audit_log", input: { orderId: "123" } });
+    });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      name: "send_whatsapp",
+      input: {
+        message: "Your order arrives Friday.",
+        sendAsVoiceNote: false,
+      },
+      attributes: {
+        "lemma.tool.kind": "user_message",
+        "lemma.tool.message": "Your order arrives Friday.",
+      },
+    });
+    expect(body.trace.spans[1]).not.toHaveProperty(
+      "attributes.lemma.tool.kind",
+    );
+    expect(body.trace.spans[1]).not.toHaveProperty(
+      "attributes.lemma.tool.message",
+    );
+  });
+
+  it("preserves a user-facing message on a live tool handle", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await lemma.trace("support-agent", async (trace) => {
+      const tool = trace.startTool({
+        name: "send_message",
+        input: { body: "I found it." },
+        userFacingMessage: "I found it.",
+      });
+      tool.end({ output: { delivered: true } });
+    });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0].attributes).toMatchObject({
+      "lemma.tool.kind": "user_message",
+      "lemma.tool.message": "I found it.",
+    });
+  });
+
   it("supports no-argument trace handles with nested shorthand observations", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const lemma = new Lemma({
@@ -330,13 +396,17 @@ describe("Lemma", () => {
 
     const trace = lemma.trace({ name: "support-agent" });
     expect(
-      (lemma as unknown as { traces: Map<string, unknown> }).traces.has(trace.id),
+      (lemma as unknown as { traces: Map<string, unknown> }).traces.has(
+        trace.id,
+      ),
     ).toBe(true);
 
     await trace.end({ output: "done" });
 
     expect(
-      (lemma as unknown as { traces: Map<string, unknown> }).traces.has(trace.id),
+      (lemma as unknown as { traces: Map<string, unknown> }).traces.has(
+        trace.id,
+      ),
     ).toBe(false);
 
     // Detached helpers must not keep working against an ended, unregistered
@@ -545,7 +615,9 @@ describe("Lemma", () => {
       output: "done",
       started_at: "2026-01-01T00:00:00.000Z",
     });
-    expect(body.trace.spans).toMatchObject([{ name: "search_docs", type: "tool" }]);
+    expect(body.trace.spans).toMatchObject([
+      { name: "search_docs", type: "tool" },
+    ]);
   });
 
   it("ingest sends each call as its own complete delivery", async () => {
@@ -744,7 +816,9 @@ describe("Lemma", () => {
         projectId: "10000000-0000-0000-0000-000000000001",
       });
       // Same instance does not re-log.
-      (lemma as unknown as { logInitConfigOnce: () => void }).logInitConfigOnce();
+      (
+        lemma as unknown as { logInitConfigOnce: () => void }
+      ).logInitConfigOnce();
 
       expect(spy).toHaveBeenCalledTimes(2);
       expect(spy.mock.calls[0]?.[1]).toMatchObject({
@@ -766,11 +840,12 @@ describe("Lemma", () => {
   it("logs ingest failure hints and response headers in debug mode", async () => {
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     enableDebugMode();
-    const fetchMock = vi.fn(async () =>
-      new Response("rate limited", {
-        status: 429,
-        headers: { "cf-ray": "ray-429", server: "cloudflare" },
-      }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response("rate limited", {
+          status: 429,
+          headers: { "cf-ray": "ray-429", server: "cloudflare" },
+        }),
     );
     const lemma = new Lemma({
       apiKey: "key",
@@ -970,8 +1045,7 @@ describe("Lemma", () => {
       await lemma.trace({ name: "no-verify" }, async () => "ok");
       expect(
         fetchMock.mock.calls.every((call) => {
-          const href =
-            typeof call[0] === "string" ? call[0] : String(call[0]);
+          const href = typeof call[0] === "string" ? call[0] : String(call[0]);
           return !href.includes("/traces/ingest-status");
         }),
       ).toBe(true);
