@@ -92,6 +92,55 @@ lemma.recordTool({
 `traceId` is required for detached tools. When the tool belongs under a span, `parentSpanId` is required; missing IDs warn and no-op.
 Pass `durationMs` when you already measured the tool call. If you omit it, Lemma splits the parent span's remaining unclaimed duration equally across siblings that also omitted duration.
 
+## Render messaging tools as assistant messages
+
+When a tool successfully delivers the agent's response to the end user, pass
+the exact text the user received as `userFacingMessage` / `user_facing_message`.
+Lemma renders that text as an assistant message in the trace conversation while
+preserving the complete tool input and output in the span detail.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const input = {
+      message: "Your order arrives Friday.",
+      sendAsVoiceNote: false,
+      shouldTerminate: true,
+    };
+    const result = await sendWhatsApp(input);
+
+    trace.recordTool({
+      name: "send_whatsapp",
+      input,
+      output: result,
+      userFacingMessage: input.message,
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    tool_input = {
+        "message": "Your order arrives Friday.",
+        "send_as_voice_note": False,
+        "should_terminate": True,
+    }
+    result = send_whatsapp(tool_input)
+
+    trace.record_tool(
+        name="send_whatsapp",
+        input=tool_input,
+        output=result,
+        user_facing_message=tool_input["message"],
+    )
+    ```
+  </Tab>
+</Tabs>
+
+Your tool schema can call the displayed value `message`, `text`, `body`, or
+anything else. Lemma never guesses which input field the user saw: map your own
+payload to the normalized SDK field. Omit it for internal tools or unsuccessful
+delivery attempts; unmarked tool payloads and rendering are unchanged.
+
 ## Measure a live tool call
 
 Use `startTool()` / `start_tool()` when you want a handle before the tool finishes. End it only after the tool returns or fails.
@@ -140,6 +189,7 @@ Use `startTool()` / `start_tool()` when you want a handle before the tool finish
 | Tool name | span `name` | `tool.name` |
 | Arguments | `input` | `input.value`, `ai.toolCall.args` |
 | Result | `output` | `output.value`, `ai.toolCall.result` |
+| User-facing message | `userFacingMessage` / `user_facing_message` | `lemma.tool.kind: "user_message"`, `lemma.tool.message` |
 | Contract props | Native props such as `toolDescription` and `toolParameters`; raw `attributes` for escape-hatch keys | Flattened OpenInference-style attributes |
 
 See [Native contract props](/reference/trace-contract#native-contract-props) and [Client fields vs ingest normalization](/reference/trace-contract#client-fields-vs-ingest-normalization).
