@@ -92,21 +92,16 @@ lemma.recordTool({
 `traceId` is required for detached tools. When the tool belongs under a span, `parentSpanId` is required; missing IDs warn and no-op.
 Pass `durationMs` when you already measured the tool call. If you omit it, Lemma splits the parent span's remaining unclaimed duration equally across siblings that also omitted duration.
 
-## Render messaging tools as assistant messages
+### Show a tool call as an assistant message
 
-When a tool successfully delivers the agent's response to the end user, pass
-the exact text the user received as `userFacingMessage` / `user_facing_message`.
-Lemma renders that text as an assistant message in the trace conversation while
-preserving the complete tool input and output in the span detail.
+When a successful tool sends text directly to the user, set `userFacingMessage`
+/ `user_facing_message` to the exact text they received. Lemma displays it as an
+assistant message while preserving complete input and output in the span detail.
 
 <Tabs>
   <Tab title="TypeScript">
     ```typescript
-    const input = {
-      message: "Your order arrives Friday.",
-      sendAsVoiceNote: false,
-      shouldTerminate: true,
-    };
+    const input = { message: "Your order arrives Friday." };
     const result = await sendWhatsApp(input);
 
     trace.recordTool({
@@ -119,11 +114,7 @@ preserving the complete tool input and output in the span detail.
   </Tab>
   <Tab title="Python">
     ```python
-    tool_input = {
-        "message": "Your order arrives Friday.",
-        "send_as_voice_note": False,
-        "should_terminate": True,
-    }
+    tool_input = {"message": "Your order arrives Friday."}
     result = send_whatsapp(tool_input)
 
     trace.record_tool(
@@ -136,10 +127,8 @@ preserving the complete tool input and output in the span detail.
   </Tab>
 </Tabs>
 
-Your tool schema can call the displayed value `message`, `text`, `body`, or
-anything else. Lemma never guesses which input field the user saw: map your own
-payload to the normalized SDK field. Omit it for internal tools or unsuccessful
-delivery attempts; unmarked tool payloads and rendering are unchanged.
+Lemma does not inspect your tool's input schema. Omit this field for internal
+tools or unsuccessful sends; their existing rendering remains unchanged.
 
 ## Measure a live tool call
 
