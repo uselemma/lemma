@@ -9,6 +9,7 @@ import urllib.request
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version as package_version
 from typing import Any, Callable, Literal, TypeVar
 
 from .debug_delivery import (
@@ -29,6 +30,13 @@ from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_ena
 T = TypeVar("T")
 SpanType = Literal["span", "generation", "tool"]
 Status = Literal["OK", "ERROR"]
+
+try:
+    _SDK_VERSION = package_version("uselemma-tracing")
+except PackageNotFoundError:
+    _SDK_VERSION = "unknown"
+
+_SDK_USER_AGENT = f"uselemma-tracing/{_SDK_VERSION}"
 
 
 def _now() -> datetime:
@@ -1164,7 +1172,12 @@ class Lemma:
     def _urllib_transport(
         url: str, headers: dict[str, str], body: bytes
     ) -> tuple[int, str, dict[str, str]]:
-        request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        request = urllib.request.Request(
+            url,
+            data=body,
+            headers={"User-Agent": _SDK_USER_AGENT, **headers},
+            method="POST",
+        )
         try:
             with urllib.request.urlopen(request) as response:
                 return (
@@ -1179,7 +1192,11 @@ class Lemma:
     def _urllib_get(
         url: str, headers: dict[str, str]
     ) -> tuple[int, str, dict[str, str]]:
-        request = urllib.request.Request(url, headers=headers, method="GET")
+        request = urllib.request.Request(
+            url,
+            headers={"User-Agent": _SDK_USER_AGENT, **headers},
+            method="GET",
+        )
         try:
             with urllib.request.urlopen(request) as response:
                 return (

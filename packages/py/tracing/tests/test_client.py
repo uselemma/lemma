@@ -12,6 +12,45 @@ from uselemma_tracing.debug_mode import disable_debug_mode, enable_debug_mode
 PROJECT_ID = "10000000-0000-0000-0000-000000000001"
 
 
+def test_default_urllib_transport_identifies_the_sdk(monkeypatch):
+    requests = []
+
+    class Response:
+        status = 201
+        headers = {}
+
+        def read(self):
+            return b"{}"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def urlopen(request):
+        requests.append(request)
+        return Response()
+
+    monkeypatch.setattr("uselemma_tracing.client.urllib.request.urlopen", urlopen)
+
+    Lemma._urllib_transport(
+        "https://api.example.test/traces/ingest",
+        {"Authorization": "Bearer key"},
+        b"{}",
+    )
+    Lemma._urllib_get(
+        "https://api.example.test/traces/ingest-status",
+        {"Authorization": "Bearer key"},
+    )
+
+    assert len(requests) == 2
+    assert all(
+        request.get_header("User-agent").startswith("uselemma-tracing/")
+        for request in requests
+    )
+
+
 def test_lemma_trace_posts_completed_trace():
     calls = []
 
