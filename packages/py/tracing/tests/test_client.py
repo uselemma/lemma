@@ -273,9 +273,9 @@ def test_lemma_trace_flushes_errors_and_reraises():
 
     body = calls[0]
     assert body["trace"]["status"] == "ERROR"
-    assert body["trace"]["error"] == "boom"
+    assert body["trace"]["error"] == "RuntimeError: boom"
     assert body["trace"]["spans"][0]["status"] == "ERROR"
-    assert body["trace"]["spans"][0]["error"] == "missing"
+    assert body["trace"]["spans"][0]["error"] == "ValueError: missing"
 
 
 def test_lemma_trace_surfaces_ingest_failures():

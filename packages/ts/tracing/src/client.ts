@@ -18,6 +18,7 @@ import {
   isDebugVerifyEnabled,
   lemmaDebug,
 } from "./debug-mode";
+import { errorMessage } from "./error-message";
 
 export type JsonValue =
   | string
@@ -201,11 +202,6 @@ function iso(
 ): string | null | undefined {
   if (value == null) return value;
   return value instanceof Date ? value.toISOString() : value;
-}
-
-function errorMessage(error: unknown): string | null {
-  if (error == null) return null;
-  return error instanceof Error ? error.message : String(error);
 }
 
 function timestampMs(value: Date | string | null | undefined): number | null {

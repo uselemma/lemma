@@ -8,6 +8,7 @@ from typing import Any
 
 from .client import Lemma, SpanHandle, TraceContext, _datetime_or_now, _duration_ms, _now
 from .debug_mode import _lemma_debug
+from .error_message import describe_error
 from .tool_result import tool_result_error
 
 _LIVE_SPAN_DATA_KEYS = (
@@ -230,6 +231,22 @@ def _is_generation_type(span_type: Any) -> bool:
 
 def _is_terminal_failure_type(span_type: Any) -> bool:
     return span_type in {"agent", "task", "custom", "guardrail"}
+
+
+def _error_payload(error: Any) -> Any:
+    """Normalize the SDK's SpanError object into a mapping the helper reads."""
+    if isinstance(error, dict):
+        return error
+    message = getattr(error, "message", None)
+    data = getattr(error, "data", None)
+    if message is None and data is None:
+        return error
+    payload: dict[str, Any] = {}
+    if message is not None:
+        payload["message"] = message if isinstance(message, str) else str(message)
+    if data is not None:
+        payload["data"] = data
+    return payload
 
 
 def _span_input(data: dict[str, Any]) -> Any:
@@ -521,14 +538,9 @@ class LemmaOpenAIAgentsProcessor:
                 data.get("output") if data.get("output") is not None else data.get("_response")
             )
 
+        # Keep the failure even when the SDK reports an error with no message.
         error = _get(span, "error")
-        hard_error = None
-        if isinstance(error, dict):
-            hard_error = error.get("message")
-        else:
-            hard_error = getattr(error, "message", None)
-        if hard_error is not None and not isinstance(hard_error, str):
-            hard_error = str(hard_error)
+        hard_error = describe_error(_error_payload(error)) if error is not None else None
 
         soft_error = (
             tool_result_error(raw_output) if span_type == "function" else None

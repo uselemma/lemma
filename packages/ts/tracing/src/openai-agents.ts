@@ -1,4 +1,5 @@
 import { Lemma, type SpanHandle, type TraceHandle } from "./client";
+import { describeError } from "./error-message";
 import { toolResultError } from "./tool-result";
 
 export type OpenAIAgentsTrace = {
@@ -401,7 +402,8 @@ export function openAIAgents(
 
     const softError =
       data.type === "function" ? toolResultError(rawOutput) : null;
-    const hardError = span.error?.message;
+    // Keep the failure even when the SDK reports an error with no message.
+    const hardError = span.error ? describeError(span.error) : undefined;
     const errorMessage = hardError ?? softError ?? undefined;
     const parsedOutput =
       options.recordOutputs === false || errorMessage ? undefined : rawOutput;

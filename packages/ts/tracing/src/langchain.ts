@@ -4,6 +4,7 @@ import {
   type SpanHandle,
   type TraceHandle,
 } from "./client";
+import { describeError } from "./error-message";
 import { toolResultError } from "./tool-result";
 
 type RunId = string;
@@ -588,10 +589,6 @@ function llmProvider(
   return undefined;
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
-}
-
 function durationMs(start: Date, end: Date) {
   return Math.max(0, end.getTime() - start.getTime());
 }
@@ -983,7 +980,7 @@ export class LemmaLangChainCallbackHandler {
     const run = this.runs.get(runId);
     if (!run) return;
     const endedAt = new Date();
-    const message = errorMessage(error);
+    const message = describeError(error);
     const stored = this.storedTrace(run.owningTraceId);
 
     if (run.handle) {
@@ -1206,7 +1203,7 @@ export class LemmaLangChainCallbackHandler {
     const run = this.runs.get(runId);
     if (!run) return;
     const endedAt = new Date();
-    const message = errorMessage(error);
+    const message = describeError(error);
 
     run.handle?.end({
       status: "ERROR",
@@ -1315,7 +1312,7 @@ export class LemmaLangChainCallbackHandler {
     const run = this.runs.get(runId);
     if (!run) return;
     const endedAt = new Date();
-    const message = errorMessage(error);
+    const message = describeError(error);
 
     run.handle?.end({
       status: "ERROR",
@@ -1409,7 +1406,7 @@ export class LemmaLangChainCallbackHandler {
     const run = this.runs.get(runId);
     if (!run) return;
     const endedAt = new Date();
-    const message = errorMessage(error);
+    const message = describeError(error);
 
     run.handle?.end({
       status: "ERROR",

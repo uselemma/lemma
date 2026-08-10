@@ -26,6 +26,7 @@ from .debug_delivery import (
     pick_response_headers,
 )
 from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_enabled
+from .error_message import error_message as _error_message
 
 T = TypeVar("T")
 SpanType = Literal["span", "generation", "tool"]
@@ -49,14 +50,6 @@ def _iso(value: datetime | str | None) -> str | None:
     if isinstance(value, str):
         return value
     return value.isoformat().replace("+00:00", "Z")
-
-
-def _error_message(error: Any) -> str | None:
-    if error is None:
-        return None
-    if isinstance(error, BaseException):
-        return str(error)
-    return str(error)
 
 
 def _compact(payload: dict[str, Any]) -> dict[str, Any]:

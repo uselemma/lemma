@@ -511,6 +511,23 @@ def test_openai_agents_root_hard_error_not_soft_tool_alone():
     assert trace["status"] == "ERROR"
     assert trace["error"] == "guardrail blocked"
 
+    calls.clear()
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_hard3", name="agent"))
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_hard3",
+            span_id="span_agent",
+            error={"data": {"code": 500}},
+            span_data={"type": "agent", "name": "agent"},
+        )
+    )
+    processor.on_trace_end(FakeTrace(trace_id="trace_hard3", name="agent"))
+
+    trace = calls[0]["trace"]
+    assert trace["status"] == "ERROR"
+    assert trace["error"] == '{"data": {"code": 500}}'
+
 
 def test_openai_agents_configurable_identity_keys():
     calls = []
