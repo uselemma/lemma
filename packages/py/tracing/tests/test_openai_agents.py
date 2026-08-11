@@ -406,7 +406,7 @@ def test_openai_agents_response_span_reads_live_response_attributes():
     assert span["output"] == "Shipped yesterday."
 
 
-def test_openai_agents_record_inputs_outputs_false():
+def test_openai_agents_records_inputs_and_outputs():
     calls = []
 
     def transport(_url, _headers, body):
@@ -414,7 +414,7 @@ def test_openai_agents_record_inputs_outputs_false():
         return 201, "{}"
 
     lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
-    processor = openai_agents(lemma, record_inputs=False, record_outputs=False)
+    processor = openai_agents(lemma)
 
     processor.on_trace_start(FakeTrace(trace_id="trace_privacy", name="agent"))
     processor.on_span_end(
@@ -444,13 +444,12 @@ def test_openai_agents_record_inputs_outputs_false():
     processor.on_trace_end(FakeTrace(trace_id="trace_privacy", name="agent"))
 
     trace = calls[0]["trace"]
-    assert trace.get("input") is None
-    assert trace.get("output") is None
+    assert trace["input"] == "secret prompt"
     assert trace["status"] == "ERROR"
-    assert trace["error"] == "error"
+    assert trace["error"] == "agent failed hard"
     gen = next(span for span in trace["spans"] if span["id"] == "span_gen")
-    assert gen.get("input") is None
-    assert gen.get("output") is None
+    assert gen["input"] == [{"role": "user", "content": "secret prompt"}]
+    assert gen["output"] == "secret answer"
 
 
 def test_openai_agents_root_hard_error_not_soft_tool_alone():

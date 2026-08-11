@@ -338,14 +338,12 @@ describe("mastra / LemmaMastraExporter", () => {
     });
   });
 
-  it("omits payloads when recordInputs/recordOutputs are false", async () => {
+  it("records inputs and outputs on the root and its spans", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const exporter = mastra({
       apiKey: "key",
       projectId: "10000000-0000-0000-0000-000000000001",
       fetch: fetchMock as typeof fetch,
-      recordInputs: false,
-      recordOutputs: false,
     });
 
     await emit(
@@ -375,10 +373,15 @@ describe("mastra / LemmaMastraExporter", () => {
     );
 
     const body = jsonBody(fetchMock.mock.calls[0]);
-    expect(body.trace).not.toHaveProperty("input");
-    expect(body.trace).not.toHaveProperty("output");
-    expect(body.trace.spans[0]).not.toHaveProperty("input");
-    expect(body.trace.spans[0]).not.toHaveProperty("output");
+    expect(body.trace.input).toBe("secret");
+    expect(body.trace.output).toBe("secret-out");
+    expect(body.trace.spans[0].input).toEqual([
+      { role: "user", content: "secret" },
+    ]);
+    expect(body.trace.spans[0].output).toEqual({
+      role: "assistant",
+      content: "secret-out",
+    });
     expect(body.trace.spans[0].model).toBe("gpt-4o");
   });
 

@@ -202,12 +202,7 @@ def _span_name(data: dict[str, Any]) -> str:
     return f"openai-agents-{span_type or 'span'}"
 
 
-def _attributes(
-    span: Any,
-    data: dict[str, Any],
-    *,
-    record_payloads: bool,
-) -> dict[str, Any]:
+def _attributes(span: Any, data: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in {
@@ -215,11 +210,8 @@ def _attributes(
             "openai.agents.span_id": _get(span, "span_id"),
             "openai.agents.parent_id": _get(span, "parent_id"),
             "openai.agents.span_type": data.get("type"),
-            "openai.agents.trace_metadata": (
-                _json(_get(span, "trace_metadata")) if record_payloads else None
-            ),
-            # Full span_data can contain prompts/outputs — omit when privacy is on.
-            "openai.agents.span_data": _json(data) if record_payloads else None,
+            "openai.agents.trace_metadata": _json(_get(span, "trace_metadata")),
+            "openai.agents.span_data": _json(data),
         }.items()
         if value is not None
     }
@@ -262,8 +254,6 @@ class LemmaOpenAIAgentsProcessor:
         project_id: str | None = None,
         base_url: str = "https://api.uselemma.ai",
         metadata: dict[str, Any] | None = None,
-        record_inputs: bool = True,
-        record_outputs: bool = True,
         thread_id_key: str = "thread_id",
         user_id_key: str | None = None,
     ) -> None:
@@ -273,8 +263,6 @@ class LemmaOpenAIAgentsProcessor:
             base_url=base_url,
         )
         self.metadata = metadata
-        self.record_inputs = record_inputs
-        self.record_outputs = record_outputs
         self.thread_id_key = thread_id_key
         self.user_id_key = user_id_key
         self._traces: dict[str, _StoredTrace] = {}
@@ -385,14 +373,14 @@ class LemmaOpenAIAgentsProcessor:
                 stored.latest_end = end
 
     def _note_root_input(self, stored: _StoredTrace, input_value: Any) -> None:
-        if not self.record_inputs or input_value is None or stored._has_root_input:
+        if input_value is None or stored._has_root_input:
             return
         stored.root_input = _root_trace_input(input_value)
         stored._has_root_input = True
         stored.context.input = stored.root_input
 
     def _note_root_output(self, stored: _StoredTrace, output: Any) -> None:
-        if not self.record_outputs or output is None or stored.root_error:
+        if output is None or stored.root_error:
             return
         stored.root_output = output
 
@@ -423,13 +411,11 @@ class LemmaOpenAIAgentsProcessor:
             stored.context.duration_ms = root_duration
 
         if stored.root_error:
-            stored.context.fail(
-                "error" if not self.record_outputs else stored.root_error
-            )
+            stored.context.fail(stored.root_error)
             self.lemma._send(stored.context, started_at, ended_at)
             return
 
-        if self.record_outputs and stored.root_output is not None:
+        if stored.root_output is not None:
             stored.context.output(stored.root_output)
 
         self.lemma._send(stored.context, started_at, ended_at)
@@ -488,13 +474,9 @@ class LemmaOpenAIAgentsProcessor:
             "id": _get(span, "span_id"),
             "parent_id": _get(span, "parent_id"),
             "name": _span_name(data),
-            "input": input_value if self.record_inputs else None,
+            "input": input_value,
             "metadata": self.metadata,
-            "attributes": _attributes(
-                span,
-                data,
-                record_payloads=self.record_inputs and self.record_outputs,
-            ),
+            "attributes": _attributes(span, data),
             "started_at": span_started_at,
         }
         if _is_generation_type(span_type):
@@ -504,9 +486,7 @@ class LemmaOpenAIAgentsProcessor:
                 llm_provider="openai",
                 llm_invocation_parameters=data.get("model_config"),
                 llm_input_messages=(
-                    input_value
-                    if self.record_inputs and isinstance(input_value, list)
-                    else None
+                    input_value if isinstance(input_value, list) else None
                 ),
             )
         if span_type == "function":
@@ -547,7 +527,7 @@ class LemmaOpenAIAgentsProcessor:
         )
         error_message = hard_error or soft_error or None
 
-        output = None if (not self.record_outputs or error_message) else raw_output
+        output = None if error_message else raw_output
         raw_started_at = _get(span, "started_at")
         raw_ended_at = _get(span, "ended_at")
         span_started_at = _datetime_or_now(raw_started_at)
@@ -566,7 +546,7 @@ class LemmaOpenAIAgentsProcessor:
         handle.end(
             # Failures must not invent an output — record error instead.
             output=output,
-            error=error_message if self.record_outputs else None,
+            error=error_message,
             status="ERROR" if error_message else None,
             model=data.get("model") if isinstance(data.get("model"), str) else None,
             ended_at=ended_at_value,
@@ -575,7 +555,6 @@ class LemmaOpenAIAgentsProcessor:
                 data.get("output")
                 if (
                     not error_message
-                    and self.record_outputs
                     and span_type == "generation"
                     and isinstance(data.get("output"), list)
                 )
@@ -601,8 +580,6 @@ def openai_agents(
     project_id: str | None = None,
     base_url: str = "https://api.uselemma.ai",
     metadata: dict[str, Any] | None = None,
-    record_inputs: bool = True,
-    record_outputs: bool = True,
     thread_id_key: str = "thread_id",
     user_id_key: str | None = None,
 ) -> LemmaOpenAIAgentsProcessor:
@@ -612,8 +589,6 @@ def openai_agents(
         project_id=project_id,
         base_url=base_url,
         metadata=metadata,
-        record_inputs=record_inputs,
-        record_outputs=record_outputs,
         thread_id_key=thread_id_key,
         user_id_key=user_id_key,
     )

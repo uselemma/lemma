@@ -214,8 +214,6 @@ export type VercelAIIntegrationOptions = {
         event: VercelAIToolExecutionEndEvent | VercelAIV6ToolCallFinishEvent,
       ) => string);
   metadata?: Record<string, unknown>;
-  recordInputs?: boolean;
-  recordOutputs?: boolean;
   /** Key looked up on telemetry metadata for threadId. Default: `threadId`. */
   threadIdKey?: string;
   /** Key looked up on telemetry metadata for userId. Default: `userId`. */
@@ -312,39 +310,29 @@ function structuredAssistantOutput(
   return stringifyContent(content);
 }
 
-function errorToolFields(error: unknown, recordOutputs: boolean) {
-  return recordOutputs
-    ? { error, status: "ERROR" as const }
-    : { status: "ERROR" as const };
+function errorToolFields(error: unknown) {
+  return { error, status: "ERROR" as const };
 }
 
-function toolOutput(
-  event: VercelAIToolExecutionEndEvent,
-  recordOutputs: boolean,
-) {
+function toolOutput(event: VercelAIToolExecutionEndEvent) {
   if (event.toolOutput.type === "tool-error") {
-    return errorToolFields(event.toolOutput.error, recordOutputs);
+    return errorToolFields(event.toolOutput.error);
   }
   const softError = toolResultError(event.toolOutput.output);
   if (softError) {
-    return errorToolFields(softError, recordOutputs);
+    return errorToolFields(softError);
   }
-  if (!recordOutputs) return {};
   return { output: event.toolOutput.output };
 }
 
-function v6ToolOutput(
-  event: VercelAIV6ToolCallFinishEvent,
-  recordOutputs: boolean,
-) {
+function v6ToolOutput(event: VercelAIV6ToolCallFinishEvent) {
   if (!event.success) {
-    return errorToolFields(event.error, recordOutputs);
+    return errorToolFields(event.error);
   }
   const softError = toolResultError(event.output);
   if (softError) {
-    return errorToolFields(softError, recordOutputs);
+    return errorToolFields(softError);
   }
-  if (!recordOutputs) return {};
   return { output: event.output };
 }
 
@@ -607,11 +595,6 @@ export function vercelAI(
     if (userId) trace.userId(userId);
   }
 
-  function rootErrorPayload(message: string) {
-    // Preserve ERROR status while redacting message bodies when outputs are off.
-    return options.recordOutputs === false ? "error" : message;
-  }
-
   function resolveTrace(
     event?:
       | VercelAIV6StartEvent
@@ -638,14 +621,10 @@ export function vercelAI(
       return { trace: options.trace, source: "explicit" };
     }
     if (!managedTrace) {
-      const rawInput =
-        options.recordInputs === false ? undefined : eventTraceInput(event);
+      const rawInput = eventTraceInput(event);
       managedTrace = getLemma().trace({
         name: traceName(options, event),
-        input:
-          options.recordInputs === false
-            ? undefined
-            : rootTraceInput(rawInput),
+        input: rootTraceInput(rawInput),
         metadata: mergedMetadata(metadata),
         threadId: resolveThreadId(metadata),
         userId: resolveUserId(metadata),
@@ -653,7 +632,7 @@ export function vercelAI(
       });
     } else {
       applyIdentity(managedTrace, metadata);
-      if (options.recordInputs !== false && event) {
+      if (event) {
         const rawInput = eventTraceInput(event);
         if (rawInput !== undefined) {
           // Keep root input as the latest known current-turn value.
@@ -760,12 +739,12 @@ export function vercelAI(
           ? { endedAt }
           : { durationMs, endedAt };
         if (terminalError) {
-          ownedTrace.fail(rootErrorPayload(terminalError));
+          ownedTrace.fail(terminalError);
           ownedTrace.output(undefined);
           await ownedTrace.end(timing);
           return;
         }
-        if (options.recordOutputs === false || successOutput === undefined) {
+        if (successOutput === undefined) {
           await ownedTrace.end(timing);
         } else {
           await ownedTrace.end({
@@ -806,33 +785,24 @@ export function vercelAI(
 
     const generation = {
       name,
-      input:
-        options.recordInputs === false
-          ? undefined
-          : stored?.event && v6Input(stored.event),
-      output:
-        options.recordOutputs === false || generationError
-          ? undefined
-          : output,
+      input: stored?.event && v6Input(stored.event),
+      output: generationError ? undefined : output,
       metadata: options.metadata,
       model: event.model.modelId,
       startedAt,
       endedAt,
       durationMs,
       llmProvider: event.model.provider,
-      llmInputMessages:
-        options.recordInputs === false || !stored?.event
-          ? undefined
-          : v6NormalizedMessages(stored.event),
+      llmInputMessages: stored?.event
+        ? v6NormalizedMessages(stored.event)
+        : undefined,
       llmOutputMessages:
-        options.recordOutputs === false ||
-        output === undefined ||
-        generationError
+        output === undefined || generationError
           ? undefined
           : [{ role: "assistant", content: output }],
       llmTools: stored?.event.tools,
       status: generationError ? ("ERROR" as const) : undefined,
-      error: options.recordOutputs === false ? undefined : generationError,
+      error: generationError,
     };
 
     if (stored?.handle) {
@@ -873,13 +843,12 @@ export function vercelAI(
     const startedAt = new Date();
     const handle = trace.startGeneration({
       name,
-      input: options.recordInputs === false ? undefined : event.messages,
+      input: event.messages,
       metadata: options.metadata,
       model: event.modelId,
       startedAt,
       llmProvider: event.provider,
-      llmInputMessages:
-        options.recordInputs === false ? undefined : event.messages,
+      llmInputMessages: event.messages,
       llmTools: event.tools,
     });
 
@@ -907,15 +876,12 @@ export function vercelAI(
     const input = v6Input(event);
     const handle = trace.startGeneration({
       name,
-      input: options.recordInputs === false ? undefined : input,
+      input,
       metadata: options.metadata,
       model: event.model.modelId,
       startedAt,
       llmProvider: event.model.provider,
-      llmInputMessages:
-        options.recordInputs === false
-          ? undefined
-          : v6NormalizedMessages(event),
+      llmInputMessages: v6NormalizedMessages(event),
       llmTools: event.tools,
     });
 
@@ -950,22 +916,17 @@ export function vercelAI(
     }
 
     stored.handle.end({
-      output:
-        options.recordOutputs === false || generationError
-          ? undefined
-          : output,
+      output: generationError ? undefined : output,
       model: event.model.modelId,
       durationMs,
       endedAt: addMs(stored.startedAt, durationMs),
       llmProvider: event.model.provider,
       llmOutputMessages:
-        options.recordOutputs === false ||
-        output === undefined ||
-        generationError
+        output === undefined || generationError
           ? undefined
           : [{ role: "assistant", content: output }],
       status: generationError ? ("ERROR" as const) : undefined,
-      error: options.recordOutputs === false ? undefined : generationError,
+      error: generationError,
     });
   }
 
@@ -1015,13 +976,12 @@ export function vercelAI(
           : (options.generationName ?? "vercel-ai-generation");
       const handle = trace.startGeneration({
         name,
-        input: options.recordInputs === false ? undefined : event.messages,
+        input: event.messages,
         metadata: options.metadata,
         model: event.modelId,
         startedAt,
         llmProvider: event.provider,
-        llmInputMessages:
-          options.recordInputs === false ? undefined : event.messages,
+        llmInputMessages: event.messages,
         llmTools: event.tools,
       });
 
@@ -1044,13 +1004,13 @@ export function vercelAI(
       );
       const output = structuredAssistantOutput(undefined, event.content);
       stored.handle.end({
-        output: options.recordOutputs === false ? undefined : output,
+        output,
         model: event.modelId,
         durationMs,
         endedAt: addMs(stored.startedAt, durationMs),
         llmProvider: event.provider,
         llmOutputMessages:
-          options.recordOutputs === false || output === undefined
+          output === undefined
             ? undefined
             : [{ role: "assistant", content: output }],
       });
@@ -1077,8 +1037,7 @@ export function vercelAI(
       const handle = trace.startTool({
         name,
         parentId,
-        input:
-          options.recordInputs === false ? undefined : event.toolCall.input,
+        input: event.toolCall.input,
         metadata: options.metadata,
         startedAt,
         toolName: event.toolCall.toolName,
@@ -1124,7 +1083,7 @@ export function vercelAI(
           durationMs,
           endedAt: addMs(storedTool.startedAt, durationMs),
           toolName: event.toolCall.toolName,
-          ...toolOutput(event, options.recordOutputs !== false),
+          ...toolOutput(event),
         });
         coverParent(
           storedTool.parentId,
@@ -1149,13 +1108,12 @@ export function vercelAI(
         name,
         parentId,
         toolName: event.toolCall.toolName,
-        input:
-          options.recordInputs === false ? undefined : event.toolCall.input,
+        input: event.toolCall.input,
         metadata: options.metadata,
         durationMs,
         startedAt: subtractMs(endedAt, durationMs),
         endedAt,
-        ...toolOutput(event, options.recordOutputs !== false),
+        ...toolOutput(event),
       });
       coverParent(parentId, endedAt);
     },
@@ -1248,7 +1206,7 @@ export function vercelAI(
           durationMs,
           endedAt: toolEndedAt,
           toolName: event.toolCall.toolName,
-          ...v6ToolOutput(event, options.recordOutputs !== false),
+          ...v6ToolOutput(event),
         });
         coverParent(storedTool.parentId, toolEndedAt);
         return;
@@ -1270,13 +1228,12 @@ export function vercelAI(
         name,
         parentId,
         toolName: event.toolCall.toolName,
-        input:
-          options.recordInputs === false ? undefined : event.toolCall.input,
+        input: event.toolCall.input,
         metadata: options.metadata,
         durationMs,
         startedAt,
         endedAt,
-        ...v6ToolOutput(event, options.recordOutputs !== false),
+        ...v6ToolOutput(event),
       });
       coverParent(parentId, endedAt);
     },
@@ -1286,7 +1243,7 @@ export function vercelAI(
       runError = message;
       if (phase === "ending") {
         // Best-effort: apply before the in-flight terminal send reads error state.
-        endingTrace?.fail(rootErrorPayload(message));
+        endingTrace?.fail(message);
         endingTrace?.output(undefined);
         return;
       }

@@ -31,8 +31,6 @@ export type LangChainIntegrationOptions = {
   fetch?: LemmaClientOptions["fetch"];
   agentName?: string;
   metadata?: Record<string, unknown>;
-  recordInputs?: boolean;
-  recordOutputs?: boolean;
   /** Key looked up on run metadata / tags for threadId. Default: `threadId`. */
   threadIdKey?: string;
   /** Key looked up on run metadata / tags for userId. Default: `userId`, then `resourceId`. */
@@ -628,14 +626,6 @@ export class LemmaLangChainCallbackHandler {
     return this.lemma;
   }
 
-  private recordInputs() {
-    return this.options.recordInputs !== false;
-  }
-
-  private recordOutputs() {
-    return this.options.recordOutputs !== false;
-  }
-
   private resolveThreadId(
     metadata?: Record<string, unknown>,
     tags?: string[],
@@ -692,14 +682,14 @@ export class LemmaLangChainCallbackHandler {
   }
 
   private noteRootInput(stored: StoredTrace, input: unknown) {
-    if (!this.recordInputs() || input == null || stored.hasRootInput) return;
+    if (input == null || stored.hasRootInput) return;
     stored.rootInput = rootTraceInput(input);
     stored.hasRootInput = true;
     stored.handle.input(stored.rootInput);
   }
 
   private noteRootOutput(stored: StoredTrace, output: unknown) {
-    if (!this.recordOutputs() || output == null || stored.rootError) return;
+    if (output == null || stored.rootError) return;
     stored.rootOutput = rootTraceOutput(output);
   }
 
@@ -724,7 +714,7 @@ export class LemmaLangChainCallbackHandler {
     const startedAt = new Date();
     const handle = this.getLemma().trace({
       name,
-      input: this.recordInputs() ? rootTraceInput(input) : undefined,
+      input: rootTraceInput(input),
       metadata: {
         ...this.options.metadata,
         ...(metadata ?? {}),
@@ -739,8 +729,8 @@ export class LemmaLangChainCallbackHandler {
       ended: false,
       openedAt: startedAt,
       earliestStart: startedAt,
-      hasRootInput: this.recordInputs() && input != null,
-      rootInput: this.recordInputs() ? rootTraceInput(input) : undefined,
+      hasRootInput: input != null,
+      rootInput: rootTraceInput(input),
     };
     this.traces.set(runId, stored);
     const run: StoredRun = {
@@ -838,16 +828,14 @@ export class LemmaLangChainCallbackHandler {
     };
 
     if (stored.rootError) {
-      stored.handle.fail(
-        this.recordOutputs() ? stored.rootError : "error",
-      );
+      stored.handle.fail(stored.rootError);
       const promise = stored.handle.end(timing);
       this.trackPending(promise);
       await promise;
       return;
     }
 
-    if (!this.recordOutputs() || stored.rootOutput === undefined) {
+    if (stored.rootOutput === undefined) {
       const promise = stored.handle.end(timing);
       this.trackPending(promise);
       await promise;
@@ -929,7 +917,7 @@ export class LemmaLangChainCallbackHandler {
     const handle = stored.handle.startSpan({
       name: chainName,
       parentId: parent.handle?.id,
-      input: this.recordInputs() ? inputs : undefined,
+      input: inputs,
       metadata: this.options.metadata,
       attributes: langchainAttributes(
         runId,
@@ -957,7 +945,7 @@ export class LemmaLangChainCallbackHandler {
 
     if (run.handle) {
       run.handle.end({
-        output: this.recordOutputs() ? outputs : undefined,
+        output: outputs,
         endedAt,
         durationMs: durationMs(run.startedAt, endedAt),
       });
@@ -986,7 +974,7 @@ export class LemmaLangChainCallbackHandler {
     if (run.handle) {
       run.handle.end({
         status: "ERROR",
-        error: this.recordOutputs() ? message : undefined,
+        error: message,
         endedAt,
         durationMs: durationMs(run.startedAt, endedAt),
       });
@@ -1038,13 +1026,11 @@ export class LemmaLangChainCallbackHandler {
     const handle = attachment.stored.handle.startGeneration({
       name: serializedName(serialized, "langchain-llm"),
       parentId: attachment.parentId,
-      input: this.recordInputs() ? prompts : undefined,
+      input: prompts,
       metadata: this.options.metadata,
       model,
       llmProvider: provider,
-      llmInputMessages: this.recordInputs()
-        ? prompts.map((content) => ({ role: "user", content }))
-        : undefined,
+      llmInputMessages: prompts.map((content) => ({ role: "user", content })),
       llmInvocationParameters: extraParams,
       attributes: langchainAttributes(runId, parentRunId, "llm"),
       startedAt,
@@ -1072,9 +1058,7 @@ export class LemmaLangChainCallbackHandler {
   ) {
     const startedAt = new Date();
     const flatMessages = messages.flat();
-    const normalized = this.recordInputs()
-      ? normalizeMessages(flatMessages)
-      : undefined;
+    const normalized = normalizeMessages(flatMessages);
 
     const attachment = this.resolveAttachment(runId, parentRunId, () =>
       this.createOwnedTrace(
@@ -1098,7 +1082,7 @@ export class LemmaLangChainCallbackHandler {
     const handle = attachment.stored.handle.startGeneration({
       name: serializedName(serialized, "langchain-chat-model"),
       parentId: attachment.parentId,
-      input: this.recordInputs() ? normalized : undefined,
+      input: normalized,
       metadata: this.options.metadata,
       model,
       llmProvider: provider,
@@ -1142,14 +1126,12 @@ export class LemmaLangChainCallbackHandler {
     const awaitingTools = !softError && hasToolCalls(structured);
 
     run.handle.end({
-      output:
-        this.recordOutputs() && !softError ? structured : undefined,
-      error: this.recordOutputs() ? (softError ?? undefined) : undefined,
+      output: softError ? undefined : structured,
+      error: softError ?? undefined,
       status: softError ? "ERROR" : undefined,
       endedAt,
       durationMs: durationMs(run.startedAt, endedAt),
-      llmOutputMessages:
-        this.recordOutputs() && !softError ? outputMessages : undefined,
+      llmOutputMessages: softError ? undefined : outputMessages,
     });
 
     const stored = this.storedTrace(run.owningTraceId);
@@ -1207,7 +1189,7 @@ export class LemmaLangChainCallbackHandler {
 
     run.handle?.end({
       status: "ERROR",
-      error: this.recordOutputs() ? message : undefined,
+      error: message,
       endedAt,
       durationMs: durationMs(run.startedAt, endedAt),
     });
@@ -1257,7 +1239,7 @@ export class LemmaLangChainCallbackHandler {
       name,
       parentId: attachment.parentId,
       toolName: name,
-      input: this.recordInputs() ? input : undefined,
+      input,
       metadata: this.options.metadata,
       attributes: langchainAttributes(runId, parentRunId, "tool"),
       startedAt,
@@ -1283,13 +1265,13 @@ export class LemmaLangChainCallbackHandler {
     if (softError) {
       run.handle?.end({
         status: "ERROR",
-        error: this.recordOutputs() ? softError : undefined,
+        error: softError,
         endedAt,
         durationMs: durationMs(run.startedAt, endedAt),
       });
     } else {
       run.handle?.end({
-        output: this.recordOutputs() ? output : undefined,
+        output,
         endedAt,
         durationMs: durationMs(run.startedAt, endedAt),
       });
@@ -1316,7 +1298,7 @@ export class LemmaLangChainCallbackHandler {
 
     run.handle?.end({
       status: "ERROR",
-      error: this.recordOutputs() ? message : undefined,
+      error: message,
       endedAt,
       durationMs: durationMs(run.startedAt, endedAt),
     });
@@ -1364,7 +1346,7 @@ export class LemmaLangChainCallbackHandler {
     const handle = attachment.stored.handle.startSpan({
       name: serializedName(serialized, "langchain-retriever"),
       parentId: attachment.parentId,
-      input: this.recordInputs() ? query : undefined,
+      input: query,
       metadata: this.options.metadata,
       attributes: langchainAttributes(runId, parentRunId, "retriever"),
       startedAt,
@@ -1387,7 +1369,7 @@ export class LemmaLangChainCallbackHandler {
     const endedAt = new Date();
 
     run.handle?.end({
-      output: this.recordOutputs() ? documents : undefined,
+      output: documents,
       endedAt,
       durationMs: durationMs(run.startedAt, endedAt),
     });
@@ -1410,7 +1392,7 @@ export class LemmaLangChainCallbackHandler {
 
     run.handle?.end({
       status: "ERROR",
-      error: this.recordOutputs() ? message : undefined,
+      error: message,
       endedAt,
       durationMs: durationMs(run.startedAt, endedAt),
     });

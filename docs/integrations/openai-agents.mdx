@@ -160,20 +160,10 @@ the same conversation stay grouped.
 
 ## Privacy
 
-The integration records prompts, tool inputs, tool outputs, and model output by
-default. Disable input/output recording when you need structure and timings
-without payload contents. When `recordOutputs` / `record_outputs` is false, root
-error status is kept but the message is redacted to `"error"`.
-
-```typescript
-addTraceProcessor(openAIAgents({ recordInputs: false, recordOutputs: false }));
-```
-
-```python
-from uselemma_tracing import instrument_openai_agents
-
-instrument_openai_agents(record_inputs=False, record_outputs=False)
-```
+The integration always records prompts, tool inputs, tool outputs, model output,
+and error messages — a trace cannot show what a run produced or why it failed
+without them. Redact secrets and sensitive user data before they reach the
+agent.
 
 ## Debugging
 

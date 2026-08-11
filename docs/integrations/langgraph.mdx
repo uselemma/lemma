@@ -122,10 +122,8 @@ def call_graph(user_message: str):
 `langGraph()` / `langgraph()` is an explicit LangChain-callback adapter — LangGraph
 emits LangChain callback events; Lemma does not use a separate LangGraph tracer.
 
-Use `langGraph({ recordInputs: false, recordOutputs: false })` in TypeScript or
-`langgraph(record_inputs=False, record_outputs=False)` in Python to avoid
-sending prompts, tool inputs, tool outputs, or model output text while keeping
-span structure and status.
+Prompts, tool inputs, outputs, model output text, and error messages are always
+recorded. Redact secrets and sensitive user data before they reach the graph.
 
 ## Debugging
 

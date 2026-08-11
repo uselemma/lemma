@@ -368,7 +368,7 @@ describe("vercelAI", () => {
     ]);
   });
 
-  it("does not record inputs or outputs when disabled", async () => {
+  it("records inputs and outputs on generations and tools", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const lemma = new Lemma({
       apiKey: "key",
@@ -377,11 +377,7 @@ describe("vercelAI", () => {
     });
 
     await lemma.trace("support-agent", async (trace) => {
-      const integration = vercelAI({
-        trace,
-        recordInputs: false,
-        recordOutputs: false,
-      });
+      const integration = vercelAI({ trace });
 
       integration.onLanguageModelCallStart?.({
         callId: "call-1",
@@ -414,16 +410,18 @@ describe("vercelAI", () => {
     });
 
     const body = jsonBody(fetchMock.mock.calls[0]);
-    expect(body.trace.spans[0]).not.toHaveProperty("input");
-    expect(body.trace.spans[0]).not.toHaveProperty("output");
-    expect(body.trace.spans[0].attributes).not.toHaveProperty(
+    expect(body.trace.spans[0].input).toEqual([
+      { role: "user", content: "secret" },
+    ]);
+    expect(body.trace.spans[0].output).toBeDefined();
+    expect(body.trace.spans[0].attributes).toHaveProperty(
       "llm.input_messages.0.message.content",
     );
-    expect(body.trace.spans[0].attributes).not.toHaveProperty(
+    expect(body.trace.spans[0].attributes).toHaveProperty(
       "llm.output_messages.0.message.content",
     );
-    expect(body.trace.spans[1]).not.toHaveProperty("input");
-    expect(body.trace.spans[1]).not.toHaveProperty("output");
+    expect(body.trace.spans[1].input).toEqual({ secret: "tool input" });
+    expect(body.trace.spans[1].output).toEqual({ secret: "tool output" });
   });
 
   it("records AI SDK v6 step and tool callbacks", async () => {
@@ -1149,28 +1147,27 @@ describe("vercelAI", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("redacts root error text when recordOutputs is false", async () => {
+  it("records the full root error message", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const integration = vercelAI({
       apiKey: "key",
       projectId: "10000000-0000-0000-0000-000000000001",
       fetch: fetchMock as typeof fetch,
-      recordOutputs: false,
     });
 
     integration.onStart?.({
       functionId: "support-agent",
       model: { provider: "openai", modelId: "gpt-4o" },
-      prompt: "secret failure",
+      prompt: "the failing prompt",
     });
-    await integration.fail(new Error("secret stack details"));
+    await integration.fail(new RangeError("context window exceeded"));
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
       status: "ERROR",
-      error: "error",
+      error: "RangeError: context window exceeded",
+      input: "the failing prompt",
     });
-    expect(body.trace.error).not.toContain("secret");
   });
 
   it("records real root wall-clock bounds", async () => {

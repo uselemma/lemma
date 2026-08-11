@@ -383,7 +383,7 @@ Complete, correctly typed trees improve classification and automated issue extra
 
 ## Privacy
 
-Record complete inputs and outputs only when safe. Redact secrets, credentials, and sensitive user data before tracing them. Framework integrations also support `recordInputs: false` / `recordOutputs: false` when you need structure and timing without payload contents.
+Redact secrets, credentials, and sensitive user data before tracing them. Framework integrations always record inputs, outputs, and error messages: without them a trace cannot show what a run consumed, produced, or why it failed.
 
 ## Related pages
 

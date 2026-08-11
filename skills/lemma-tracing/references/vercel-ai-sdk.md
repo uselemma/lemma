@@ -143,20 +143,9 @@ If the app uses AI SDK v6 streaming syntax, keep its existing stream handling bu
 
 For advanced externally coordinated work, you may pass a trace handle to `vercelAI({ trace })`. In that case, do not also wrap the run in callback-form `lemma.trace(...)`.
 
-## Recording Controls
+## What Gets Recorded
 
-Disable captured prompts, tool inputs, tool outputs, or model output text when needed. Structure and status remain:
-
-```typescript
-telemetry: {
-  integrations: [
-    vercelAI({
-      recordInputs: false,
-      recordOutputs: false,
-    }),
-  ],
-}
-```
+Prompts, tool inputs, tool outputs, model output text, and error messages are always recorded — there is no flag to suppress them. Redact sensitive values before they reach the AI SDK call.
 
 ## What Lemma Records
 

@@ -75,8 +75,6 @@ export type MastraIntegrationOptions = {
   generationName?: string;
   toolName?: string;
   metadata?: Record<string, unknown>;
-  recordInputs?: boolean;
-  recordOutputs?: boolean;
   /** Key looked up on root metadata / requestContext for threadId. Default: `threadId`. */
   threadIdKey?: string;
   /** Key looked up on root metadata / requestContext for userId. Default: `userId`, then `resourceId`. */
@@ -349,19 +347,13 @@ export class LemmaMastraExporter {
     const endedAt =
       toDate(span.endTime) ?? (span.isEvent ? startedAt : new Date());
     const errorMessage = childErrorMessage(span);
-    const recordInputs = this.options.recordInputs !== false;
-    const recordOutputs = this.options.recordOutputs !== false;
-    const input = recordInputs ? span.input : undefined;
-    const output =
-      recordOutputs && !errorMessage ? span.output : undefined;
-    const error = recordOutputs ? errorMessage : undefined;
     const status = errorMessage ? ("ERROR" as const) : undefined;
     const base: SpanOptions = {
       id: span.id,
       parentId,
       name: span.name,
-      input,
-      output,
+      input: span.input,
+      output: errorMessage ? undefined : span.output,
       metadata: this.options.metadata,
       attributes: {
         "mastra.span_type": span.type,
@@ -375,18 +367,15 @@ export class LemmaMastraExporter {
       endedAt,
       durationMs: durationMs(startedAt, endedAt),
       status,
-      error,
+      error: errorMessage,
     };
 
     if (GENERATION_TYPES.has(span.type)) {
       const attrs = span.attributes;
-      const llmInputMessages = recordInputs
-        ? asInputMessages(span.input)
-        : undefined;
-      const llmOutputMessages =
-        recordOutputs && !errorMessage
-          ? asOutputMessages(span.output)
-          : undefined;
+      const llmInputMessages = asInputMessages(span.input);
+      const llmOutputMessages = errorMessage
+        ? undefined
+        : asOutputMessages(span.output);
       trace.recordGeneration({
         ...base,
         name: this.options.generationName ?? span.name,
@@ -413,8 +402,6 @@ export class LemmaMastraExporter {
   }
 
   private deliver(root: MastraExportedSpan, children: MastraExportedSpan[]) {
-    const recordInputs = this.options.recordInputs !== false;
-    const recordOutputs = this.options.recordOutputs !== false;
     const startedAt = toDate(root.startTime) ?? new Date();
     const endedAt = toDate(root.endTime) ?? new Date();
     const recordedIds = new Set(children.map((child) => child.id));
@@ -422,7 +409,7 @@ export class LemmaMastraExporter {
     const trace = this.getLemma().trace({
       id: root.traceId,
       name: this.options.agentName ?? resolveAgentName(root),
-      input: recordInputs ? rootTraceInput(root.input) : undefined,
+      input: rootTraceInput(root.input),
       metadata: {
         ...this.options.metadata,
         ...(root.metadata ?? {}),
@@ -450,13 +437,13 @@ export class LemmaMastraExporter {
     }
 
     const endPromise = trace.end(
-      recordOutputs && !rootError
-        ? {
+      rootError
+        ? { durationMs: durationMs(startedAt, endedAt), endedAt }
+        : {
             output: root.output,
             durationMs: durationMs(startedAt, endedAt),
             endedAt,
-          }
-        : { durationMs: durationMs(startedAt, endedAt), endedAt },
+          },
     );
 
     this.pending.add(endPromise);

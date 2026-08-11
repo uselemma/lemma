@@ -293,14 +293,12 @@ def test_langchain_records_is_error_tool_end_as_error_without_output():
     assert "output" not in span
 
 
-def test_privacy_flags_strip_payloads_keep_structure():
+def test_records_inputs_outputs_and_errors():
     calls = []
     handler = langchain(
         api_key="key",
         project_id="10000000-0000-0000-0000-000000000001",
         transport=make_transport(calls),
-        record_inputs=False,
-        record_outputs=False,
     )
 
     handler.on_chain_start(
@@ -333,14 +331,15 @@ def test_privacy_flags_strip_payloads_keep_structure():
     assert body["trace"]["status"] == "ERROR"
     assert body["trace"]["thread_id"] == "t1"
     assert body["trace"]["user_id"] == "u1"
-    assert body["trace"].get("input") in (None, {})
-    assert body["trace"]["error"] == "error"
+    assert body["trace"]["input"] == "secret"
+    assert body["trace"]["error"] == "RuntimeError: failed"
     assert body["trace"]["spans"][0]["type"] == "generation"
     assert body["trace"]["spans"][0]["model"] == "gpt-4o"
-    assert body["trace"]["spans"][0].get("input") in (None, {})
-    assert body["trace"]["spans"][0].get("output") in (None, {})
+    assert body["trace"]["spans"][0]["input"] == ["secret"]
+    assert body["trace"]["spans"][0]["output"] == "secret-out"
     assert body["trace"]["spans"][1]["status"] == "ERROR"
-    assert body["trace"]["spans"][1].get("input") in (None, {})
+    assert body["trace"]["spans"][1]["error"] == "RuntimeError: boom"
+    assert body["trace"]["spans"][1]["input"] == {"q": "secret"}
     assert body["trace"]["spans"][1].get("output") in (None, {})
 
 
