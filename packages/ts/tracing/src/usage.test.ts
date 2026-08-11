@@ -48,6 +48,26 @@ describe("normalizeTokenUsage", () => {
     });
   });
 
+  it("maps OpenAI Agents / Responses input_tokens_details shapes", () => {
+    expect(
+      normalizeTokenUsage({
+        input_tokens: 100,
+        output_tokens: 50,
+        input_tokens_details: {
+          cached_tokens: 40,
+          cache_write_tokens: 8,
+        },
+        output_tokens_details: { reasoning_tokens: 12 },
+      }),
+    ).toEqual({
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheReadInputTokens: 40,
+      cacheCreationInputTokens: 8,
+      reasoningOutputTokens: 12,
+    });
+  });
+
   it("maps Anthropic-style cache fields", () => {
     expect(
       normalizeTokenUsage({
@@ -77,6 +97,30 @@ describe("normalizeTokenUsage", () => {
       outputTokens: 2,
       cacheReadInputTokens: 7,
       reasoningOutputTokens: 1,
+    });
+  });
+
+  it("maps AI SDK 7 inputTokenDetails / outputTokenDetails", () => {
+    expect(
+      normalizeTokenUsage({
+        inputTokens: 20,
+        outputTokens: 6,
+        inputTokenDetails: {
+          noCacheTokens: 10,
+          cacheReadTokens: 7,
+          cacheWriteTokens: 3,
+        },
+        outputTokenDetails: {
+          textTokens: 4,
+          reasoningTokens: 2,
+        },
+      }),
+    ).toEqual({
+      inputTokens: 20,
+      outputTokens: 6,
+      cacheReadInputTokens: 7,
+      cacheCreationInputTokens: 3,
+      reasoningOutputTokens: 2,
     });
   });
 

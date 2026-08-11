@@ -113,7 +113,18 @@ describe("vercelAI", () => {
       modelId: "gpt-4o",
       content: [{ type: "text", text: "hi" }],
       performance: { responseTimeMs: 10 },
-      usage: { inputTokens: 15, outputTokens: 4, reasoningTokens: 2 },
+      usage: {
+        inputTokens: 15,
+        outputTokens: 4,
+        // AI SDK 7 nested details (top-level reasoningTokens/cachedInputTokens deprecated).
+        inputTokenDetails: {
+          cacheReadTokens: 5,
+          cacheWriteTokens: 2,
+        },
+        outputTokenDetails: {
+          reasoningTokens: 2,
+        },
+      },
     } as never);
 
     await integration.onEnd?.({ text: "hi" });
@@ -124,6 +135,8 @@ describe("vercelAI", () => {
       usage: {
         input_tokens: 15,
         output_tokens: 4,
+        cache_read_input_tokens: 5,
+        cache_creation_input_tokens: 2,
         reasoning_output_tokens: 2,
       },
       attributes: {
@@ -131,6 +144,9 @@ describe("vercelAI", () => {
         "lemma.sdk.integration": "vercel-ai",
         "gen_ai.usage.input_tokens": 15,
         "gen_ai.usage.output_tokens": 4,
+        "gen_ai.usage.cache_read.input_tokens": 5,
+        "gen_ai.usage.cache_creation.input_tokens": 2,
+        "gen_ai.usage.reasoning.output_tokens": 2,
       },
     });
   });

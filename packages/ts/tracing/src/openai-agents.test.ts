@@ -164,7 +164,9 @@ describe("openAIAgents", () => {
         usage: {
           input_tokens: 8,
           output_tokens: 2,
-          prompt_tokens_details: { cached_tokens: 3 },
+          // Agents / Responses API shape (not Chat Completions prompt_tokens_details).
+          input_tokens_details: { cached_tokens: 3, cache_write_tokens: 1 },
+          output_tokens_details: { reasoning_tokens: 2 },
         },
       },
       startedAt: "2026-06-29T10:00:00.000Z",
@@ -182,12 +184,17 @@ describe("openAIAgents", () => {
         input_tokens: 8,
         output_tokens: 2,
         cache_read_input_tokens: 3,
+        cache_creation_input_tokens: 1,
+        reasoning_output_tokens: 2,
       },
       attributes: {
         "llm.provider": "openai",
         "lemma.sdk.integration": "openai-agents",
         "gen_ai.usage.input_tokens": 8,
         "gen_ai.usage.output_tokens": 2,
+        "gen_ai.usage.cache_read.input_tokens": 3,
+        "gen_ai.usage.cache_creation.input_tokens": 1,
+        "gen_ai.usage.reasoning.output_tokens": 2,
       },
     });
   });

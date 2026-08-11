@@ -96,15 +96,22 @@ export function normalizeTokenUsage(raw: unknown): TokenUsage | undefined {
     "completion_tokens",
   ]);
 
-  // OpenAI-style nested details
+  // Nested detail containers across providers / SDKs:
+  // - Chat Completions: prompt_tokens_details / completion_tokens_details
+  // - Responses / OpenAI Agents: input_tokens_details / output_tokens_details
+  // - AI SDK 7: inputTokenDetails / outputTokenDetails
   const promptDetails =
     asRecord(source.prompt_tokens_details) ??
     asRecord(source.promptTokensDetails) ??
+    asRecord(source.input_tokens_details) ??
+    asRecord(source.inputTokensDetails) ??
     asRecord(source.input_token_details) ??
     asRecord(source.inputTokenDetails);
   const completionDetails =
     asRecord(source.completion_tokens_details) ??
     asRecord(source.completionTokensDetails) ??
+    asRecord(source.output_tokens_details) ??
+    asRecord(source.outputTokensDetails) ??
     asRecord(source.output_token_details) ??
     asRecord(source.outputTokenDetails);
 
@@ -121,6 +128,9 @@ export function normalizeTokenUsage(raw: unknown): TokenUsage | undefined {
       "cachedTokens",
       "cache_read",
       "cacheRead",
+      // AI SDK 7 LanguageModelUsage.inputTokenDetails
+      "cacheReadTokens",
+      "cache_read_tokens",
     ]);
   }
 
@@ -128,6 +138,8 @@ export function normalizeTokenUsage(raw: unknown): TokenUsage | undefined {
     "cacheCreationInputTokens",
     "cache_creation_input_tokens",
     "cache_creation",
+    "cacheWriteTokens",
+    "cache_write_tokens",
   ]);
   if (cacheCreationInputTokens === undefined && promptDetails) {
     cacheCreationInputTokens = pickNumber(promptDetails, [
@@ -135,6 +147,9 @@ export function normalizeTokenUsage(raw: unknown): TokenUsage | undefined {
       "cacheCreation",
       "cache_write",
       "cacheWrite",
+      // OpenAI Responses / Agents + AI SDK 7
+      "cache_write_tokens",
+      "cacheWriteTokens",
     ]);
   }
 

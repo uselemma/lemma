@@ -97,15 +97,23 @@ def normalize_token_usage(raw: Any) -> dict[str, int | float] | None:
         ),
     )
 
+    # Nested detail containers across providers / SDKs:
+    # - Chat Completions: prompt_tokens_details / completion_tokens_details
+    # - Responses / OpenAI Agents: input_tokens_details / output_tokens_details
+    # - AI SDK 7: inputTokenDetails / outputTokenDetails
     prompt_details = (
         _as_dict(source.get("prompt_tokens_details"))
         or _as_dict(source.get("promptTokensDetails"))
+        or _as_dict(source.get("input_tokens_details"))
+        or _as_dict(source.get("inputTokensDetails"))
         or _as_dict(source.get("input_token_details"))
         or _as_dict(source.get("inputTokenDetails"))
     )
     completion_details = (
         _as_dict(source.get("completion_tokens_details"))
         or _as_dict(source.get("completionTokensDetails"))
+        or _as_dict(source.get("output_tokens_details"))
+        or _as_dict(source.get("outputTokensDetails"))
         or _as_dict(source.get("output_token_details"))
         or _as_dict(source.get("outputTokenDetails"))
     )
@@ -123,7 +131,15 @@ def normalize_token_usage(raw: Any) -> dict[str, int | float] | None:
     if cache_read is None and prompt_details is not None:
         cache_read = _pick_number(
             prompt_details,
-            ("cached_tokens", "cachedTokens", "cache_read", "cacheRead"),
+            (
+                "cached_tokens",
+                "cachedTokens",
+                "cache_read",
+                "cacheRead",
+                # AI SDK 7 LanguageModelUsage.inputTokenDetails
+                "cacheReadTokens",
+                "cache_read_tokens",
+            ),
         )
 
     cache_creation = _pick_number(
@@ -132,12 +148,22 @@ def normalize_token_usage(raw: Any) -> dict[str, int | float] | None:
             "cacheCreationInputTokens",
             "cache_creation_input_tokens",
             "cache_creation",
+            "cacheWriteTokens",
+            "cache_write_tokens",
         ),
     )
     if cache_creation is None and prompt_details is not None:
         cache_creation = _pick_number(
             prompt_details,
-            ("cache_creation", "cacheCreation", "cache_write", "cacheWrite"),
+            (
+                "cache_creation",
+                "cacheCreation",
+                "cache_write",
+                "cacheWrite",
+                # OpenAI Responses / Agents + AI SDK 7
+                "cache_write_tokens",
+                "cacheWriteTokens",
+            ),
         )
 
     reasoning = _pick_number(

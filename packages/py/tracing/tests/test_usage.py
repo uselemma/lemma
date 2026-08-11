@@ -27,6 +27,44 @@ def test_normalize_provider_shapes():
         "reasoning_output_tokens": 12,
     }
     assert normalize_token_usage(
+        {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "input_tokens_details": {
+                "cached_tokens": 40,
+                "cache_write_tokens": 8,
+            },
+            "output_tokens_details": {"reasoning_tokens": 12},
+        }
+    ) == {
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "cache_read_input_tokens": 40,
+        "cache_creation_input_tokens": 8,
+        "reasoning_output_tokens": 12,
+    }
+    assert normalize_token_usage(
+        {
+            "inputTokens": 20,
+            "outputTokens": 6,
+            "inputTokenDetails": {
+                "noCacheTokens": 10,
+                "cacheReadTokens": 7,
+                "cacheWriteTokens": 3,
+            },
+            "outputTokenDetails": {
+                "textTokens": 4,
+                "reasoningTokens": 2,
+            },
+        }
+    ) == {
+        "input_tokens": 20,
+        "output_tokens": 6,
+        "cache_read_input_tokens": 7,
+        "cache_creation_input_tokens": 3,
+        "reasoning_output_tokens": 2,
+    }
+    assert normalize_token_usage(
         {"tokenUsage": {"promptTokens": 9, "completionTokens": 3}}
     ) == {"input_tokens": 9, "output_tokens": 3}
     assert normalize_token_usage({"input_tokens": 0, "output_tokens": 0}) == {
