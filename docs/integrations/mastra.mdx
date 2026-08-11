@@ -115,14 +115,7 @@ Root `input` is the current user turn (extracted from Mastra’s `{ messages }` 
 
 ## Privacy
 
-The integration records prompts, tool inputs, tool outputs, and model output by default. Disable input/output recording when you need structure and timings without payload contents:
-
-```typescript
-new LemmaMastraExporter({
-  recordInputs: false,
-  recordOutputs: false,
-})
-```
+The integration always records prompts, tool inputs, tool outputs, model output, and error messages — a trace cannot show what a run produced or why it failed without them. Redact secrets and sensitive user data before they reach the agent.
 
 ## Debugging
 

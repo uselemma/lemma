@@ -145,18 +145,7 @@ For advanced externally coordinated work, you may pass a trace handle to `vercel
 
 ## Recording Controls
 
-Disable captured prompts, tool inputs, tool outputs, or model output text when needed. Structure and status remain:
-
-```typescript
-telemetry: {
-  integrations: [
-    vercelAI({
-      recordInputs: false,
-      recordOutputs: false,
-    }),
-  ],
-}
-```
+Prompts, tool inputs, tool outputs, model output text, and error messages are always recorded. Redact sensitive values before they reach the AI SDK call.
 
 ## What Lemma Records
 

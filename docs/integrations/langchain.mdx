@@ -98,10 +98,8 @@ Promote identity from configurable metadata/tag keys (`threadIdKey` /
 `thread_id_key`, `userIdKey` / `user_id_key`). Defaults also check
 `conversation_id`, `session_id`, and `resourceId`.
 
-Use `langChain({ recordInputs: false, recordOutputs: false })` in TypeScript or
-`langchain(record_inputs=False, record_outputs=False)` in Python to avoid
-sending prompts, tool inputs, tool outputs, or model output text while keeping
-span structure and status.
+Prompts, tool inputs, outputs, model output text, and error messages are always
+recorded. Redact secrets and sensitive user data before they reach the chain.
 
 ## Debugging
 

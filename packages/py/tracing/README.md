@@ -196,9 +196,9 @@ from uselemma_tracing import enable_debug_mode
 enable_debug_mode()
 ```
 
-Use `openai_agents(record_inputs=False, record_outputs=False)` when you need a
-processor that avoids sending prompts, tool inputs, tool outputs, and generated
-text.
+Prompts, tool inputs, outputs, generated text, and error messages are always
+recorded — Lemma cannot show what a run consumed, produced, or why it failed
+without them.
 
 ## LangChain and LangGraph
 
@@ -245,10 +245,8 @@ result = graph.invoke(
 )
 ```
 
-Use `langchain(record_inputs=False, record_outputs=False)` or
-`langgraph(record_inputs=False, record_outputs=False)` to avoid sending prompts,
-tool inputs, tool outputs, or generated text while keeping span structure and
-status.
+Prompts, tool inputs, outputs, generated text, and error messages are always
+recorded.
 
 ## Supported Contract Fields
 

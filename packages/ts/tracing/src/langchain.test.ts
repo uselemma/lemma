@@ -320,12 +320,9 @@ describe("langChain", () => {
     expect(body.trace.spans[0]).not.toHaveProperty("output");
   });
 
-  it("privacy flags strip payloads but keep structure and status", async () => {
+  it("records inputs, outputs, errors, and structure", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
-    const h = handler(fetchMock, {
-      recordInputs: false,
-      recordOutputs: false,
-    });
+    const h = handler(fetchMock);
 
     h.handleChainStart(
       { name: "agent" },
@@ -353,21 +350,21 @@ describe("langChain", () => {
       thread_id: "t1",
       user_id: "u1",
     });
-    expect(body.trace).not.toHaveProperty("input");
-    expect(body.trace.error).toBe("error");
+    expect(body.trace.input).toBe("secret");
+    expect(body.trace.error).toBe("failed");
     expect(body.trace.spans[0]).toMatchObject({
       type: "generation",
       model: "gpt-4o",
+      input: ["secret"],
+      output: "secret-out",
     });
-    expect(body.trace.spans[0]).not.toHaveProperty("input");
-    expect(body.trace.spans[0]).not.toHaveProperty("output");
     expect(body.trace.spans[1]).toMatchObject({
       type: "tool",
       status: "ERROR",
+      error: "boom",
+      input: { q: "secret" },
     });
-    expect(body.trace.spans[1]).not.toHaveProperty("input");
     expect(body.trace.spans[1]).not.toHaveProperty("output");
-    expect(body.trace.spans[1].error ?? null).toBeNull();
   });
 
   it("normalizes common LangChain message classes and preserves tool calls", async () => {

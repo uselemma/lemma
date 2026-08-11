@@ -45,8 +45,6 @@ export type OpenAIAgentsIntegrationOptions = {
   baseUrl?: string;
   fetch?: typeof fetch;
   metadata?: Record<string, unknown>;
-  recordInputs?: boolean;
-  recordOutputs?: boolean;
   /** Key looked up on trace/span metadata for threadId. Default: `threadId`. */
   threadIdKey?: string;
   /** Key looked up on trace/span metadata for userId. Default: `userId`, then `resourceId`. */
@@ -160,24 +158,17 @@ function spanName(data: OpenAIAgentsSpanData): string {
   return `openai-agents-${data.type || "span"}`;
 }
 
-function openAIAttributes(
-  span: OpenAIAgentsSpan,
-  recordPayloads: boolean,
-): Record<string, unknown> {
+function openAIAttributes(span: OpenAIAgentsSpan): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries({
       "openai.agents.trace_id": span.traceId,
       "openai.agents.span_id": span.spanId,
       "openai.agents.parent_id": span.parentId,
       "openai.agents.span_type": span.spanData.type,
-      "openai.agents.trace_metadata":
-        recordPayloads && span.traceMetadata
-          ? JSON.stringify(span.traceMetadata)
-          : undefined,
-      // Full span_data can contain prompts/outputs — omit when privacy is on.
-      "openai.agents.span_data": recordPayloads
-        ? JSON.stringify(span.spanData)
+      "openai.agents.trace_metadata": span.traceMetadata
+        ? JSON.stringify(span.traceMetadata)
         : undefined,
+      "openai.agents.span_data": JSON.stringify(span.spanData),
     }).filter(([, value]) => value !== undefined && value !== null),
   );
 }
@@ -283,7 +274,6 @@ export function openAIAgents(
   }
 
   function noteRootInput(stored: StoredTrace, input: unknown) {
-    if (options.recordInputs === false) return;
     if (input == null) return;
     if (stored.rootInput !== undefined) return;
     stored.rootInput = rootTraceInput(input);
@@ -291,7 +281,6 @@ export function openAIAgents(
   }
 
   function noteRootOutput(stored: StoredTrace, output: unknown) {
-    if (options.recordOutputs === false) return;
     if (output == null || stored.rootError) return;
     stored.rootOutput = output;
   }
@@ -342,15 +331,13 @@ export function openAIAgents(
     const spanStartedAt = startedAt(span);
     noteBounds(trace, spanStartedAt, undefined);
 
-    const recordPayloads =
-      options.recordInputs !== false && options.recordOutputs !== false;
     const base = {
       id: span.spanId,
       parentId: span.parentId ?? null,
       name: spanName(data),
-      input: options.recordInputs === false ? undefined : input,
+      input,
       metadata: options.metadata,
-      attributes: openAIAttributes(span, recordPayloads),
+      attributes: openAIAttributes(span),
       startedAt: spanStartedAt,
     };
 
@@ -359,10 +346,9 @@ export function openAIAgents(
         ...base,
         model: typeof data["model"] === "string" ? data["model"] : undefined,
         llmProvider: "openai",
-        llmInputMessages:
-          options.recordInputs === false || !Array.isArray(input)
-            ? undefined
-            : (input as unknown[]),
+        llmInputMessages: Array.isArray(input)
+          ? (input as unknown[])
+          : undefined,
         llmInvocationParameters: data["model_config"],
       });
     }
@@ -406,8 +392,7 @@ export function openAIAgents(
     const hardError =
       span.error != null ? describeError(span.error) : undefined;
     const errorMessage = hardError ?? softError ?? undefined;
-    const parsedOutput =
-      options.recordOutputs === false || errorMessage ? undefined : rawOutput;
+    const parsedOutput = errorMessage ? undefined : rawOutput;
     const spanStartedAt = startedAt(span);
     const spanEndedAt = endedAt(span);
     noteBounds(storedTrace, spanStartedAt, spanEndedAt);
@@ -424,14 +409,13 @@ export function openAIAgents(
     handle.end({
       // Failures must not invent an output — record error instead.
       output: parsedOutput,
-      error: options.recordOutputs === false ? undefined : errorMessage,
+      error: errorMessage,
       status: errorMessage ? "ERROR" : undefined,
       model: typeof data["model"] === "string" ? data["model"] : undefined,
       endedAt: spanEndedAt,
       durationMs: durationMs(spanStartedAt, spanEndedAt),
       llmOutputMessages:
         errorMessage ||
-        options.recordOutputs === false ||
         data.type !== "generation" ||
         !Array.isArray(data["output"])
           ? undefined
@@ -478,14 +462,12 @@ export function openAIAgents(
     };
 
     if (stored.rootError) {
-      stored.handle.fail(
-        options.recordOutputs === false ? "error" : stored.rootError,
-      );
+      stored.handle.fail(stored.rootError);
       await stored.handle.end(timing);
       return;
     }
 
-    if (options.recordOutputs === false || stored.rootOutput === undefined) {
+    if (stored.rootOutput === undefined) {
       await stored.handle.end(timing);
       return;
     }

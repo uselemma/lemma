@@ -155,18 +155,7 @@ vercelAI({
 
 For advanced cases, you can still attach to an existing trace by passing `vercelAI({ trace })` or by calling AI SDK inside a `lemma.trace()` callback. If you use the callback form of `lemma.trace()`, the callback owns trace closure. If you pass a trace handle to `vercelAI({ trace })`, the integration closes it automatically at the end of the AI SDK operation.
 
-Use `recordInputs: false` or `recordOutputs: false` to avoid sending prompts, tool inputs, tool outputs, or model output text. Structure and status are preserved.
-
-```typescript
-telemetry: {
-  integrations: [
-    vercelAI({
-      recordInputs: false,
-      recordOutputs: false,
-    }),
-  ],
-}
-```
+Prompts, tool inputs, tool outputs, model output, and error messages are always recorded. Redact secrets and sensitive user data before they reach the AI SDK call.
 
 ## Abort, flush, and shutdown
 

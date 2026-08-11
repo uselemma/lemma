@@ -236,7 +236,7 @@ await generateText({
 
 Use `telemetry.functionId` / `experimental_telemetry.functionId` for the agent name, or set it on the integration with `vercelAI({ agentName: "support-agent" })`.
 
-Use `vercelAI({ recordInputs: false, recordOutputs: false })` to avoid sending prompts, tool inputs, tool outputs, or model output text.
+Prompts, tool inputs, outputs, model output text, and error messages are always recorded.
 
 Call `fail(error)` when the AI SDK call throws before a terminal callback, `flush()` to await ingest delivery, and `shutdown()` in short-lived runtimes. Do not share one integration across concurrent AI SDK operations.
 
@@ -276,8 +276,8 @@ import { enableDebugMode } from "@uselemma/tracing";
 enableDebugMode();
 ```
 
-Use `openAIAgents({ recordInputs: false, recordOutputs: false })` to avoid
-sending prompts, tool inputs, tool outputs, or model output text.
+Prompts, tool inputs, outputs, model output text, and error messages are always
+recorded.
 
 ## LangChain and LangGraph
 
@@ -322,10 +322,8 @@ const result = await graph.invoke(
 );
 ```
 
-Use `langChain({ recordInputs: false, recordOutputs: false })` or
-`langGraph({ recordInputs: false, recordOutputs: false })` to avoid sending
-prompts, tool inputs, tool outputs, or generated text while keeping span
-structure and status.
+Prompts, tool inputs, outputs, model output text, and error messages are always
+recorded.
 
 When a helper only has IDs, use the client-level methods:
 
