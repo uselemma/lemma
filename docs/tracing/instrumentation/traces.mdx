@@ -105,6 +105,19 @@ Use the callback form when one function owns the whole run. In TypeScript, use a
 
 The TypeScript trace handle has a stable `trace.id`. Call `trace.end({ output, durationMs })` once when the run is finished to send the complete trace. Callback traces in both SDKs measure total trace duration automatically; pass `durationMs` / `duration_ms` only when you already measured it.
 
+## Root latency vs generation duration
+
+Analytics treats these as **distinct** quantities:
+
+| Quantity | Source | Meaning |
+| --- | --- | --- |
+| **Root / run latency** | Trace `started_at` → `ended_at` / `duration_ms` | End-to-end agent execution time |
+| **Generation duration** | Generation span `duration_ms` (or its `started_at` → `ended_at`) | Time for a single model call |
+
+Keep generation timing as measured wall-clock (or provider-reported response time when that is what the integration records). Do not substitute root latency for generation speed, or sum child durations into the root when the root already has an accurate wall-clock measurement.
+
+Framework integrations already set both. For manual instrumentation, pass `durationMs` on each generation and let the root measure from `lemma.trace()` start to `end()` / callback return.
+
 ## Record by ID
 
 Helpers can attach work to a trace when they only have IDs from the caller. This detached helper API is TypeScript-specific.

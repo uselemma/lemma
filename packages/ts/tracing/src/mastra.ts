@@ -6,6 +6,11 @@ import {
 } from "./client";
 import { describeError } from "./error-message";
 import { toolResultError } from "./tool-result";
+import { normalizeTokenUsage, type TokenUsage } from "./usage";
+
+const INTEGRATION_ATTRS = {
+  "lemma.sdk.integration": "mastra",
+} as const;
 
 /** Mastra AI-tracing span type strings (structural; no @mastra/* dependency). */
 export type MastraSpanType =
@@ -279,6 +284,19 @@ function childErrorMessage(span: MastraExportedSpan): string | undefined {
   return undefined;
 }
 
+/**
+ * Extract usage when Mastra exposes distinguishable input/output tokens.
+ * `{ totalTokens }` alone is not enough — normalizeTokenUsage omits it.
+ */
+function mastraUsage(span: MastraExportedSpan): TokenUsage | undefined {
+  const fromOutput =
+    span.output && typeof span.output === "object"
+      ? normalizeTokenUsage((span.output as Record<string, unknown>).usage)
+      : undefined;
+  if (fromOutput) return fromOutput;
+  return normalizeTokenUsage(span.attributes?.usage) ?? normalizeTokenUsage(span.attributes);
+}
+
 export class LemmaMastraExporter {
   name = "lemma";
   private lemma: Lemma | undefined;
@@ -356,6 +374,7 @@ export class LemmaMastraExporter {
       output: errorMessage ? undefined : span.output,
       metadata: this.options.metadata,
       attributes: {
+        ...INTEGRATION_ATTRS,
         "mastra.span_type": span.type,
         "mastra.trace_id": span.traceId,
         "mastra.span_id": span.id,
@@ -384,6 +403,7 @@ export class LemmaMastraExporter {
         llmInvocationParameters: attrs?.parameters,
         llmInputMessages,
         llmOutputMessages,
+        usage: mastraUsage(span),
       });
       return;
     }

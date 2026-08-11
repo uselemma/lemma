@@ -141,6 +141,57 @@ describe("openAIAgents", () => {
     ).toBe(40);
   });
 
+  it("extracts usage from spanData.usage and sets openai-agents provenance", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await processor.onTraceStart({
+      traceId: "trace_usage",
+      name: "support-agent",
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_usage",
+      spanId: "span_gen",
+      spanData: {
+        type: "generation",
+        model: "gpt-4o",
+        input: [{ role: "user", content: "hi" }],
+        output: [{ role: "assistant", content: "hello" }],
+        usage: {
+          input_tokens: 8,
+          output_tokens: 2,
+          prompt_tokens_details: { cached_tokens: 3 },
+        },
+      },
+      startedAt: "2026-06-29T10:00:00.000Z",
+      endedAt: "2026-06-29T10:00:00.050Z",
+    });
+    await processor.onTraceEnd({
+      traceId: "trace_usage",
+      name: "support-agent",
+    });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      type: "generation",
+      usage: {
+        input_tokens: 8,
+        output_tokens: 2,
+        cache_read_input_tokens: 3,
+      },
+      attributes: {
+        "llm.provider": "openai",
+        "lemma.sdk.integration": "openai-agents",
+        "gen_ai.usage.input_tokens": 8,
+        "gen_ai.usage.output_tokens": 2,
+      },
+    });
+  });
+
   it("records function spans with isError output as error without output", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const processor = openAIAgents({

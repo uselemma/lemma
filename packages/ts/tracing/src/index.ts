@@ -10,11 +10,16 @@ export {
   type GenerationOptions,
   type JsonValue,
   type LemmaClientOptions,
+  type SdkIntegration,
   type SpanOptions,
+  type TokenUsage,
   type ToolOptions,
   type TraceEndOptions,
   type TraceOptions,
   type DebugSmokeTestResult,
+  type WireTokenUsage,
+  normalizeTokenUsage,
+  toWireTokenUsage,
 } from "./client";
 export {
   disableDebugMode,

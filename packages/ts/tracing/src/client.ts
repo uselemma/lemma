@@ -19,6 +19,16 @@ import {
   lemmaDebug,
 } from "./debug-mode";
 import { failureMessage } from "./error-message";
+import {
+  normalizeTokenUsage,
+  tokenUsageAttributes,
+  toWireTokenUsage,
+  type TokenUsage,
+  type WireTokenUsage,
+} from "./usage";
+
+export type { TokenUsage, WireTokenUsage } from "./usage";
+export { normalizeTokenUsage, toWireTokenUsage } from "./usage";
 
 export type JsonValue =
   | string
@@ -119,6 +129,13 @@ export type SpanOptions = {
   rerankerModelName?: string;
   rerankerInputDocuments?: unknown[];
   rerankerOutputDocuments?: unknown[];
+  /**
+   * Token usage for generations. CamelCase DX; converted to snake_case on the
+   * wire. Omit when the provider did not supply usage — do not invent zeros.
+   * Explicit zeros are emitted so Analytics can distinguish healthy zero from
+   * missing instrumentation.
+   */
+  usage?: TokenUsage;
 };
 
 export type GenerationOptions = Omit<SpanOptions, "type" | "toolName">;
@@ -157,7 +174,20 @@ type SdkTraceSpanPayload = {
   error?: string | null;
   model?: string;
   tool_name?: string;
+  usage?: WireTokenUsage;
 };
+
+/** Lemma SDK provenance — lets Analytics attribute coverage gaps. */
+export type SdkIntegration =
+  | "manual"
+  | "vercel-ai"
+  | "langchain"
+  | "openai-agents"
+  | "mastra";
+
+const SDK_LANGUAGE = "typescript" as const;
+const SDK_INTEGRATION_ATTR = "lemma.sdk.integration";
+const SDK_LANGUAGE_ATTR = "lemma.sdk.language";
 
 type SdkTracePayload = {
   project_id: string;
@@ -313,6 +343,10 @@ function flattenDocument(
   );
 }
 
+function resolveUsage(options: NormalizedSpanOptions): TokenUsage | undefined {
+  return normalizeTokenUsage(options.usage);
+}
+
 function contractAttributes(
   options: NormalizedSpanOptions,
 ): Record<string, unknown> {
@@ -325,7 +359,14 @@ function contractAttributes(
     options.llmModelName ?? options.model,
   );
   addDefined(attributes, "llm.provider", options.llmProvider);
+  // llm.system from explicit llmSystem; gen_ai.system from llmSystem or llmProvider.
   addDefined(attributes, "llm.system", options.llmSystem);
+  addDefined(
+    attributes,
+    "gen_ai.system",
+    options.llmSystem ?? options.llmProvider,
+  );
+  Object.assign(attributes, tokenUsageAttributes(resolveUsage(options)));
   addDefined(
     attributes,
     "llm.invocation_parameters",
@@ -389,9 +430,16 @@ function contractAttributes(
 function spanAttributes(
   options: NormalizedSpanOptions,
 ): Record<string, unknown> | undefined {
+  const callerAttributes = options.attributes ?? {};
+  const integration =
+    typeof callerAttributes[SDK_INTEGRATION_ATTR] === "string"
+      ? callerAttributes[SDK_INTEGRATION_ATTR]
+      : ("manual" as SdkIntegration);
   const attributes = {
-    ...(options.attributes ?? {}),
+    ...callerAttributes,
     ...contractAttributes(options),
+    [SDK_LANGUAGE_ATTR]: SDK_LANGUAGE,
+    [SDK_INTEGRATION_ATTR]: integration,
   };
   return Object.keys(attributes).length > 0 ? attributes : undefined;
 }
@@ -403,6 +451,7 @@ function normalizeSpan(
   const startedAt = options.startedAt ?? new Date();
   const endedAt = options.endedAt ?? new Date();
   const error = failureMessage(options.error);
+  const usage = toWireTokenUsage(resolveUsage(options));
   return {
     id: options.id,
     parent_id: options.parentId ?? options.parentSpanId,
@@ -419,6 +468,7 @@ function normalizeSpan(
     error,
     model: options.model,
     tool_name: options.toolName,
+    ...(usage ? { usage } : {}),
   };
 }
 

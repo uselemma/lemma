@@ -93,6 +93,95 @@ describe("Lemma", () => {
     ]);
   });
 
+  it("emits wire usage + GenAI attributes from recordGeneration", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await lemma.trace("support-agent", async (trace) => {
+      trace.recordGeneration({
+        name: "draft-reply",
+        model: "gpt-4o",
+        llmProvider: "openai",
+        output: "answer",
+        durationMs: 40,
+        usage: {
+          inputTokens: 100,
+          outputTokens: 20,
+          cacheReadInputTokens: 40,
+          reasoningOutputTokens: 5,
+        },
+      });
+      return "ok";
+    });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      type: "generation",
+      model: "gpt-4o",
+      usage: {
+        input_tokens: 100,
+        output_tokens: 20,
+        cache_read_input_tokens: 40,
+        reasoning_output_tokens: 5,
+      },
+      attributes: {
+        "llm.provider": "openai",
+        "gen_ai.system": "openai",
+        "gen_ai.usage.input_tokens": 100,
+        "gen_ai.usage.output_tokens": 20,
+        "gen_ai.usage.cache_read.input_tokens": 40,
+        "gen_ai.usage.reasoning.output_tokens": 5,
+        "llm.token_count.prompt": 100,
+        "llm.token_count.completion": 20,
+        "lemma.sdk.language": "typescript",
+        "lemma.sdk.integration": "manual",
+      },
+    });
+  });
+
+  it("omits usage when absent and emits zeros when explicitly provided", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await lemma.trace("support-agent", async (trace) => {
+      trace.recordGeneration({
+        name: "no-usage",
+        model: "gpt-4o",
+        llmProvider: "openai",
+        output: "a",
+      });
+      trace.recordGeneration({
+        name: "zero-usage",
+        model: "gpt-4o",
+        llmProvider: "openai",
+        output: "b",
+        usage: { inputTokens: 0, outputTokens: 0 },
+      });
+      return "ok";
+    });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).not.toHaveProperty("usage");
+    expect(body.trace.spans[0].attributes).not.toHaveProperty(
+      "gen_ai.usage.input_tokens",
+    );
+    expect(body.trace.spans[1]).toMatchObject({
+      usage: { input_tokens: 0, output_tokens: 0 },
+      attributes: {
+        "gen_ai.usage.input_tokens": 0,
+        "gen_ai.usage.output_tokens": 0,
+      },
+    });
+  });
+
   it("supports live span handles", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const lemma = new Lemma({

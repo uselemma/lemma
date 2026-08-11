@@ -1,0 +1,81 @@
+---
+title: "Analytics telemetry"
+description: "Required SDK attributes for Analytics widgets, coverage semantics, and upgrade behavior"
+---
+
+Lemma Analytics widgets consume source telemetry from ingested traces. The SDK emits that telemetry; the backend computes windowed aggregates. The SDK must **not** derive user-facing totals or estimated cost.
+
+For the full ingest contract, see [Trace contract](/reference/trace-contract). This page lists the attributes Analytics depends on and how missing vs zero values are interpreted.
+
+## Required signals
+
+| Analytics need | Source fields |
+| --- | --- |
+| Model identity | Generation `model`, attributes `llm.model_name` / `gen_ai.request.model` |
+| Provider identity | `llm.provider`, `gen_ai.system` (from `llmProvider` / `llmSystem`) |
+| Input / output tokens | Top-level `usage.input_tokens` / `usage.output_tokens`, plus `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` and `llm.token_count.prompt` / `llm.token_count.completion` |
+| Cached tokens | `usage.cache_read_input_tokens`, `usage.cache_creation_input_tokens` → `gen_ai.usage.cache_read.input_tokens`, `gen_ai.usage.cache_creation.input_tokens` |
+| Reasoning tokens | `usage.reasoning_output_tokens` → `gen_ai.usage.reasoning.output_tokens` |
+| Root latency | Trace `started_at` / `ended_at` / `duration_ms` |
+| Generation speed | Generation span `duration_ms` (kept distinct from root latency) |
+| Run / tool errors | Normalized `status: "ERROR"` and `error` on the root or tool span |
+| Tool identity | Tool span `name` / `tool_name`, nested under the same `trace.id` |
+| Coverage provenance | `lemma.sdk.language`, `lemma.sdk.integration` |
+
+## Coverage semantics (omit vs zero)
+
+| Situation | Emit |
+| --- | --- |
+| Provider did not return usage | **Omit** `usage` and usage attributes entirely |
+| Provider returned zeros | **Emit** `0` |
+
+Analytics treats a missing field as “not instrumented / unknown” and an explicit `0` as a healthy zero. Inventing zeros in the SDK would under-report coverage and hide upgrade gaps.
+
+Estimated cost is a **backend** derivation from model/provider + token telemetry. Do not emit billed cost from the SDK.
+
+## Provenance attributes
+
+Lemma extensions on every span:
+
+| Attribute | Values |
+| --- | --- |
+| `lemma.sdk.language` | `typescript` \| `python` |
+| `lemma.sdk.integration` | `manual` \| `vercel-ai` \| `langchain` \| `openai-agents` \| `mastra` |
+
+Use these to attribute sparse coverage to an integration or SDK language without hard-coding provider logic in the Analytics frontend.
+
+## Framework integrations
+
+| Integration | Usage extraction |
+| --- | --- |
+| LangChain / LangGraph | `llmOutput.tokenUsage` / `token_usage`, message `usage_metadata` |
+| OpenAI Agents | `spanData.usage` or `response.usage` when present |
+| Mastra | `output.usage` / `attributes.usage` when input/output tokens are distinguishable (`totalTokens` alone is omitted) |
+| Vercel AI SDK | Extracts `usage` when present on finish/step-end events; many AI SDK versions do not expose usage on telemetry callbacks today |
+
+Manual `recordGeneration` / `record_generation` always accepts usage when you have it from the provider response.
+
+## Upgrade behavior (older SDK versions)
+
+| Older SDK behavior | Analytics impact |
+| --- | --- |
+| No `usage` object | Token / estimated-cost widgets show as not instrumented for those generations |
+| `llm.provider` missing | Provider breakdowns fall back to unknown / unsupported |
+| No `lemma.sdk.*` provenance | Coverage cannot be attributed to a specific integration |
+| Root or generation duration missing | Latency / generation-speed percentiles skip those points |
+
+Upgrading to an SDK that emits usage, provider, duration, and provenance enables Analytics to move from “not instrumented” to populated charts without re-ingesting historical traces.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Trace contract" icon="/icons/file-json.svg" href="/reference/trace-contract">
+    Full ingest payload and native contract props.
+  </Card>
+  <Card title="Generations" icon="/icons/sparkles.svg" href="/tracing/instrumentation/generations">
+    How to record model calls with usage.
+  </Card>
+  <Card title="Traces" icon="/icons/git-branch.svg" href="/tracing/instrumentation/traces">
+    Root latency vs generation duration.
+  </Card>
+</CardGroup>

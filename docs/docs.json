@@ -82,7 +82,8 @@
                 "group": "Reference",
                 "expanded": false,
                 "pages": [
-                  "reference/trace-contract"
+                  "reference/trace-contract",
+                  "reference/analytics-telemetry"
                 ]
               }
             ]

@@ -91,6 +91,50 @@ describe("vercelAI", () => {
     });
   });
 
+  it("emits usage from language-model end when present", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+      agentName: "docs-agent",
+    });
+
+    integration.onLanguageModelCallStart?.({
+      callId: "call-usage",
+      provider: "openai",
+      modelId: "gpt-4o",
+      messages: [{ role: "user", content: "hello" }],
+    } as never);
+
+    integration.onLanguageModelCallEnd?.({
+      callId: "call-usage",
+      provider: "openai",
+      modelId: "gpt-4o",
+      content: [{ type: "text", text: "hi" }],
+      performance: { responseTimeMs: 10 },
+      usage: { inputTokens: 15, outputTokens: 4, reasoningTokens: 2 },
+    } as never);
+
+    await integration.onEnd?.({ text: "hi" });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      type: "generation",
+      usage: {
+        input_tokens: 15,
+        output_tokens: 4,
+        reasoning_output_tokens: 2,
+      },
+      attributes: {
+        "llm.provider": "openai",
+        "lemma.sdk.integration": "vercel-ai",
+        "gen_ai.usage.input_tokens": 15,
+        "gen_ai.usage.output_tokens": 4,
+      },
+    });
+  });
+
   it("creates and ends an AI SDK v6 trace without lemma.trace", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const integration = vercelAI({

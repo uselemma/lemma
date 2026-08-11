@@ -143,6 +143,7 @@ Every child is a named object in `trace.spans[]`.
 | `error` / `status` | Failure details; prefer these over inventing an output |
 | `started_at` / `ended_at` / `duration_ms` | Timing |
 | `model` | Generation model name |
+| `usage` | Token counts when the provider supplied them (omit when unknown) |
 | `attributes` | Flattened contract attributes and escape-hatch keys |
 | `metadata` | Arbitrary JSON for the child |
 
@@ -151,7 +152,7 @@ Every child is a named object in `trace.spans[]`.
 | Type | Use for | Semantic fields |
 | --- | --- | --- |
 | `span` | Retrieval, ranking, planning, app logic | `input` + `output` (or `error`) |
-| `generation` | One LLM call | `model`, prompt/messages, completion (or `error`) |
+| `generation` | One LLM call | `model`, prompt/messages, completion (or `error`), optional `usage` |
 | `tool` | One tool invocation | tool `name`, arguments, result (or `error`) |
 
 Type is a discriminator. Setting `model` alone does not make a generation; set `type: "generation"`.
@@ -176,7 +177,71 @@ Prefer both:
 - `input` — the prompt payload for that call
 - `llmInputMessages` / `llm_input_messages` — structured messages flattened into `llm.input_messages.{index}.message.*`
 
-`model` is the primary model identifier. Native generation props such as `llmProvider`, `llmInvocationParameters`, and `llmOutputMessages` populate OpenInference-style attributes.
+`model` is the primary model identifier. Native generation props such as `llmProvider`, `llmInvocationParameters`, and `llmOutputMessages` populate OpenInference-style attributes. Pass `usage` (camelCase in TypeScript, snake_case kwargs in Python) when the provider returns token counts — see [Token usage](#token-usage).
+
+## Token usage
+
+Generations may include a top-level `usage` object. Lemma does **not** invent token counts. Coverage semantics:
+
+| Provider behavior | SDK behavior |
+| --- | --- |
+| No usage supplied | Omit `usage` entirely (and omit usage attributes) |
+| Usage includes zeros | Emit those zeros |
+
+Healthy zero ≠ missing instrumentation. Analytics uses absence vs explicit zero to decide whether a metric is unsupported or genuinely empty.
+
+### Wire format (ingest JSON)
+
+```json
+{
+  "usage": {
+    "input_tokens": 1200,
+    "output_tokens": 340,
+    "cache_read_input_tokens": 800,
+    "cache_creation_input_tokens": 50,
+    "reasoning_output_tokens": 120
+  }
+}
+```
+
+All fields are optional. Only include fields the provider actually returned.
+
+### TypeScript DX
+
+```typescript
+trace.recordGeneration({
+  name: "draft-reply",
+  model: "gpt-4o",
+  llmProvider: "openai",
+  usage: {
+    inputTokens: 1200,
+    outputTokens: 340,
+    cacheReadInputTokens: 800,
+    cacheCreationInputTokens: 50,
+    reasoningOutputTokens: 120,
+  },
+});
+```
+
+### Python DX
+
+```python
+trace.record_generation(
+    name="draft-reply",
+    model="gpt-4o",
+    llm_provider="openai",
+    input_tokens=1200,
+    output_tokens=340,
+    cache_read_input_tokens=800,
+    cache_creation_input_tokens=50,
+    reasoning_output_tokens=120,
+)
+# or: usage={"input_tokens": 1200, "output_tokens": 340, ...}
+```
+
+The SDK also flattens usage into span attributes using OTel GenAI names (`gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.usage.cache_read.input_tokens`, `gen_ai.usage.cache_creation.input_tokens`, `gen_ai.usage.reasoning.output_tokens`) plus OpenInference compatibility keys (`llm.token_count.prompt`, `llm.token_count.completion`).
+
+Do **not** derive user-facing aggregates or estimated cost in the SDK — the backend computes windowed Analytics quantities from this source telemetry.
 
 ## Tools
 
@@ -287,6 +352,7 @@ Do not hand-build the normalized aliases unless you are bypassing the SDK. Prefe
     | User id | `userId` | `trace.user_id` |
     | Generation | `trace.recordGeneration(...)` / `startGeneration(...)` | `type: "generation"` |
     | Generation model | `model` | `model` |
+    | Generation usage | `usage: { inputTokens, ... }` | `usage` (snake_case on the wire) |
     | Generation content | `input`, `output`, `llmInputMessages` | `input`, `output`, attributes |
     | Tool | `trace.recordTool(...)` / `startTool(...)` | `type: "tool"` |
     | Tool args / result | `input`, `output` | `input`, `output` |
@@ -305,6 +371,7 @@ Do not hand-build the normalized aliases unless you are bypassing the SDK. Prefe
     | User id | `user_id` | `trace.user_id` |
     | Generation | `trace.record_generation(...)` / `start_generation(...)` | `type: "generation"` |
     | Generation model | `model` | `model` |
+    | Generation usage | `usage={...}` or `input_tokens=` / `output_tokens=` kwargs | `usage` |
     | Generation content | `input`, `output`, `llm_input_messages` | `input`, `output`, attributes |
     | Tool | `trace.record_tool(...)` / `start_tool(...)` | `type: "tool"` |
     | Tool args / result | `input`, `output` | `input`, `output` |
@@ -329,8 +396,9 @@ Use native props instead of hand-building flattened attribute names. In Python, 
     | SDK prop | Attribute key |
     | --- | --- |
     | `llmModelName` | `llm.model_name` |
-    | `llmProvider` | `llm.provider` |
-    | `llmSystem` | `llm.system` |
+    | `llmProvider` | `llm.provider` (also sets `gen_ai.system` when `llmSystem` is unset) |
+    | `llmSystem` | `llm.system`, `gen_ai.system` |
+    | `usage` | `gen_ai.usage.*`, `llm.token_count.prompt` / `completion` |
     | `llmInvocationParameters` | `llm.invocation_parameters` |
     | `llmInputMessages` | `llm.input_messages.{index}.message.*` |
     | `llmOutputMessages` | `llm.output_messages.{index}.message.*` |
@@ -363,6 +431,17 @@ Use native props instead of hand-building flattened attribute names. In Python, 
 
 `model` also populates `llm.model_name` for generation records. Object and array attribute values are serialized where Lemma expects string-valued attributes. For fields without a native prop, pass raw `attributes`.
 
+## Provenance attributes (Lemma extensions)
+
+Every emitted span includes SDK provenance so Analytics can attribute coverage gaps to an integration or language without provider-specific frontend logic:
+
+| Attribute | Values | Set by |
+| --- | --- | --- |
+| `lemma.sdk.language` | `typescript` \| `python` | Core client |
+| `lemma.sdk.integration` | `manual` \| `vercel-ai` \| `langchain` \| `openai-agents` \| `mastra` | Core defaults to `manual`; integrations override |
+
+These are Lemma-specific extensions (not OpenTelemetry GenAI canonical names).
+
 ## Semantic requirements
 
 | Field | Why it matters |
@@ -372,10 +451,13 @@ Use native props instead of hand-building flattened attribute names. In Python, 
 | Root `output` or `error` | Distinguishes success from failure |
 | Stable `name` | Groups and filters by agent/workflow |
 | Typed generations with model + content | Makes model calls inspectable |
+| Provider identity (`llm.provider` / `gen_ai.system`) | Model, token, and estimated-cost breakdowns |
+| Token `usage` when the provider supplies it | Token and estimated-cost Analytics; omit vs zero coverage |
 | Typed tools with args + result/error | Makes tool behavior inspectable |
 | Correct `parent_id` nesting | Preserves causality in the tree |
 | `thread_id` for multi-turn work | Groups conversation turns |
 | `user_id` when available | Enables per-user slicing |
+| Measured `duration_ms` on root and generations | Root latency vs generation speed as distinct quantities |
 
 ## Issue detection
 
@@ -388,6 +470,9 @@ Redact secrets, credentials, and sensitive user data before tracing them. Framew
 ## Related pages
 
 <CardGroup cols={2}>
+  <Card title="Analytics telemetry" icon="/icons/chart-column.svg" href="/reference/analytics-telemetry">
+    Required attributes for Analytics widgets and upgrade behavior.
+  </Card>
   <Card title="Building high-quality traces" icon="/icons/circle-check.svg" href="/guides/building-high-quality-traces">
     Bad → better → best examples for the ideal instrumentation path.
   </Card>

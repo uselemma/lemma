@@ -7,6 +7,7 @@ from typing import Any
 from .client import Lemma, SpanHandle, TraceContext, _duration_ms, _now
 from .error_message import describe_error
 from .tool_result import tool_result_error
+from .usage import normalize_token_usage
 
 KNOWN_PROVIDERS = (
     "openai",
@@ -520,6 +521,7 @@ def _langchain_attributes(
     run_id: str, parent_run_id: str | None, run_type: str
 ) -> dict[str, Any]:
     attrs: dict[str, Any] = {
+        "lemma.sdk.integration": "langchain",
         "langchain.run_id": str(run_id),
         "langchain.run_type": run_type,
     }
@@ -527,6 +529,43 @@ def _langchain_attributes(
         attrs["langchain.parent_run_id"] = str(parent_run_id)
     return attrs
 
+
+def llm_token_usage(response: Any) -> dict[str, int | float] | None:
+    """Extract usage from LLMResult.llm_output and/or message usage_metadata."""
+    llm_output = _get(response, "llm_output")
+    if llm_output is None:
+        llm_output = _get(response, "llmOutput")
+    from_output = normalize_token_usage(llm_output)
+    if from_output is not None:
+        return from_output
+
+    generations = _get(response, "generations")
+    if not isinstance(generations, list):
+        return None
+    for group in generations:
+        if not isinstance(group, list):
+            continue
+        for item in group:
+            if not isinstance(item, dict) and not hasattr(item, "__dict__"):
+                continue
+            message = _get(item, "message")
+            if message is not None:
+                from_message = (
+                    normalize_token_usage(_get(message, "usage_metadata"))
+                    or normalize_token_usage(_get(message, "usageMetadata"))
+                    or normalize_token_usage(_get(message, "response_metadata"))
+                    or normalize_token_usage(message)
+                )
+                if from_message is not None:
+                    return from_message
+            from_item = (
+                normalize_token_usage(_get(item, "usage_metadata"))
+                or normalize_token_usage(_get(item, "generationInfo"))
+                or normalize_token_usage(item if isinstance(item, dict) else None)
+            )
+            if from_item is not None:
+                return from_item
+    return None
 
 class LemmaLangChainCallbackHandler:
     """LangChain callback handler that owns one Lemma trace per root run."""
@@ -989,6 +1028,7 @@ class LemmaLangChainCallbackHandler:
             ended_at=ended_at,
             duration_ms=_duration_ms(run.started_at, ended_at),
             llm_output_messages=(output_messages if soft_error is None else None),
+            usage=llm_token_usage(response),
         )
 
         stored = self._traces.get(run.owning_trace_id)
