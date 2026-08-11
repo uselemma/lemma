@@ -1037,8 +1037,7 @@ export function vercelAI(
       const handle = trace.startTool({
         name,
         parentId,
-        input:
-          event.toolCall.input,
+        input: event.toolCall.input,
         metadata: options.metadata,
         startedAt,
         toolName: event.toolCall.toolName,
@@ -1109,8 +1108,7 @@ export function vercelAI(
         name,
         parentId,
         toolName: event.toolCall.toolName,
-        input:
-          event.toolCall.input,
+        input: event.toolCall.input,
         metadata: options.metadata,
         durationMs,
         startedAt: subtractMs(endedAt, durationMs),
@@ -1230,8 +1228,7 @@ export function vercelAI(
         name,
         parentId,
         toolName: event.toolCall.toolName,
-        input:
-          event.toolCall.input,
+        input: event.toolCall.input,
         metadata: options.metadata,
         durationMs,
         startedAt,

@@ -988,9 +988,7 @@ class LemmaLangChainCallbackHandler:
             status="ERROR" if soft_error else None,
             ended_at=ended_at,
             duration_ms=_duration_ms(run.started_at, ended_at),
-            llm_output_messages=(
-                output_messages if soft_error is None else None
-            ),
+            llm_output_messages=(output_messages if soft_error is None else None),
         )
 
         stored = self._traces.get(run.owning_trace_id)
