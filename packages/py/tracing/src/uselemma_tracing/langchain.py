@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from .client import Lemma, SpanHandle, TraceContext, _duration_ms, _now
+from .error_message import describe_error
 from .tool_result import tool_result_error
 
 KNOWN_PROVIDERS = (
@@ -515,10 +516,6 @@ def llm_provider(
     return None
 
 
-def _error_message(error: Any) -> str:
-    return str(error)
-
-
 def _langchain_attributes(
     run_id: str, parent_run_id: str | None, run_type: str
 ) -> dict[str, Any]:
@@ -844,7 +841,7 @@ class LemmaLangChainCallbackHandler:
         if run is None:
             return
         ended_at = _now()
-        message = _error_message(error)
+        message = describe_error(error)
         stored = self._traces.get(run.owning_trace_id)
 
         if run.handle is not None:
@@ -1055,7 +1052,7 @@ class LemmaLangChainCallbackHandler:
         if run is None:
             return
         ended_at = _now()
-        message = _error_message(error)
+        message = describe_error(error)
         if run.handle is not None:
             run.handle.end(
                 status="ERROR",
@@ -1162,7 +1159,7 @@ class LemmaLangChainCallbackHandler:
         if run is None:
             return
         ended_at = _now()
-        message = _error_message(error)
+        message = describe_error(error)
         if run.handle is not None:
             run.handle.end(
                 status="ERROR",
@@ -1255,7 +1252,7 @@ class LemmaLangChainCallbackHandler:
         if run is None:
             return
         ended_at = _now()
-        message = _error_message(error)
+        message = describe_error(error)
         if run.handle is not None:
             run.handle.end(
                 status="ERROR",

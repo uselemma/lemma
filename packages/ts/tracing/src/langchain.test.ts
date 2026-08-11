@@ -256,6 +256,38 @@ describe("langChain", () => {
     expect(body.trace.spans[0]).not.toHaveProperty("output");
   });
 
+  it("fails the root even when the exception carries no message", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock);
+
+    h.handleChainStart({ name: "support-agent" }, "hello", "chain-1");
+    h.handleToolStart({ name: "lookup" }, "hello", "tool-1", "chain-1");
+    await h.handleToolError(new RangeError(), "tool-1");
+    await h.handleChainError(new Error(), "chain-1");
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace).toMatchObject({ status: "ERROR", error: "Error" });
+    expect(body.trace.spans[0]).toMatchObject({
+      name: "lookup",
+      status: "ERROR",
+      error: "RangeError",
+    });
+  });
+
+  it("qualifies subclass exceptions with their class name", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock);
+
+    h.handleChainStart({ name: "support-agent" }, "hello", "chain-1");
+    await h.handleChainError(new TypeError("x is not a function"), "chain-1");
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace).toMatchObject({
+      status: "ERROR",
+      error: "TypeError: x is not a function",
+    });
+  });
+
   it("records MCP isError tool ends as error without output", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const h = handler(fetchMock);

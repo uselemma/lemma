@@ -18,6 +18,7 @@ import {
   isDebugVerifyEnabled,
   lemmaDebug,
 } from "./debug-mode";
+import { failureMessage } from "./error-message";
 
 export type JsonValue =
   | string
@@ -201,11 +202,6 @@ function iso(
 ): string | null | undefined {
   if (value == null) return value;
   return value instanceof Date ? value.toISOString() : value;
-}
-
-function errorMessage(error: unknown): string | null {
-  if (error == null) return null;
-  return error instanceof Error ? error.message : String(error);
 }
 
 function timestampMs(value: Date | string | null | undefined): number | null {
@@ -406,6 +402,7 @@ function normalizeSpan(
 ): SdkTraceSpanPayload {
   const startedAt = options.startedAt ?? new Date();
   const endedAt = options.endedAt ?? new Date();
+  const error = failureMessage(options.error);
   return {
     id: options.id,
     parent_id: options.parentId ?? options.parentSpanId,
@@ -418,8 +415,8 @@ function normalizeSpan(
     started_at: iso(startedAt) ?? new Date().toISOString(),
     ended_at: iso(endedAt) ?? new Date().toISOString(),
     duration_ms: options.durationMs,
-    status: options.status ?? (options.error ? "ERROR" : undefined),
-    error: errorMessage(options.error),
+    status: options.status ?? (error ? "ERROR" : undefined),
+    error,
     model: options.model,
     tool_name: options.toolName,
   };
@@ -673,7 +670,7 @@ export class TraceContext {
   }
 
   fail(error: unknown) {
-    this.traceError = errorMessage(error);
+    this.traceError = failureMessage(error);
     this.changed();
   }
 

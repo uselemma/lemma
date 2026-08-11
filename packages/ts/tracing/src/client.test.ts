@@ -121,6 +121,38 @@ describe("Lemma", () => {
     expect(body.trace.spans[0].id).toEqual(expect.any(String));
   });
 
+  it("keeps failures whose value carries no readable message", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    // A subclass field declaration leaves an own `message` of undefined, and a
+    // blank string carries no message at all — both still failed.
+    class ApiError extends Error {}
+    const shadowed = new ApiError("upstream failed");
+    Object.defineProperty(shadowed, "message", { value: undefined });
+
+    const trace = lemma.trace({ name: "support-agent" });
+    trace.recordTool({ name: "lookup", error: shadowed });
+    trace.recordSpan({ name: "blank", error: "   " });
+    trace.fail("   ");
+    await trace.end();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace).toMatchObject({ status: "ERROR", error: "Error" });
+    expect(body.trace.spans[0]).toMatchObject({
+      status: "ERROR",
+      error: "ApiError",
+    });
+    expect(body.trace.spans[1]).toMatchObject({
+      status: "ERROR",
+      error: "Error",
+    });
+  });
+
   it("honors explicit root startedAt and endedAt on trace handles", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const lemma = new Lemma({

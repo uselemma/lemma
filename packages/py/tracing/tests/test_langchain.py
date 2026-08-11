@@ -234,10 +234,32 @@ def test_langchain_records_errors():
 
     body = calls[0]["body"]
     assert body["trace"]["status"] == "ERROR"
-    assert body["trace"]["error"] == "agent failed"
+    assert body["trace"]["error"] == "RuntimeError: agent failed"
     assert body["trace"]["spans"][0]["status"] == "ERROR"
-    assert body["trace"]["spans"][0]["error"] == "lookup failed"
+    assert body["trace"]["spans"][0]["error"] == "RuntimeError: lookup failed"
     assert "output" not in body["trace"]["spans"][0]
+
+
+def test_langchain_fails_root_for_message_less_exceptions():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id="10000000-0000-0000-0000-000000000001",
+        transport=make_transport(calls),
+    )
+
+    handler.on_chain_start({"name": "support-agent"}, "hello", run_id="chain-1")
+    handler.on_tool_start(
+        {"name": "lookup"}, "hello", run_id="tool-1", parent_run_id="chain-1"
+    )
+    handler.on_tool_error(ValueError(), run_id="tool-1")
+    handler.on_chain_error(RuntimeError(), run_id="chain-1")
+
+    body = calls[0]["body"]
+    assert body["trace"]["status"] == "ERROR"
+    assert body["trace"]["error"] == "RuntimeError"
+    assert body["trace"]["spans"][0]["status"] == "ERROR"
+    assert body["trace"]["spans"][0]["error"] == "ValueError"
 
 
 def test_langchain_records_is_error_tool_end_as_error_without_output():

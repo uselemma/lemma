@@ -454,6 +454,36 @@ describe("openAIAgents", () => {
     expect(body.trace).not.toHaveProperty("output");
   });
 
+  it("records root failure from a message-less agent error", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await processor.onTraceStart({
+      traceId: "trace_agent_bare_err",
+      name: "support-agent",
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_agent_bare_err",
+      spanId: "span_agent",
+      spanData: { type: "agent", name: "support-agent" },
+      error: { data: { code: 500 } },
+    });
+    await processor.onTraceEnd({
+      traceId: "trace_agent_bare_err",
+      name: "support-agent",
+    });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace).toMatchObject({
+      status: "ERROR",
+      error: '{"data":{"code":500}}',
+    });
+  });
+
   it("promotes configurable identity keys from metadata", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const processor = openAIAgents({

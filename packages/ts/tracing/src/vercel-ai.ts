@@ -5,6 +5,7 @@ import {
   type TraceContext,
   type TraceHandle,
 } from "./client";
+import { describeError } from "./error-message";
 import { toolResultError } from "./tool-result";
 
 type MaybePromise<T> = T | PromiseLike<T>;
@@ -486,16 +487,6 @@ function endOutput(event: TerminalEvent) {
   return structuredAssistantOutput(event.text, event.content);
 }
 
-function errorMessage(error: unknown): string {
-  if (typeof error === "string" && error) return error;
-  if (error instanceof Error && error.message) return error.message;
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
-}
-
 export function vercelAI(
   options: VercelAIIntegrationOptions = {},
 ): VercelAITelemetryIntegration {
@@ -744,7 +735,7 @@ export function vercelAI(
 
     const eventError =
       "error" in event && event.error != null
-        ? errorMessage(event.error)
+        ? describeError(event.error)
         : undefined;
     if (eventError && !runError) {
       runError = eventError;
@@ -810,7 +801,7 @@ export function vercelAI(
     const output = v6Output(event);
     const generationError =
       "error" in event && event.error != null
-        ? errorMessage(event.error)
+        ? describeError(event.error)
         : undefined;
 
     const generation = {
@@ -947,7 +938,7 @@ export function vercelAI(
     );
     const output = structuredAssistantOutput(event.text, event.content);
     const generationError =
-      event.error != null ? errorMessage(event.error) : undefined;
+      event.error != null ? describeError(event.error) : undefined;
 
     for (const toolCall of event.toolCalls ?? []) {
       if (toolCall.toolCallId) {
@@ -1291,7 +1282,7 @@ export function vercelAI(
     },
 
     async fail(error) {
-      const message = errorMessage(error);
+      const message = describeError(error);
       runError = message;
       if (phase === "ending") {
         // Best-effort: apply before the in-flight terminal send reads error state.

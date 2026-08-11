@@ -220,6 +220,49 @@ describe("mastra / LemmaMastraExporter", () => {
     expect(body.trace.spans[0]).not.toHaveProperty("output");
   });
 
+  it("keeps the failure when errorInfo carries no message", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = new LemmaMastraExporter({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "tool_bare_err",
+        name: "lookup",
+        type: "tool_call",
+        parentSpanId: "root_bare_err",
+        input: { id: "1843" },
+        errorInfo: { message: "", category: "USER" },
+        entityId: "lookup",
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "root_bare_err",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        input: "find my order",
+        errorInfo: { message: "" },
+      }),
+    );
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace).toMatchObject({ status: "ERROR", error: "Error" });
+    expect(body.trace).not.toHaveProperty("output");
+    expect(body.trace.spans[0]).toMatchObject({
+      status: "ERROR",
+      error: "USER error (no message)",
+    });
+  });
+
   it("attaches orphan children directly under the trace root", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const exporter = mastra({

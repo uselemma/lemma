@@ -4,6 +4,7 @@ import {
   type SpanOptions,
   type TraceHandle,
 } from "./client";
+import { describeError } from "./error-message";
 import { toolResultError } from "./tool-result";
 
 /** Mastra AI-tracing span type strings (structural; no @mastra/* dependency). */
@@ -245,8 +246,28 @@ function softFailureMessage(output: unknown): string | undefined {
   return undefined;
 }
 
+/** Keep the failure even when Mastra reports `errorInfo` with no message. */
+function errorInfoMessage(
+  errorInfo: MastraErrorInfo | undefined,
+): string | undefined {
+  if (!errorInfo) return undefined;
+  if (errorInfo.message?.trim()) return describeError(errorInfo.message);
+  // Mastra reported a failure it cannot describe. Say so rather than passing a
+  // bare `category` / `id` off as the message it isn't.
+  const label =
+    trimmed(errorInfo.category) ??
+    trimmed(errorInfo.domain) ??
+    trimmed(errorInfo.id);
+  return label ? `${label} error (no message)` : describeError(errorInfo);
+}
+
+function trimmed(value: string | undefined): string | undefined {
+  return value?.trim() || undefined;
+}
+
 function childErrorMessage(span: MastraExportedSpan): string | undefined {
-  if (span.errorInfo?.message) return span.errorInfo.message;
+  const fromErrorInfo = errorInfoMessage(span.errorInfo);
+  if (fromErrorInfo) return fromErrorInfo;
   if (!TOOL_TYPES.has(span.type)) return undefined;
 
   const fromOutput = toolResultError(span.output);
@@ -423,12 +444,13 @@ export class LemmaMastraExporter {
       );
     }
 
-    if (root.errorInfo?.message) {
-      trace.fail(root.errorInfo.message);
+    const rootError = errorInfoMessage(root.errorInfo);
+    if (rootError) {
+      trace.fail(rootError);
     }
 
     const endPromise = trace.end(
-      recordOutputs && !root.errorInfo?.message
+      recordOutputs && !rootError
         ? {
             output: root.output,
             durationMs: durationMs(startedAt, endedAt),
