@@ -403,7 +403,8 @@ export function openAIAgents(
     const softError =
       data.type === "function" ? toolResultError(rawOutput) : null;
     // Keep the failure even when the SDK reports an error with no message.
-    const hardError = span.error ? describeError(span.error) : undefined;
+    const hardError =
+      span.error != null ? describeError(span.error) : undefined;
     const errorMessage = hardError ?? softError ?? undefined;
     const parsedOutput =
       options.recordOutputs === false || errorMessage ? undefined : rawOutput;

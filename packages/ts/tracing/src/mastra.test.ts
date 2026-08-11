@@ -259,7 +259,7 @@ describe("mastra / LemmaMastraExporter", () => {
     expect(body.trace).not.toHaveProperty("output");
     expect(body.trace.spans[0]).toMatchObject({
       status: "ERROR",
-      error: "USER",
+      error: "USER error (no message)",
     });
   });
 

@@ -278,6 +278,27 @@ def test_lemma_trace_flushes_errors_and_reraises():
     assert body["trace"]["spans"][0]["error"] == "ValueError: missing"
 
 
+def test_lemma_keeps_failures_that_carry_no_readable_message():
+    calls = []
+
+    def transport(url, headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    context = TraceContext(id="trace-1", name="support-agent")
+    context.record_tool(name="lookup", error="   ")
+    context.fail("   ")
+    lemma.ingest(context, started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+
+    trace = calls[0]["trace"]
+    assert trace["status"] == "ERROR"
+    assert trace["error"] == "Error"
+    assert trace["spans"][0]["status"] == "ERROR"
+    assert trace["spans"][0]["error"] == "Error"
+
+
 def test_lemma_trace_surfaces_ingest_failures():
     lemma = Lemma(
         api_key="key",

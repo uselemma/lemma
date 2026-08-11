@@ -526,7 +526,7 @@ def test_openai_agents_root_hard_error_not_soft_tool_alone():
 
     trace = calls[0]["trace"]
     assert trace["status"] == "ERROR"
-    assert trace["error"] == '{"data": {"code": 500}}'
+    assert trace["error"] == '{"data":{"code":500}}'
 
 
 def test_openai_agents_configurable_identity_keys():

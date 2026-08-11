@@ -28,7 +28,7 @@ export function errorMessage(error: unknown): string | null {
     return stringifyObject(error);
   }
 
-  return String(error).trim() || null;
+  return safeText(error) || null;
 }
 
 /**
@@ -40,19 +40,34 @@ export function describeError(error: unknown): string {
   return errorMessage(error) ?? GENERIC_ERROR_NAME;
 }
 
+/**
+ * Normalize a reported failure, treating presence rather than truthiness as the
+ * signal: `fail("   ")` or an error object with nothing readable in it still
+ * failed, and only a nullish value means no failure happened.
+ */
+export function failureMessage(error: unknown): string | null {
+  return error == null ? null : describeError(error);
+}
+
 /** Subclasses that never set `name` still report the useful constructor name. */
 function errorClassName(error: Error): string {
-  if (error.name && error.name !== GENERIC_ERROR_NAME) return error.name;
-  return error.constructor?.name || error.name || GENERIC_ERROR_NAME;
+  const name = typeof error.name === "string" ? error.name : undefined;
+  if (name && name !== GENERIC_ERROR_NAME) return name;
+  const constructorName = error.constructor?.name;
+  return (
+    (typeof constructorName === "string" ? constructorName : undefined) ||
+    name ||
+    GENERIC_ERROR_NAME
+  );
 }
 
 /**
  * Keep the class name when it carries information: `TypeError: x is not a
  * function` stays qualified, a plain `Error` does not repeat itself.
  */
-function qualify(name: string | undefined, message: string): string {
+function qualify(name: string | undefined, message: unknown): string {
   const trimmedName = name?.trim();
-  const trimmedMessage = message.trim();
+  const trimmedMessage = messageText(message);
   if (!trimmedMessage) return trimmedName || GENERIC_ERROR_NAME;
   if (
     !trimmedName ||
@@ -64,6 +79,23 @@ function qualify(name: string | undefined, message: string): string {
   return `${trimmedName}: ${trimmedMessage}`;
 }
 
+/**
+ * `Error.message` and error-like `message` fields are typed as strings, but
+ * nothing enforces that at runtime — a subclass field declaration alone leaves
+ * `message` undefined, and frameworks sometimes assign a payload to it. Coerce
+ * instead of trusting the type, or the SDK throws while recording a failure.
+ */
+function messageText(message: unknown): string {
+  if (typeof message === "string") return message.trim();
+  if (message == null) return "";
+  if (typeof message === "object") {
+    const text = stringifyObject(message);
+    // Nothing readable in the payload — let the class name speak instead.
+    return text === GENERIC_ERROR_NAME ? "" : text;
+  }
+  return safeText(message);
+}
+
 function stringifyObject(error: object): string {
   try {
     const json = JSON.stringify(error);
@@ -71,8 +103,17 @@ function stringifyObject(error: object): string {
   } catch {
     // Circular or non-serializable payload — fall through to String().
   }
-  const text = String(error).trim();
+  const text = safeText(error);
   return text && text !== "[object Object]" ? text : GENERIC_ERROR_NAME;
+}
+
+/** String coercion that tolerates hostile `toString` / `Symbol.toPrimitive`. */
+function safeText(value: unknown): string {
+  try {
+    return String(value).trim();
+  } catch {
+    return "";
+  }
 }
 
 const GENERIC_ERROR_NAME = "Error";

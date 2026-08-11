@@ -42,6 +42,15 @@ def describe_error(error: Any) -> str:
     return error_message(error) or GENERIC_ERROR_NAME
 
 
+def failure_message(error: Any) -> str | None:
+    """Normalize a reported failure, keyed on presence rather than truthiness.
+
+    ``fail("   ")`` or an error payload with nothing readable in it still
+    failed; only ``None`` means no failure happened.
+    """
+    return None if error is None else describe_error(error)
+
+
 def _qualify(name: str | None, message: str) -> str:
     """Keep the class name when it carries information.
 
@@ -65,7 +74,9 @@ def _stringify(error: dict[str, Any]) -> str:
     if not error:
         return GENERIC_ERROR_NAME
     try:
-        text = json.dumps(error, default=str)
+        # Compact separators keep the text identical to the TypeScript SDK's
+        # JSON.stringify, so the same failure groups as one message.
+        text = json.dumps(error, default=str, separators=(",", ":"))
         if text and text != "{}":
             return text
     except (TypeError, ValueError):

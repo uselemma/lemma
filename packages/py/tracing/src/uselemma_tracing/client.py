@@ -26,7 +26,7 @@ from .debug_delivery import (
     pick_response_headers,
 )
 from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_enabled
-from .error_message import error_message as _error_message
+from .error_message import failure_message as _failure_message
 
 T = TypeVar("T")
 SpanType = Literal["span", "generation", "tool"]
@@ -355,7 +355,7 @@ class TraceContext:
         self.output_value = value
 
     def fail(self, error: Any) -> None:
-        self.error = _error_message(error)
+        self.error = _failure_message(error)
 
     def _debug_span(self, event: str, span: dict[str, Any]) -> None:
         _lemma_debug(
@@ -496,8 +496,8 @@ class TraceContext:
                 "started_at": _iso(started),
                 "ended_at": _iso(ended),
                 "duration_ms": duration_ms,
-                "status": status or ("ERROR" if error else None),
-                "error": _error_message(error),
+                "status": status or ("ERROR" if error is not None else None),
+                "error": _failure_message(error),
                 "model": model,
                 "tool_name": tool_name,
             }
@@ -556,8 +556,8 @@ class TraceContext:
                     llm_prompt_template_version=llm_prompt_template_version,
                 ),
                 "duration_ms": duration_ms,
-                "status": status or ("ERROR" if error else None),
-                "error": _error_message(error),
+                "status": status or ("ERROR" if error is not None else None),
+                "error": _failure_message(error),
                 "started_at": _iso(now),
                 "ended_at": _iso(now),
             }
@@ -601,8 +601,8 @@ class TraceContext:
                     user_facing_message=user_facing_message,
                 ),
                 "duration_ms": duration_ms,
-                "status": status or ("ERROR" if error else None),
-                "error": _error_message(error),
+                "status": status or ("ERROR" if error is not None else None),
+                "error": _failure_message(error),
                 "started_at": _iso(now),
                 "ended_at": _iso(now),
             }

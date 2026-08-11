@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from uselemma_tracing.error_message import describe_error, error_message
+from uselemma_tracing.error_message import (
+    describe_error,
+    error_message,
+    failure_message,
+)
 
 
 def test_returns_none_only_when_there_is_no_error():
@@ -37,10 +41,22 @@ def test_never_returns_an_empty_message_for_a_message_less_error():
 
 
 def test_serializes_mapping_payloads():
+    # Compact, matching the TypeScript SDK's JSON.stringify byte for byte.
     assert error_message({"code": 502, "detail": "upstream"}) == (
-        '{"code": 502, "detail": "upstream"}'
+        '{"code":502,"detail":"upstream"}'
     )
     assert error_message({"name": "HttpError", "message": "bad gateway"}) == (
         "HttpError: bad gateway"
     )
     assert error_message({}) == "Error"
+
+
+def test_failure_message_reports_no_failure_only_for_none():
+    assert failure_message(None) is None
+    assert failure_message("") == "Error"
+
+
+def test_failure_message_keeps_failures_without_a_readable_message():
+    assert failure_message("   ") == "Error"
+    assert failure_message({}) == "Error"
+    assert failure_message(ValueError()) == "ValueError"

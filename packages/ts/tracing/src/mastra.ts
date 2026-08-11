@@ -251,7 +251,18 @@ function errorInfoMessage(
   errorInfo: MastraErrorInfo | undefined,
 ): string | undefined {
   if (!errorInfo) return undefined;
-  return describeError(errorInfo.message || errorInfo.category || errorInfo.id);
+  if (errorInfo.message?.trim()) return describeError(errorInfo.message);
+  // Mastra reported a failure it cannot describe. Say so rather than passing a
+  // bare `category` / `id` off as the message it isn't.
+  const label =
+    trimmed(errorInfo.category) ??
+    trimmed(errorInfo.domain) ??
+    trimmed(errorInfo.id);
+  return label ? `${label} error (no message)` : describeError(errorInfo);
+}
+
+function trimmed(value: string | undefined): string | undefined {
+  return value?.trim() || undefined;
 }
 
 function childErrorMessage(span: MastraExportedSpan): string | undefined {
