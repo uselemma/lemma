@@ -18,8 +18,13 @@ A **generation** is a single LLM call inside a trace. Record it with `trace.reco
         input: messages,
         output: response.text,
         model: "gpt-4o",
+        llmProvider: "openai",
         llmInputMessages: messages,
         llmInvocationParameters: { temperature: 0.2 },
+        usage: {
+          inputTokens: response.usage?.inputTokens,
+          outputTokens: response.usage?.outputTokens,
+        },
       });
 
       return response.text;
@@ -36,8 +41,11 @@ A **generation** is a single LLM call inside a trace. Record it with `trace.reco
             input=messages,
             output=response.text,
             model="gpt-4o",
+            llm_provider="openai",
             llm_input_messages=messages,
             llm_invocation_parameters={"temperature": 0.2},
+            input_tokens=getattr(response, "input_tokens", None),
+            output_tokens=getattr(response, "output_tokens", None),
         )
 
         return response.text
@@ -48,6 +56,8 @@ A **generation** is a single LLM call inside a trace. Record it with `trace.reco
 </Tabs>
 
 Pass the **full ordered message list** for that call as both `input` and `llmInputMessages` / `llm_input_messages`. The root trace input is only the current user turn; the generation should include system, prior turns, tool results, and the current user message.
+
+When the provider returns token counts, pass them as `usage` (TypeScript camelCase) or `input_tokens` / `output_tokens` / … kwargs (Python). **Omit** usage when the provider did not supply it — do not invent zeros. Explicit zeros are fine and mean “provider reported zero.” See [Token usage](/reference/trace-contract#token-usage) and [Analytics telemetry](/reference/analytics-telemetry).
 
 ## Measure a live generation
 
@@ -105,6 +115,9 @@ Use `startGeneration()` / `start_generation()` when you want a handle before the
 | Prompt / input | `input`, `llmInputMessages` | `input.value`, `llm.input_messages.*` |
 | Completion / output | `output` | `output.value` |
 | Model | `model` | `gen_ai.request.model`, `ai.model.id` |
+| Provider | `llmProvider` | `llm.provider`, `gen_ai.system` |
+| Token usage | `usage` / `input_tokens`… (omit when unknown) | `usage.*`, `gen_ai.usage.*`, `llm.token_count.*` |
+| Duration | `durationMs` / `duration_ms` | Generation speed (distinct from root latency) |
 | Contract props | Native props such as `llmInvocationParameters` and `llmPromptTemplate`; raw `attributes` for escape-hatch keys | Flattened OpenInference-style attributes |
 
 See [Native contract props](/reference/trace-contract#native-contract-props) and [Client fields vs ingest normalization](/reference/trace-contract#client-fields-vs-ingest-normalization).

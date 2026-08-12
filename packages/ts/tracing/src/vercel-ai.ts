@@ -7,6 +7,11 @@ import {
 } from "./client";
 import { describeError } from "./error-message";
 import { toolResultError } from "./tool-result";
+import { normalizeTokenUsage, type TokenUsage } from "./usage";
+
+const INTEGRATION_ATTRS = {
+  "lemma.sdk.integration": "vercel-ai",
+} as const;
 
 type MaybePromise<T> = T | PromiseLike<T>;
 
@@ -26,6 +31,11 @@ type VercelAIModelCallEndEvent = {
   performance: {
     responseTimeMs?: number;
   };
+  /**
+   * Token usage when the AI SDK / provider exposes it on the finish event.
+   * Not reliably present on all AI SDK versions today — extract when set.
+   */
+  usage?: unknown;
 };
 
 type VercelAIEndEvent = {
@@ -34,6 +44,8 @@ type VercelAIEndEvent = {
   functionId?: string;
   metadata?: Record<string, unknown>;
   error?: unknown;
+  /** Optional usage when a future AI SDK finish payload includes it. */
+  usage?: unknown;
 };
 
 type VercelAIToolExecutionEndEvent = {
@@ -92,6 +104,8 @@ type VercelAIStepEndEvent = {
     input?: unknown;
   }>;
   error?: unknown;
+  /** Optional usage when present on step end. */
+  usage?: unknown;
 };
 
 type VercelAIV6ModelInfo = {
@@ -116,6 +130,8 @@ type VercelAIV6StepFinishEvent = {
   functionId?: string;
   metadata?: Record<string, unknown>;
   error?: unknown;
+  /** Optional usage when present on step finish. */
+  usage?: unknown;
 };
 
 type VercelAIV6StartEvent = {
@@ -135,6 +151,12 @@ type VercelAIV6FinishEvent = {
   functionId?: string;
   metadata?: Record<string, unknown>;
   error?: unknown;
+  /**
+   * TODO: Vercel AI SDK telemetry finish events do not consistently expose
+   * token usage today. Support `usage` when present so Analytics can consume
+   * it without a follow-up SDK change once the AI SDK emits it.
+   */
+  usage?: unknown;
 };
 
 type VercelAIV6ToolCallFinishEvent = {
@@ -475,6 +497,17 @@ function endOutput(event: TerminalEvent) {
   return structuredAssistantOutput(event.text, event.content);
 }
 
+/** Extract usage from a finish/end event when the AI SDK exposes it. */
+function eventUsage(event: { usage?: unknown }): TokenUsage | undefined {
+  return normalizeTokenUsage(event.usage);
+}
+
+function withIntegrationAttrs(
+  attributes?: Record<string, unknown>,
+): Record<string, unknown> {
+  return { ...INTEGRATION_ATTRS, ...(attributes ?? {}) };
+}
+
 export function vercelAI(
   options: VercelAIIntegrationOptions = {},
 ): VercelAITelemetryIntegration {
@@ -788,6 +821,7 @@ export function vercelAI(
       input: stored?.event && v6Input(stored.event),
       output: generationError ? undefined : output,
       metadata: options.metadata,
+      attributes: withIntegrationAttrs(),
       model: event.model.modelId,
       startedAt,
       endedAt,
@@ -803,6 +837,7 @@ export function vercelAI(
       llmTools: stored?.event.tools,
       status: generationError ? ("ERROR" as const) : undefined,
       error: generationError,
+      usage: eventUsage(event),
     };
 
     if (stored?.handle) {
@@ -845,6 +880,7 @@ export function vercelAI(
       name,
       input: event.messages,
       metadata: options.metadata,
+      attributes: withIntegrationAttrs(),
       model: event.modelId,
       startedAt,
       llmProvider: event.provider,
@@ -878,6 +914,7 @@ export function vercelAI(
       name,
       input,
       metadata: options.metadata,
+      attributes: withIntegrationAttrs(),
       model: event.model.modelId,
       startedAt,
       llmProvider: event.model.provider,
@@ -927,6 +964,7 @@ export function vercelAI(
           : [{ role: "assistant", content: output }],
       status: generationError ? ("ERROR" as const) : undefined,
       error: generationError,
+      usage: eventUsage(event),
     });
   }
 
@@ -978,6 +1016,7 @@ export function vercelAI(
         name,
         input: event.messages,
         metadata: options.metadata,
+        attributes: withIntegrationAttrs(),
         model: event.modelId,
         startedAt,
         llmProvider: event.provider,
@@ -1013,6 +1052,7 @@ export function vercelAI(
           output === undefined
             ? undefined
             : [{ role: "assistant", content: output }],
+        usage: eventUsage(event),
       });
     },
 
@@ -1039,6 +1079,7 @@ export function vercelAI(
         parentId,
         input: event.toolCall.input,
         metadata: options.metadata,
+        attributes: withIntegrationAttrs(),
         startedAt,
         toolName: event.toolCall.toolName,
       });
@@ -1110,6 +1151,7 @@ export function vercelAI(
         toolName: event.toolCall.toolName,
         input: event.toolCall.input,
         metadata: options.metadata,
+        attributes: withIntegrationAttrs(),
         durationMs,
         startedAt: subtractMs(endedAt, durationMs),
         endedAt,
@@ -1230,6 +1272,7 @@ export function vercelAI(
         toolName: event.toolCall.toolName,
         input: event.toolCall.input,
         metadata: options.metadata,
+        attributes: withIntegrationAttrs(),
         durationMs,
         startedAt,
         endedAt,

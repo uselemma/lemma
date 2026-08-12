@@ -6,6 +6,11 @@ import {
 } from "./client";
 import { describeError } from "./error-message";
 import { toolResultError } from "./tool-result";
+import { normalizeTokenUsage, type TokenUsage } from "./usage";
+
+const INTEGRATION_ATTRS = {
+  "lemma.sdk.integration": "langchain",
+} as const;
 
 type RunId = string;
 
@@ -598,11 +603,51 @@ function langchainAttributes(
 ): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries({
+      ...INTEGRATION_ATTRS,
       "langchain.run_id": runId,
       "langchain.parent_run_id": parentRunId,
       "langchain.run_type": runType,
     }).filter(([, value]) => value !== undefined && value !== null),
   );
+}
+
+/**
+ * Extract token usage from LLMResult.llmOutput and/or generation message
+ * usage_metadata. Prefers llmOutput.tokenUsage / token_usage, then the first
+ * message-level usage_metadata that normalizes.
+ */
+function llmTokenUsage(result: LLMResult): TokenUsage | undefined {
+  const llmOutput = result.llmOutput;
+  if (llmOutput && typeof llmOutput === "object") {
+    const fromOutput = normalizeTokenUsage(llmOutput);
+    if (fromOutput) return fromOutput;
+  }
+
+  const generations = result.generations;
+  if (!Array.isArray(generations)) return undefined;
+  for (const group of generations) {
+    if (!Array.isArray(group)) continue;
+    for (const item of group) {
+      if (!item || typeof item !== "object") continue;
+      const record = item as Record<string, unknown>;
+      const message = record.message;
+      if (message && typeof message === "object") {
+        const msg = message as Record<string, unknown>;
+        const fromMessage =
+          normalizeTokenUsage(msg.usage_metadata) ??
+          normalizeTokenUsage(msg.usageMetadata) ??
+          normalizeTokenUsage(msg.response_metadata) ??
+          normalizeTokenUsage(msg);
+        if (fromMessage) return fromMessage;
+      }
+      const fromItem =
+        normalizeTokenUsage(record.usage_metadata) ??
+        normalizeTokenUsage(record.generationInfo) ??
+        normalizeTokenUsage(record);
+      if (fromItem) return fromItem;
+    }
+  }
+  return undefined;
 }
 
 export class LemmaLangChainCallbackHandler {
@@ -1132,6 +1177,7 @@ export class LemmaLangChainCallbackHandler {
       endedAt,
       durationMs: durationMs(run.startedAt, endedAt),
       llmOutputMessages: softError ? undefined : outputMessages,
+      usage: llmTokenUsage(output),
     });
 
     const stored = this.storedTrace(run.owningTraceId);

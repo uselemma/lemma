@@ -634,6 +634,62 @@ describe("mastra / LemmaMastraExporter", () => {
         "llm.output_messages.0.message.content": "It arrives Friday.",
       },
     });
+    // totalTokens alone is not enough — do not invent an input/output split.
+    expect(body.trace.spans[0]).not.toHaveProperty("usage");
+  });
+
+  it("extracts Mastra usage when input/output tokens are present", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "gen_usage",
+        name: "llm: 'gpt-4o'",
+        type: "model_generation",
+        parentSpanId: "root_usage",
+        input: [{ role: "user", content: "hi" }],
+        output: {
+          text: "hello",
+          usage: { inputTokens: 10, outputTokens: 4, cachedInputTokens: 2 },
+        },
+        attributes: { model: "gpt-4o", provider: "openai" },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "root_usage",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        input: "hi",
+        output: "hello",
+      }),
+    );
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      type: "generation",
+      usage: {
+        input_tokens: 10,
+        output_tokens: 4,
+        cache_read_input_tokens: 2,
+      },
+      attributes: {
+        "llm.provider": "openai",
+        "lemma.sdk.integration": "mastra",
+        "gen_ai.usage.input_tokens": 10,
+        "gen_ai.usage.output_tokens": 4,
+      },
+    });
   });
 
   it("resolves toolName from entityId/entityName and tool: span names", async () => {

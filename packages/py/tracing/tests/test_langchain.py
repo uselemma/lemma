@@ -89,6 +89,42 @@ def test_langchain_records_generation_retriever_and_tool_children():
     assert tool["output"] == [{"title": "Shipping"}]
 
 
+def test_llm_end_emits_usage_from_llm_output_token_usage():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id="10000000-0000-0000-0000-000000000001",
+        transport=make_transport(calls),
+    )
+
+    handler.on_llm_start(
+        {"id": ["langchain_openai", "chat_models", "ChatOpenAI"], "kwargs": {"model": "gpt-4o"}},
+        ["hello"],
+        run_id="llm-usage",
+    )
+    handler.on_llm_end(
+        {
+            "generations": [[{"text": "hi"}]],
+            "llm_output": {
+                "tokenUsage": {
+                    "promptTokens": 12,
+                    "completionTokens": 3,
+                    "totalTokens": 15,
+                }
+            },
+        },
+        run_id="llm-usage",
+    )
+
+    body = calls[0]["body"]
+    span = body["trace"]["spans"][0]
+    assert span["usage"] == {"input_tokens": 12, "output_tokens": 3}
+    assert span["attributes"]["llm.provider"] == "openai"
+    assert span["attributes"]["gen_ai.usage.input_tokens"] == 12
+    assert span["attributes"]["lemma.sdk.integration"] == "langchain"
+    assert span["attributes"]["lemma.sdk.language"] == "python"
+
+
 def test_standalone_chat_model_finalizes_one_owned_trace():
     calls = []
     handler = langchain(

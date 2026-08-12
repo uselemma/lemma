@@ -27,10 +27,15 @@ from .debug_delivery import (
 )
 from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_enabled
 from .error_message import failure_message as _failure_message
+from .usage import normalize_token_usage, token_usage_attributes
 
 T = TypeVar("T")
 SpanType = Literal["span", "generation", "tool"]
 Status = Literal["OK", "ERROR"]
+
+_SDK_LANGUAGE = "python"
+_SDK_LANGUAGE_ATTR = "lemma.sdk.language"
+_SDK_INTEGRATION_ATTR = "lemma.sdk.integration"
 
 try:
     _SDK_VERSION = package_version("uselemma-tracing")
@@ -166,13 +171,22 @@ def _span_attributes(
     reranker_model_name: str | None = None,
     reranker_input_documents: list[Any] | None = None,
     reranker_output_documents: list[Any] | None = None,
+    usage: dict[str, int | float] | None = None,
 ) -> dict[str, Any] | None:
-    attrs = dict(attributes or {})
+    caller = dict(attributes or {})
+    integration = caller.get(_SDK_INTEGRATION_ATTR)
+    if not isinstance(integration, str) or not integration:
+        integration = "manual"
+
+    attrs = dict(caller)
     _add_defined(attrs, "input.mime_type", input_mime_type)
     _add_defined(attrs, "output.mime_type", output_mime_type)
     _add_defined(attrs, "llm.model_name", llm_model_name or model)
     _add_defined(attrs, "llm.provider", llm_provider)
     _add_defined(attrs, "llm.system", llm_system)
+    # gen_ai.system from llm_system when set, else llm_provider.
+    _add_defined(attrs, "gen_ai.system", llm_system or llm_provider)
+    attrs.update(token_usage_attributes(usage))
     _add_defined(
         attrs,
         "llm.invocation_parameters",
@@ -209,8 +223,14 @@ def _span_attributes(
         _flatten_document(attrs, f"reranker.input_documents.{index}", document)
     for index, document in enumerate(reranker_output_documents or []):
         _flatten_document(attrs, f"reranker.output_documents.{index}", document)
+
+    attrs[_SDK_LANGUAGE_ATTR] = _SDK_LANGUAGE
+    attrs[_SDK_INTEGRATION_ATTR] = integration
     return attrs or None
 
+
+def _resolve_usage(usage: Any = None) -> dict[str, int | float] | None:
+    return normalize_token_usage(usage)
 
 @dataclass
 class SpanHandle:
@@ -229,6 +249,7 @@ class SpanHandle:
     llm_invocation_parameters: Any = None
     llm_input_messages: list[Any] | None = None
     llm_tools: Any = None
+    usage: dict[str, int | float] | None = None
     payload: dict[str, Any] | None = None
     ended: bool = False
     user_facing_message: str | None = None
@@ -256,10 +277,30 @@ class SpanHandle:
         reranker_model_name: str | None = None,
         reranker_input_documents: list[Any] | None = None,
         reranker_output_documents: list[Any] | None = None,
+        usage: dict[str, int | float] | None = None,
+        input_tokens: int | float | None = None,
+        output_tokens: int | float | None = None,
+        cache_read_input_tokens: int | float | None = None,
+        cache_creation_input_tokens: int | float | None = None,
+        reasoning_output_tokens: int | float | None = None,
     ) -> None:
         if self.ended:
             return
         self.ended = True
+        resolved_usage = _resolve_usage(
+            usage
+            if usage is not None
+            else _compact(
+                {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cache_read_input_tokens": cache_read_input_tokens,
+                    "cache_creation_input_tokens": cache_creation_input_tokens,
+                    "reasoning_output_tokens": reasoning_output_tokens,
+                }
+            )
+            or self.usage
+        )
         span = self.trace._build_span(
             name=self.name,
             input=self.input,
@@ -286,6 +327,7 @@ class SpanHandle:
             reranker_model_name=reranker_model_name,
             reranker_input_documents=reranker_input_documents,
             reranker_output_documents=reranker_output_documents,
+            usage=resolved_usage,
             status=status,
             error=error,
             id=self.id,
@@ -396,8 +438,28 @@ class TraceContext:
         id: str | None = None,
         parent_id: str | None = None,
         type: SpanType = "span",
+        usage: dict[str, int | float] | None = None,
+        input_tokens: int | float | None = None,
+        output_tokens: int | float | None = None,
+        cache_read_input_tokens: int | float | None = None,
+        cache_creation_input_tokens: int | float | None = None,
+        reasoning_output_tokens: int | float | None = None,
         _debug_event: str = "span recorded",
     ) -> None:
+        resolved_usage = _resolve_usage(
+            usage
+            if usage is not None
+            else _compact(
+                {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cache_read_input_tokens": cache_read_input_tokens,
+                    "cache_creation_input_tokens": cache_creation_input_tokens,
+                    "reasoning_output_tokens": reasoning_output_tokens,
+                }
+            )
+            or None
+        )
         span = self._build_span(
             name=name,
             input=input,
@@ -419,6 +481,7 @@ class TraceContext:
             reranker_model_name=reranker_model_name,
             reranker_input_documents=reranker_input_documents,
             reranker_output_documents=reranker_output_documents,
+            usage=resolved_usage,
             started_at=started_at,
             ended_at=ended_at,
             duration_ms=duration_ms,
@@ -455,6 +518,7 @@ class TraceContext:
         reranker_model_name: str | None = None,
         reranker_input_documents: list[Any] | None = None,
         reranker_output_documents: list[Any] | None = None,
+        usage: dict[str, int | float] | None = None,
         started_at: datetime | str | None = None,
         ended_at: datetime | str | None = None,
         duration_ms: int | None = None,
@@ -466,6 +530,7 @@ class TraceContext:
     ) -> dict[str, Any]:
         started = started_at or _now()
         ended = ended_at or _now()
+        resolved_usage = _resolve_usage(usage)
         return _compact(
             {
                 "id": id,
@@ -492,6 +557,7 @@ class TraceContext:
                     reranker_model_name=reranker_model_name,
                     reranker_input_documents=reranker_input_documents,
                     reranker_output_documents=reranker_output_documents,
+                    usage=resolved_usage,
                 ),
                 "started_at": _iso(started),
                 "ended_at": _iso(ended),
@@ -500,6 +566,7 @@ class TraceContext:
                 "error": _failure_message(error),
                 "model": model,
                 "tool_name": tool_name,
+                "usage": resolved_usage,
             }
         )
 
@@ -529,8 +596,28 @@ class TraceContext:
         duration_ms: int | None = None,
         status: Status | None = None,
         error: Any = None,
+        usage: dict[str, int | float] | None = None,
+        input_tokens: int | float | None = None,
+        output_tokens: int | float | None = None,
+        cache_read_input_tokens: int | float | None = None,
+        cache_creation_input_tokens: int | float | None = None,
+        reasoning_output_tokens: int | float | None = None,
     ) -> None:
         now = _now()
+        resolved_usage = _resolve_usage(
+            usage
+            if usage is not None
+            else _compact(
+                {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cache_read_input_tokens": cache_read_input_tokens,
+                    "cache_creation_input_tokens": cache_creation_input_tokens,
+                    "reasoning_output_tokens": reasoning_output_tokens,
+                }
+            )
+            or None
+        )
         span = _compact(
             {
                 "name": name,
@@ -554,12 +641,14 @@ class TraceContext:
                     llm_prompt_template=llm_prompt_template,
                     llm_prompt_template_variables=llm_prompt_template_variables,
                     llm_prompt_template_version=llm_prompt_template_version,
+                    usage=resolved_usage,
                 ),
                 "duration_ms": duration_ms,
                 "status": status or ("ERROR" if error is not None else None),
                 "error": _failure_message(error),
                 "started_at": _iso(now),
                 "ended_at": _iso(now),
+                "usage": resolved_usage,
             }
         )
         self.spans.append(span)

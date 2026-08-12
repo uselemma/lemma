@@ -176,6 +176,119 @@ describe("langChain", () => {
     });
   });
 
+  it("emits usage, provider, and provenance from llmOutput.tokenUsage", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock);
+
+    h.handleLLMStart(
+      {
+        id: ["langchain_openai", "chat_models", "ChatOpenAI"],
+        kwargs: { model: "gpt-4o" },
+      },
+      ["hello"],
+      "llm-usage",
+    );
+    await h.handleLLMEnd(
+      {
+        generations: [[{ text: "hi" }]],
+        llmOutput: {
+          tokenUsage: {
+            promptTokens: 12,
+            completionTokens: 3,
+            totalTokens: 15,
+          },
+        },
+      },
+      "llm-usage",
+    );
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      type: "generation",
+      model: "gpt-4o",
+      usage: { input_tokens: 12, output_tokens: 3 },
+      attributes: {
+        "llm.provider": "openai",
+        "gen_ai.system": "openai",
+        "gen_ai.usage.input_tokens": 12,
+        "gen_ai.usage.output_tokens": 3,
+        "llm.token_count.prompt": 12,
+        "llm.token_count.completion": 3,
+        "lemma.sdk.language": "typescript",
+        "lemma.sdk.integration": "langchain",
+      },
+    });
+  });
+
+  it("emits explicit zero usage from message usage_metadata", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock);
+
+    h.handleChatModelStart(
+      {
+        id: ["langchain_anthropic", "chat_models", "ChatAnthropic"],
+        kwargs: { model: "claude-3-5-sonnet" },
+      },
+      [[{ type: "human", content: "ping" }]],
+      "llm-zero",
+    );
+    await h.handleLLMEnd(
+      {
+        generations: [
+          [
+            {
+              message: {
+                type: "ai",
+                content: "pong",
+                usage_metadata: {
+                  input_tokens: 0,
+                  output_tokens: 0,
+                  cache_read_input_tokens: 0,
+                },
+              },
+            },
+          ],
+        ],
+      },
+      "llm-zero",
+    );
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
+      attributes: {
+        "llm.provider": "anthropic",
+        "gen_ai.usage.input_tokens": 0,
+        "gen_ai.usage.output_tokens": 0,
+      },
+    });
+  });
+
+  it("omits usage when the provider did not supply token counts", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock);
+
+    h.handleLLMStart(
+      { id: ["langchain", "chat_models", "openai", "ChatOpenAI"] },
+      ["hi"],
+      "llm-no-usage",
+    );
+    await h.handleLLMEnd(
+      { generations: [[{ text: "hello" }]] },
+      "llm-no-usage",
+    );
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).not.toHaveProperty("usage");
+    expect(body.trace.spans[0].attributes).not.toHaveProperty(
+      "gen_ai.usage.input_tokens",
+    );
+  });
+
   it("promotes configurable conversation/user identity keys", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const h = handler(fetchMock, {

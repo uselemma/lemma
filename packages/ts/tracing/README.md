@@ -399,7 +399,10 @@ Use native SDK props for OpenInference-style fields:
 
 - LLM: `llmModelName`, `llmProvider`, `llmSystem`,
   `llmInvocationParameters`, `llmInputMessages`, `llmOutputMessages`,
-  `llmTools`, token counts, and prompt template fields
+  `llmTools`, `usage` (token counts when the provider supplies them — omit
+  when unknown; never invent zeros), and prompt template fields
+- provenance: every span includes `lemma.sdk.language` and
+  `lemma.sdk.integration` (`manual` by default; framework integrations override)
 - tools: `toolName`, `toolDescription`, `toolParameters`, `userFacingMessage`
 - embeddings and rerankers: `embeddingModelName`,
   `embeddingInvocationParameters`, `embeddingEmbeddings`,

@@ -16,11 +16,13 @@ from .openai_agents import (
     openai_agents,
 )
 from .langchain import LemmaLangChainCallbackHandler, langchain, langgraph
+from .usage import normalize_token_usage
 
 __all__ = [
     "Lemma",
     "SpanHandle",
     "TraceContext",
+    "normalize_token_usage",
     # Mode flags
     "enable_experiment_mode",
     "disable_experiment_mode",

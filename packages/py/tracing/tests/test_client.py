@@ -108,6 +108,8 @@ def test_lemma_trace_posts_completed_trace():
     assert body["trace"]["spans"][0]["duration_ms"] == 25
     assert body["trace"]["spans"][0]["attributes"] == {
         "tool.parameters": '{"query":"string"}',
+        "lemma.sdk.language": "python",
+        "lemma.sdk.integration": "manual",
     }
     assert body["trace"]["spans"][1]["type"] == "generation"
     assert body["trace"]["spans"][1]["duration_ms"] == 40
@@ -116,7 +118,62 @@ def test_lemma_trace_posts_completed_trace():
         "llm.input_messages.0.message.role": "user",
         "llm.input_messages.0.message.content": "where is my order?",
         "llm.model_name": "gpt-4o",
+        "lemma.sdk.language": "python",
+        "lemma.sdk.integration": "manual",
     }
+
+
+def test_record_generation_emits_usage_wire_format_and_attributes():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    def run(trace):
+        trace.record_generation(
+            name="draft-reply",
+            model="gpt-4o",
+            llm_provider="openai",
+            output="answer",
+            input_tokens=100,
+            output_tokens=20,
+            cache_read_input_tokens=40,
+            reasoning_output_tokens=5,
+        )
+        trace.record_generation(
+            name="no-usage",
+            model="gpt-4o",
+            llm_provider="openai",
+            output="b",
+        )
+        trace.record_generation(
+            name="zero-usage",
+            model="gpt-4o",
+            llm_provider="openai",
+            output="c",
+            usage={"input_tokens": 0, "output_tokens": 0},
+        )
+        return "ok"
+
+    lemma.trace("support-agent", run)
+
+    spans = calls[0]["trace"]["spans"]
+    assert spans[0]["usage"] == {
+        "input_tokens": 100,
+        "output_tokens": 20,
+        "cache_read_input_tokens": 40,
+        "reasoning_output_tokens": 5,
+    }
+    assert spans[0]["attributes"]["gen_ai.usage.input_tokens"] == 100
+    assert spans[0]["attributes"]["gen_ai.system"] == "openai"
+    assert spans[0]["attributes"]["llm.provider"] == "openai"
+    assert "usage" not in spans[1]
+    assert "gen_ai.usage.input_tokens" not in spans[1]["attributes"]
+    assert spans[2]["usage"] == {"input_tokens": 0, "output_tokens": 0}
+    assert spans[2]["attributes"]["gen_ai.usage.input_tokens"] == 0
 
 
 def test_lemma_trace_omits_unspecified_child_duration():
@@ -204,8 +261,13 @@ def test_user_facing_tool_message_preserves_raw_input():
     assert spans[0]["attributes"] == {
         "lemma.tool.kind": "user_message",
         "lemma.tool.message": "Your order arrives Friday.",
+        "lemma.sdk.language": "python",
+        "lemma.sdk.integration": "manual",
     }
-    assert "attributes" not in spans[1]
+    assert spans[1]["attributes"] == {
+        "lemma.sdk.language": "python",
+        "lemma.sdk.integration": "manual",
+    }
 
 
 def test_live_tool_preserves_user_facing_message():
@@ -230,6 +292,8 @@ def test_live_tool_preserves_user_facing_message():
     assert calls[0]["trace"]["spans"][0]["attributes"] == {
         "lemma.tool.kind": "user_message",
         "lemma.tool.message": "I found it.",
+        "lemma.sdk.language": "python",
+        "lemma.sdk.integration": "manual",
     }
 
 

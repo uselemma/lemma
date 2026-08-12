@@ -254,7 +254,11 @@ Use native SDK keyword arguments for OpenInference-style fields:
 
 - LLM: `llm_model_name`, `llm_provider`, `llm_system`,
   `llm_invocation_parameters`, `llm_input_messages`, `llm_output_messages`,
-  `llm_tools`, token counts, and prompt template fields
+  `llm_tools`, `usage` / `input_tokens` / `output_tokens` / cache and
+  reasoning kwargs (omit when the provider did not supply them — never
+  invent zeros), and prompt template fields
+- provenance: every span includes `lemma.sdk.language` and
+  `lemma.sdk.integration` (`manual` by default; framework integrations override)
 - tools: `tool_description`, `tool_parameters`, `user_facing_message`
 - embeddings and rerankers: `embedding_model_name`,
   `embedding_invocation_parameters`, `embedding_embeddings`,

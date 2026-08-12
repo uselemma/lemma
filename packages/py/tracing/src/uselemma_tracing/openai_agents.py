@@ -10,6 +10,7 @@ from .client import Lemma, SpanHandle, TraceContext, _datetime_or_now, _duration
 from .debug_mode import _lemma_debug
 from .error_message import describe_error
 from .tool_result import tool_result_error
+from .usage import normalize_token_usage
 
 _LIVE_SPAN_DATA_KEYS = (
     "type",
@@ -23,6 +24,7 @@ _LIVE_SPAN_DATA_KEYS = (
     "to_agent",
     "_input",
     "_response",
+    "usage",
 )
 
 
@@ -206,6 +208,7 @@ def _attributes(span: Any, data: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in {
+            "lemma.sdk.integration": "openai-agents",
             "openai.agents.trace_id": _get(span, "trace_id"),
             "openai.agents.span_id": _get(span, "span_id"),
             "openai.agents.parent_id": _get(span, "parent_id"),
@@ -215,6 +218,20 @@ def _attributes(span: Any, data: dict[str, Any]) -> dict[str, Any]:
         }.items()
         if value is not None
     }
+
+
+def _generation_usage(data: dict[str, Any]) -> dict[str, int | float] | None:
+    direct = normalize_token_usage(data.get("usage"))
+    if direct is not None:
+        return direct
+    response = data.get("response")
+    if response is None:
+        response = data.get("_response")
+    if isinstance(response, dict):
+        return normalize_token_usage(response.get("usage"))
+    if response is not None:
+        return normalize_token_usage(_get(response, "usage"))
+    return None
 
 
 def _is_generation_type(span_type: Any) -> bool:
@@ -559,6 +576,9 @@ class LemmaOpenAIAgentsProcessor:
                     and isinstance(data.get("output"), list)
                 )
                 else None
+            ),
+            usage=(
+                _generation_usage(data) if _is_generation_type(span_type) else None
             ),
         )
         span_id = _get(span, "span_id")

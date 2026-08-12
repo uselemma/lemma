@@ -1,6 +1,11 @@
 import { Lemma, type SpanHandle, type TraceHandle } from "./client";
 import { describeError } from "./error-message";
 import { toolResultError } from "./tool-result";
+import { normalizeTokenUsage, type TokenUsage } from "./usage";
+
+const INTEGRATION_ATTRS = {
+  "lemma.sdk.integration": "openai-agents",
+} as const;
 
 export type OpenAIAgentsTrace = {
   traceId: string;
@@ -161,6 +166,7 @@ function spanName(data: OpenAIAgentsSpanData): string {
 function openAIAttributes(span: OpenAIAgentsSpan): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries({
+      ...INTEGRATION_ATTRS,
       "openai.agents.trace_id": span.traceId,
       "openai.agents.span_id": span.spanId,
       "openai.agents.parent_id": span.parentId,
@@ -171,6 +177,20 @@ function openAIAttributes(span: OpenAIAgentsSpan): Record<string, unknown> {
       "openai.agents.span_data": JSON.stringify(span.spanData),
     }).filter(([, value]) => value !== undefined && value !== null),
   );
+}
+
+/** Extract usage from spanData.usage or nested response.usage when present. */
+function generationUsage(data: OpenAIAgentsSpanData): TokenUsage | undefined {
+  const direct = normalizeTokenUsage(data["usage"]);
+  if (direct) return direct;
+
+  const response = data["response"] ?? data["_response"];
+  if (response && typeof response === "object") {
+    const record = response as Record<string, unknown>;
+    const fromResponse = normalizeTokenUsage(record.usage);
+    if (fromResponse) return fromResponse;
+  }
+  return undefined;
 }
 
 function coerceDate(value: string | Date | null | undefined): Date | undefined {
@@ -420,6 +440,7 @@ export function openAIAgents(
         !Array.isArray(data["output"])
           ? undefined
           : (data["output"] as unknown[]),
+      usage: isGenerationType(data.type) ? generationUsage(data) : undefined,
     });
     endedSpans.set(span.spanId, { handle, traceId: span.traceId });
 
