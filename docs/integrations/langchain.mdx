@@ -32,6 +32,7 @@ import { langChain } from "@uselemma/tracing";
 const lemmaHandler = langChain({
   apiKey: process.env.LEMMA_API_KEY,
   projectId: process.env.LEMMA_PROJECT_ID,
+  release: process.env.LEMMA_RELEASE,
   agentName: "support-agent",
   threadIdKey: "conversation_id",
   userIdKey: "user_id",

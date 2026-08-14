@@ -587,3 +587,33 @@ def test_langgraph_extracts_current_turn_from_message_state():
     assert body["trace"]["input"] == "second turn"
     assert body["trace"]["output"] == "final answer"
     assert body["trace"]["thread_id"] == "tg-1"
+
+
+def test_langchain_forwards_release_onto_ingest_payload():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id="10000000-0000-0000-0000-000000000001",
+        transport=make_transport(calls),
+        release="1.8.3",
+    )
+    handler.on_chain_start(
+        {"id": ["langchain", "chains", "RunnableSequence"]},
+        {"input": "hi"},
+        run_id="chain-1",
+    )
+    handler.on_chain_end({"answer": "ok"}, run_id="chain-1")
+    assert calls[0]["body"]["trace"]["release"] == "1.8.3"
+
+
+def test_langgraph_forwards_release_onto_ingest_payload():
+    calls = []
+    handler = langgraph(
+        api_key="key",
+        project_id="10000000-0000-0000-0000-000000000001",
+        transport=make_transport(calls),
+        release="1.8.3",
+    )
+    handler.on_chain_start({"name": "StateGraph"}, {"topic": "docs"}, run_id="graph-1")
+    handler.on_chain_end({"answer": "done"}, run_id="graph-1")
+    assert calls[0]["body"]["trace"]["release"] == "1.8.3"

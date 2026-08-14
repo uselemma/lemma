@@ -1256,4 +1256,23 @@ describe("vercelAI", () => {
       Date.parse(body.trace.started_at),
     );
   });
+
+  it("forwards release onto the ingest payload", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+      release: "1.8.3",
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      prompt: "where is my order?",
+    });
+    await integration.onEnd?.({ text: "It arrives Friday." });
+
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
+  });
 });

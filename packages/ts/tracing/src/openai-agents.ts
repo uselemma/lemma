@@ -49,6 +49,7 @@ export type OpenAIAgentsIntegrationOptions = {
   projectId?: string;
   baseUrl?: string;
   fetch?: typeof fetch;
+  release?: string;
   metadata?: Record<string, unknown>;
   /** Key looked up on trace/span metadata for threadId. Default: `threadId`. */
   threadIdKey?: string;
@@ -241,6 +242,7 @@ export function openAIAgents(
       projectId: options.projectId,
       baseUrl: options.baseUrl,
       fetch: options.fetch,
+      release: options.release,
     });
   const traces = new Map<string, StoredTrace>();
   const spans = new Map<string, { handle: SpanHandle; traceId: string }>();

@@ -27,6 +27,7 @@ from .debug_delivery import (
 )
 from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_enabled
 from .error_message import failure_message as _failure_message
+from .release import normalize_release
 from .usage import normalize_token_usage, token_usage_attributes
 
 T = TypeVar("T")
@@ -885,6 +886,7 @@ class Lemma:
         *,
         api_key: str | None = None,
         project_id: str | None = None,
+        release: str | None = None,
         base_url: str = "https://api.uselemma.ai",
         transport: (
             Callable[
@@ -900,6 +902,9 @@ class Lemma:
             raise ValueError("uselemma-tracing: Missing LEMMA_API_KEY")
         if not self.project_id:
             raise ValueError("uselemma-tracing: Missing LEMMA_PROJECT_ID")
+        self.release = normalize_release(
+            release if release is not None else os.environ.get("LEMMA_RELEASE")
+        )
         self.base_url = base_url.rstrip("/")
         self._last_response_headers: dict[str, str] = {}
         self._config_logged = False
@@ -931,7 +936,7 @@ class Lemma:
         )
         ctx.output("ok")
         started_at = _now()
-        payload = ctx.payload(self.project_id or "", started_at, _now())
+        payload = self._stamp_release(ctx.payload(self.project_id or "", started_at, _now()))
         body = json.dumps(payload, default=str).encode()
         url = f"{self.base_url}{INGEST_PATH}"
 
@@ -1098,13 +1103,18 @@ class Lemma:
         """
         self._send(context, started_at, ended_at or _now())
 
+    def _stamp_release(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.release:
+            payload["trace"]["release"] = self.release
+        return payload
+
     def _send(
         self,
         ctx: TraceContext,
         started_at: datetime,
         ended_at: datetime,
     ) -> None:
-        payload = ctx.payload(self.project_id or "", started_at, ended_at)
+        payload = self._stamp_release(ctx.payload(self.project_id or "", started_at, ended_at))
         body = json.dumps(payload, default=str).encode()
         url = f"{self.base_url}{INGEST_PATH}"
         _lemma_debug(

@@ -269,6 +269,7 @@ class LemmaOpenAIAgentsProcessor:
         *,
         api_key: str | None = None,
         project_id: str | None = None,
+        release: str | None = None,
         base_url: str = "https://api.uselemma.ai",
         metadata: dict[str, Any] | None = None,
         thread_id_key: str = "thread_id",
@@ -277,6 +278,7 @@ class LemmaOpenAIAgentsProcessor:
         self.lemma = lemma or Lemma(
             api_key=api_key,
             project_id=project_id,
+            release=release,
             base_url=base_url,
         )
         self.metadata = metadata
@@ -598,6 +600,7 @@ def openai_agents(
     *,
     api_key: str | None = None,
     project_id: str | None = None,
+    release: str | None = None,
     base_url: str = "https://api.uselemma.ai",
     metadata: dict[str, Any] | None = None,
     thread_id_key: str = "thread_id",
@@ -607,6 +610,7 @@ def openai_agents(
         lemma,
         api_key=api_key,
         project_id=project_id,
+        release=release,
         base_url=base_url,
         metadata=metadata,
         thread_id_key=thread_id_key,

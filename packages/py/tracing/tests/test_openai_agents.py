@@ -719,3 +719,31 @@ def test_openai_agents_debug_logs_live_child_parent(capsys):
         assert "'has_output': True" in output
     finally:
         disable_debug_mode()
+
+
+def test_openai_agents_forwards_release_to_the_client():
+    processor = openai_agents(
+        api_key="key",
+        project_id=PROJECT_ID,
+        release="1.8.3",
+    )
+    assert processor.lemma.release == "1.8.3"
+
+
+def test_openai_agents_stamps_lemma_release_on_ingest():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        release="1.8.3",
+        transport=transport,
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_release", name="support-agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_release", name="support-agent"))
+    assert calls[0]["trace"]["release"] == "1.8.3"

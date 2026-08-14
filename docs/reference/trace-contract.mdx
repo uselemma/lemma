@@ -44,6 +44,7 @@ Ingest accepts a name-only trace. Semantic fields are not HTTP-required, but wit
     "output": "It ships tomorrow and arrives Friday.",
     "thread_id": "conversation-42",
     "user_id": "user-7",
+    "release": "1.8.3",
     "started_at": "2026-07-13T20:00:00.000Z",
     "ended_at": "2026-07-13T20:00:02.410Z",
     "duration_ms": 2410,
@@ -122,6 +123,7 @@ Deliver **one complete trace** when the execution (agent turn) finishes. This is
 | `started_at` / `ended_at` / `duration_ms` | Trace timing |
 | `thread_id` | Groups multi-turn conversation traces |
 | `user_id` | Per-user slicing |
+| `release` | Optional deployed app version from the SDK client (`release` / `LEMMA_RELEASE`). Trimmed; empty, over 200 characters, or values with newlines, tabs, or carriage returns are omitted (unreleased) |
 | `metadata` | Arbitrary JSON attached to the root |
 | `spans` | Child work |
 

@@ -41,6 +41,7 @@ Both SDKs read Lemma credentials from environment variables by default:
 ```bash
 export LEMMA_API_KEY=...
 export LEMMA_PROJECT_ID=...
+export LEMMA_RELEASE=1.8.3   # optional deployed version
 ```
 
 ## Integrations

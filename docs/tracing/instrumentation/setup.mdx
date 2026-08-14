@@ -27,6 +27,7 @@ Find your API key and project ID in [Lemma project settings](https://platform.us
 ```bash
 export LEMMA_API_KEY="lma_..."
 export LEMMA_PROJECT_ID="proj_..."
+export LEMMA_RELEASE="1.8.3" # optional deployed version
 ```
 
 <Note>
@@ -40,14 +41,16 @@ export LEMMA_PROJECT_ID="proj_..."
     ```typescript
     import { Lemma } from "@uselemma/tracing";
 
-    export const lemma = new Lemma();
+    export const lemma = new Lemma({
+      release: "1.8.3", // optional; falls back to LEMMA_RELEASE
+    });
     ```
   </Tab>
   <Tab title="Python">
     ```python
     from uselemma_tracing import Lemma
 
-    lemma = Lemma()
+    lemma = Lemma(release="1.8.3")  # optional; falls back to LEMMA_RELEASE
     ```
   </Tab>
 </Tabs>
@@ -80,6 +83,12 @@ export LEMMA_PROJECT_ID="proj_..."
 </Tabs>
 
 Open the [Lemma dashboard](https://platform.uselemma.ai) -> **Traces**. Your trace appears within seconds.
+
+## Optional: stamp a release
+
+Pass `release` on the client (or set `LEMMA_RELEASE`) to tag every ingest payload with the running app version — the same idea as Sentry's release. An explicit constructor value wins over the environment variable. Empty, whitespace-only, longer-than-200-character, or newline/tab/CR values are omitted (unreleased). Lemma does not guess a git SHA.
+
+Adapters (`vercelAI`, `openAIAgents`, `langChain`, `langGraph`, `mastra`) accept the same `release` field and forward it to the client they construct.
 
 ## Next steps
 

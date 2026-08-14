@@ -16,6 +16,7 @@ from .openai_agents import (
     openai_agents,
 )
 from .langchain import LemmaLangChainCallbackHandler, langchain, langgraph
+from .release import normalize_release
 from .usage import normalize_token_usage
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     "SpanHandle",
     "TraceContext",
     "normalize_token_usage",
+    "normalize_release",
     # Mode flags
     "enable_experiment_mode",
     "disable_experiment_mode",
