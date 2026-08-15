@@ -715,3 +715,116 @@ def test_debug_verify_alone_does_not_poll(monkeypatch):
         assert calls["status"] == 0
     finally:
         os.environ.pop("LEMMA_DEBUG_VERIFY", None)
+
+
+def _release_transport(calls):
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    return transport
+
+
+def test_constructor_release_is_stamped_on_every_ingest_payload():
+    calls = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        release="1.8.3",
+        transport=_release_transport(calls),
+    )
+    lemma.trace("support-agent", lambda _trace: "ok")
+    lemma.trace("support-agent", lambda _trace: "again")
+
+    assert len(calls) == 2
+    assert calls[0]["trace"]["release"] == "1.8.3"
+    assert calls[1]["trace"]["release"] == "1.8.3"
+
+
+def test_lemma_release_env_used_when_constructor_omits_release(monkeypatch):
+    monkeypatch.setenv("LEMMA_RELEASE", "env-1.0.0")
+    calls = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=_release_transport(calls),
+    )
+    lemma.trace("support-agent", lambda _trace: "ok")
+    assert calls[0]["trace"]["release"] == "env-1.0.0"
+
+
+def test_constructor_release_wins_over_env(monkeypatch):
+    monkeypatch.setenv("LEMMA_RELEASE", "env-1.0.0")
+    calls = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        release="1.8.3",
+        transport=_release_transport(calls),
+    )
+    lemma.trace("support-agent", lambda _trace: "ok")
+    assert calls[0]["trace"]["release"] == "1.8.3"
+
+
+@pytest.mark.parametrize(
+    "release",
+    ["", "   ", "v1\n2", "v1\t2", "v1\r2", "a" * 201],
+)
+def test_empty_and_invalid_release_omits_the_field(release):
+    calls = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        release=release,
+        transport=_release_transport(calls),
+    )
+    lemma.trace("support-agent", lambda _trace: "ok")
+    assert "release" not in calls[0]["trace"]
+
+
+def test_explicit_empty_release_does_not_fall_back_to_env(monkeypatch):
+    monkeypatch.setenv("LEMMA_RELEASE", "env-1.0.0")
+    calls = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        release="",
+        transport=_release_transport(calls),
+    )
+    lemma.trace("support-agent", lambda _trace: "ok")
+    assert "release" not in calls[0]["trace"]
+
+
+def test_release_is_trimmed_from_constructor_and_env(monkeypatch):
+    calls = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        release="  1.8.3  ",
+        transport=_release_transport(calls),
+    )
+    lemma.trace("support-agent", lambda _trace: "ok")
+    assert calls[0]["trace"]["release"] == "1.8.3"
+
+    monkeypatch.setenv("LEMMA_RELEASE", "  env-1.0.0  ")
+    env_calls = []
+    env_lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=_release_transport(env_calls),
+    )
+    env_lemma.trace("support-agent", lambda _trace: "ok")
+    assert env_calls[0]["trace"]["release"] == "env-1.0.0"
+
+
+def test_ingest_stamps_client_release():
+    calls = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        release="1.8.3",
+        transport=_release_transport(calls),
+    )
+    context = TraceContext(id="trace-1", name="turn")
+    lemma.ingest(context, started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    assert calls[0]["trace"]["release"] == "1.8.3"

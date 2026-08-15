@@ -21,6 +21,7 @@ export {
   normalizeTokenUsage,
   toWireTokenUsage,
 } from "./client";
+export { normalizeRelease, RELEASE_MAX_LENGTH } from "./release";
 export {
   disableDebugMode,
   enableDebugMode,

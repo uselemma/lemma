@@ -76,6 +76,7 @@ export type MastraIntegrationOptions = {
   projectId?: LemmaClientOptions["projectId"];
   baseUrl?: LemmaClientOptions["baseUrl"];
   fetch?: LemmaClientOptions["fetch"];
+  release?: LemmaClientOptions["release"];
   agentName?: string;
   generationName?: string;
   toolName?: string;
@@ -313,6 +314,7 @@ export class LemmaMastraExporter {
       projectId: this.options.projectId,
       baseUrl: this.options.baseUrl,
       fetch: this.options.fetch,
+      release: this.options.release,
     });
     return this.lemma;
   }

@@ -48,6 +48,7 @@ export async function callGraph(userMessage: string) {
         langGraph({
           apiKey: process.env.LEMMA_API_KEY,
           projectId: process.env.LEMMA_PROJECT_ID,
+          release: process.env.LEMMA_RELEASE,
           agentName: "support-graph",
         }),
       ],

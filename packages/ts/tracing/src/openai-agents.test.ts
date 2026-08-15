@@ -672,4 +672,25 @@ describe("openAIAgents", () => {
       name: "debug-agent",
     });
   });
+
+  it("forwards release onto the ingest payload", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+      release: "1.8.3",
+    });
+
+    await processor.onTraceStart({
+      traceId: "trace_openai_release",
+      name: "support-agent",
+    });
+    await processor.onTraceEnd({
+      traceId: "trace_openai_release",
+      name: "support-agent",
+    });
+
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
+  });
 });

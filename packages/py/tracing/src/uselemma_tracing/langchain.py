@@ -578,6 +578,7 @@ class LemmaLangChainCallbackHandler:
         *,
         api_key: str | None = None,
         project_id: str | None = None,
+        release: str | None = None,
         base_url: str = "https://api.uselemma.ai",
         transport: Any = None,
         agent_name: str | None = None,
@@ -588,6 +589,7 @@ class LemmaLangChainCallbackHandler:
         self.lemma = lemma or Lemma(
             api_key=api_key,
             project_id=project_id,
+            release=release,
             base_url=base_url,
             transport=transport,
         )

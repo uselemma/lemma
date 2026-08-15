@@ -13,7 +13,7 @@ pip install uselemma-tracing
 ```python
 from uselemma_tracing import Lemma
 
-lemma = Lemma()
+lemma = Lemma(release="1.8.3")  # or set LEMMA_RELEASE
 
 def run(trace):
     docs = search_docs(user_message)
@@ -47,6 +47,10 @@ answer = lemma.trace(
 
 `lemma.trace()` measures the trace from callback start to completion. Use
 `async_trace()` for async callbacks.
+
+Pass `release` (or set `LEMMA_RELEASE`) to stamp the running app version on
+every ingest payload. An explicit constructor value wins. Empty or invalid
+values are omitted.
 
 ## Live Spans
 

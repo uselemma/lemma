@@ -668,6 +668,20 @@ describe("langChain", () => {
     });
     expect(body.trace.spans[0].parent_id ?? null).toBeNull();
   });
+
+  it("forwards release onto the ingest payload", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock, { release: "1.8.3" });
+
+    h.handleChainStart(
+      { id: ["langchain", "chains", "RunnableSequence"] },
+      { input: "hi" },
+      "chain-1",
+    );
+    await h.handleChainEnd({ answer: "ok" }, "chain-1");
+
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
+  });
 });
 
 describe("langGraph", () => {
@@ -777,5 +791,20 @@ describe("langGraph", () => {
       output: "final answer",
       thread_id: "tg-1",
     });
+  });
+
+  it("forwards release onto the ingest payload", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = langGraph({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+      release: "1.8.3",
+    });
+
+    h.handleChainStart({ name: "StateGraph" }, { topic: "docs" }, "graph-1");
+    await h.handleChainEnd({ answer: "done" }, "graph-1");
+
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
   });
 });

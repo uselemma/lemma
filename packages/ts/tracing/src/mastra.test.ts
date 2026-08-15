@@ -1031,4 +1031,29 @@ describe("mastra / LemmaMastraExporter", () => {
     await flushPromise;
     await exporter.shutdown();
   });
+
+  it("forwards release onto the ingest payload", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+      release: "1.8.3",
+    });
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "root_release",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        input: "hi",
+        output: "hello",
+      }),
+    );
+
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
+  });
 });

@@ -221,6 +221,7 @@ export type VercelAIIntegrationOptions = {
   projectId?: LemmaClientOptions["projectId"];
   baseUrl?: LemmaClientOptions["baseUrl"];
   fetch?: LemmaClientOptions["fetch"];
+  release?: LemmaClientOptions["release"];
   agentName?: string;
   generationName?:
     | string
@@ -574,6 +575,7 @@ export function vercelAI(
       projectId: options.projectId,
       baseUrl: options.baseUrl,
       fetch: options.fetch,
+      release: options.release,
     });
     return lemma;
   }

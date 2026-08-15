@@ -16,6 +16,7 @@ import { Lemma } from "@uselemma/tracing";
 const lemma = new Lemma({
   apiKey: process.env.LEMMA_API_KEY,
   projectId: process.env.LEMMA_PROJECT_ID,
+  release: "1.8.3", // or set LEMMA_RELEASE
 });
 
 const answer = await lemma.trace(
@@ -47,6 +48,8 @@ const answer = await lemma.trace(
 ```
 
 `trace()` creates one Lemma trace. The callback receives a context object; any child span, generation, or tool recorded through that context is attached to the trace.
+
+Pass `release` (or set `LEMMA_RELEASE`) to stamp the running app version on every ingest payload. An explicit constructor value wins. Empty or invalid values are omitted.
 
 ## One-Off Events
 

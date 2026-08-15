@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Lemma, TraceContext } from "./client";
 import { disableDebugMode, enableDebugMode } from "./debug-mode";
 
@@ -1174,4 +1174,104 @@ describe("Lemma", () => {
       delete process.env["LEMMA_DEBUG_VERIFY"];
     }
   });
+
+  describe("release", () => {
+    const previousRelease = process.env.LEMMA_RELEASE;
+
+    afterEach(() => {
+      if (previousRelease === undefined) {
+        delete process.env.LEMMA_RELEASE;
+      } else {
+        process.env.LEMMA_RELEASE = previousRelease;
+      }
+    });
+
+    function client(options: ConstructorParameters<typeof Lemma>[0] = {}) {
+      const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+      const lemma = new Lemma({
+        apiKey: "key",
+        projectId: "10000000-0000-0000-0000-000000000001",
+        fetch: fetchMock as typeof fetch,
+        ...options,
+      });
+      return { lemma, fetchMock };
+    }
+
+    async function sendTrace(lemma: Lemma) {
+      await lemma.trace({ name: "support-agent" }, async () => "ok");
+    }
+
+    it("stamps constructor release on every ingest payload", async () => {
+      const { lemma, fetchMock } = client({ release: "1.8.3" });
+      await sendTrace(lemma);
+      await sendTrace(lemma);
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
+      expect(jsonBody(fetchMock.mock.calls[1]).trace.release).toBe("1.8.3");
+    });
+
+    it("uses LEMMA_RELEASE when the constructor omits release", async () => {
+      process.env.LEMMA_RELEASE = "env-1.0.0";
+      const { lemma, fetchMock } = client();
+      await sendTrace(lemma);
+      expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("env-1.0.0");
+    });
+
+    it("lets an explicit constructor release win over LEMMA_RELEASE", async () => {
+      process.env.LEMMA_RELEASE = "env-1.0.0";
+      const { lemma, fetchMock } = client({ release: "1.8.3" });
+      await sendTrace(lemma);
+      expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
+    });
+
+    it("omits the field for empty, whitespace, and invalid values", async () => {
+      for (const release of [
+        "",
+        "   ",
+        "v1\n2",
+        "v1\t2",
+        "v1\r2",
+        "a".repeat(201),
+      ]) {
+        const { lemma, fetchMock } = client({ release });
+        await sendTrace(lemma);
+        expect(jsonBody(fetchMock.mock.calls[0])).not.toHaveProperty(
+          "trace.release",
+        );
+      }
+    });
+
+    it("does not fall back to LEMMA_RELEASE when an explicit empty release is passed", async () => {
+      process.env.LEMMA_RELEASE = "env-1.0.0";
+      const { lemma, fetchMock } = client({ release: "" });
+      await sendTrace(lemma);
+      expect(jsonBody(fetchMock.mock.calls[0])).not.toHaveProperty(
+        "trace.release",
+      );
+    });
+
+    it("trims constructor and env values before stamping", async () => {
+      const trimmed = client({ release: "  1.8.3  " });
+      await sendTrace(trimmed.lemma);
+      expect(jsonBody(trimmed.fetchMock.mock.calls[0]).trace.release).toBe(
+        "1.8.3",
+      );
+
+      process.env.LEMMA_RELEASE = "  env-1.0.0  ";
+      const fromEnv = client();
+      await sendTrace(fromEnv.lemma);
+      expect(jsonBody(fromEnv.fetchMock.mock.calls[0]).trace.release).toBe(
+        "env-1.0.0",
+      );
+    });
+
+    it("stamps release on ingest() payloads", async () => {
+      const { lemma, fetchMock } = client({ release: "1.8.3" });
+      const context = new TraceContext({ id: "trace-1", name: "turn" });
+      await lemma.ingest(context, { startedAt: new Date() });
+      expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
+    });
+  });
 });
+

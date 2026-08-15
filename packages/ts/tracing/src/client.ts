@@ -19,6 +19,7 @@ import {
   lemmaDebug,
 } from "./debug-mode";
 import { failureMessage } from "./error-message";
+import { normalizeRelease } from "./release";
 import {
   normalizeTokenUsage,
   tokenUsageAttributes,
@@ -43,6 +44,8 @@ export type LemmaClientOptions = {
   projectId?: string;
   baseUrl?: string;
   fetch?: typeof fetch;
+  /** Deployed app version stamped on every ingest payload. */
+  release?: string;
 };
 
 export type DebugSmokeTestResult = {
@@ -199,6 +202,7 @@ type SdkTracePayload = {
     metadata?: Record<string, unknown>;
     thread_id?: string;
     user_id?: string;
+    release?: string;
     started_at: string;
     ended_at?: string | null;
     duration_ms?: number;
@@ -930,6 +934,7 @@ export class Lemma {
   private readonly projectId: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly release?: string;
   private readonly traces = new Map<string, TraceHandle>();
   private configLogged = false;
 
@@ -947,6 +952,9 @@ export class Lemma {
       "",
     );
     this.fetchImpl = options.fetch ?? fetch;
+    this.release = normalizeRelease(
+      options.release ?? process.env.LEMMA_RELEASE,
+    );
     this.logInitConfigOnce();
   }
 
@@ -974,7 +982,9 @@ export class Lemma {
     });
     context.output("ok");
     const startedAt = new Date();
-    const payload = context.toPayload(this.projectId, startedAt, new Date());
+    const payload = this.stampRelease(
+      context.toPayload(this.projectId, startedAt, new Date()),
+    );
     const body = JSON.stringify(payload);
     const url = `${this.baseUrl}${INGEST_PATH}`;
 
@@ -1383,12 +1393,19 @@ export class Lemma {
     );
   }
 
+  private stampRelease(payload: SdkTracePayload): SdkTracePayload {
+    if (this.release) payload.trace.release = this.release;
+    return payload;
+  }
+
   private async flushTrace(
     context: TraceContext,
     startedAt: Date,
     endedAt: Date,
   ) {
-    const payload = context.toPayload(this.projectId, startedAt, endedAt);
+    const payload = this.stampRelease(
+      context.toPayload(this.projectId, startedAt, endedAt),
+    );
     const body = JSON.stringify(payload);
     const url = `${this.baseUrl}${INGEST_PATH}`;
     lemmaDebug("client", "sending trace", {

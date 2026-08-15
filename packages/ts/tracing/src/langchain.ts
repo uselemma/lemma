@@ -34,6 +34,7 @@ export type LangChainIntegrationOptions = {
   projectId?: LemmaClientOptions["projectId"];
   baseUrl?: LemmaClientOptions["baseUrl"];
   fetch?: LemmaClientOptions["fetch"];
+  release?: LemmaClientOptions["release"];
   agentName?: string;
   metadata?: Record<string, unknown>;
   /** Key looked up on run metadata / tags for threadId. Default: `threadId`. */
@@ -667,6 +668,7 @@ export class LemmaLangChainCallbackHandler {
       projectId: this.options.projectId,
       baseUrl: this.options.baseUrl,
       fetch: this.options.fetch,
+      release: this.options.release,
     });
     return this.lemma;
   }

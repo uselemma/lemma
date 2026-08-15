@@ -25,6 +25,7 @@ import { vercelAI } from "@uselemma/tracing";
 const lemmaTelemetry = vercelAI({
   apiKey: process.env.LEMMA_API_KEY,
   projectId: process.env.LEMMA_PROJECT_ID,
+  release: process.env.LEMMA_RELEASE,
 });
 
 try {
@@ -68,6 +69,7 @@ import { vercelAI } from "@uselemma/tracing";
 const lemmaTelemetry = vercelAI({
   apiKey: process.env.LEMMA_API_KEY,
   projectId: process.env.LEMMA_PROJECT_ID,
+  release: process.env.LEMMA_RELEASE,
 });
 
 try {
@@ -110,6 +112,7 @@ import { vercelAI } from "@uselemma/tracing";
 const lemmaTelemetry = vercelAI({
   apiKey: process.env.LEMMA_API_KEY,
   projectId: process.env.LEMMA_PROJECT_ID,
+  release: process.env.LEMMA_RELEASE,
 });
 
 const result = streamText({
