@@ -47,7 +47,6 @@ export async function callAgent(userMessage: string, conversationId: string) {
   const response = await model.invoke([new HumanMessage(userMessage)], {
     metadata: { conversation_id: conversationId },
   });
-  lemmaHandler.recordResult(response);
   await lemmaHandler.flush();
   return response.content;
 }

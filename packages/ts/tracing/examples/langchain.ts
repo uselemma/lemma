@@ -24,7 +24,6 @@ export async function callLangChain(
       ...(userId ? { user_id: userId } : {}),
     },
   });
-  lemmaHandler.recordResult(response);
   await lemmaHandler.flush();
   return response.content;
 }

@@ -212,7 +212,6 @@ try {
       integrations: [lemmaTelemetry],
     },
   });
-  lemmaTelemetry.recordResult(result);
   await lemmaTelemetry.flush();
   return result.text;
 } catch (error) {
@@ -242,7 +241,7 @@ Use `telemetry.functionId` / `experimental_telemetry.functionId` for the agent n
 
 Prompts, tool inputs, outputs, model output text, and error messages are always recorded.
 
-Call `fail(error)` when the AI SDK call throws before a terminal callback. Call `recordResult(result)` after `generateText` so token usage reaches the same generation spans when telemetry omitted it, then `flush()` to send the trace. Do not share one integration across concurrent AI SDK operations.
+Call `fail(error)` when the AI SDK call throws before a terminal callback, then `flush()` to send the trace. Do not share one integration across concurrent AI SDK operations.
 
 For advanced cases, you can still attach to an existing trace by passing `vercelAI({ trace })` or by calling AI SDK inside a `lemma.trace()` callback. When you pass a trace handle, the integration ends it from the AI SDK terminal callback: `onEnd` in AI SDK v7 and `onFinish` in AI SDK v6. When you use the callback form of `lemma.trace()`, the callback owns trace closure.
 
@@ -267,8 +266,7 @@ spans become Lemma generations, function spans become Lemma tool spans, and
 other OpenAI Agents spans are preserved as regular spans.
 
 Put conversation identity on the OpenAI Agents trace (`groupId` → `thread_id`,
-metadata `userId` → `user_id`). Call `recordResult(result)` after `run()` when
-the processor event omitted token usage, then `forceFlush()` to send the trace.
+metadata `userId` → `user_id`). Call `forceFlush()` to send the trace.
 
 Function spans stay nested under their OpenAI parent span. To verify nesting
 locally, enable debug mode and check that the tool span log includes the
@@ -289,8 +287,7 @@ Pass `langChain()` as a LangChain callback handler. Each root run (chain, standa
 LLM/tool/retriever) owns one Lemma trace with current-turn input, final output or
 root error, promoted `threadId` / `userId`, and real wall-clock bounds. Nested
 chains, generations, tools, and retrievers keep typed parent IDs with orphan-safe
-fallback. Call `recordResult(response)` after `invoke()` when the callback
-event omitted token usage, then `flush()` to send the trace.
+fallback. Call `flush()` to send the trace.
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
@@ -312,7 +309,6 @@ const model = new ChatOpenAI({
 const response = await model.invoke(userMessage, {
   metadata: { conversation_id: threadId, user_id: userId },
 });
-callbacks[0].recordResult(response);
 await callbacks[0].flush();
 ```
 
@@ -407,8 +403,6 @@ Use native SDK props for OpenInference-style fields:
   `llmInvocationParameters`, `llmInputMessages`, `llmOutputMessages`,
   `llmTools`, `usage` (token counts when the provider supplies them — omit
   when unknown; never invent zeros), and prompt template fields.
-  Framework integrations accept `recordResult(result)` so operation-result
-  usage lands on the same generation when the telemetry event omitted it.
 - provenance: every span includes `lemma.sdk.language` and
   `lemma.sdk.integration` (`manual` by default; framework integrations override)
 - tools: `toolName`, `toolDescription`, `toolParameters`, `userFacingMessage`

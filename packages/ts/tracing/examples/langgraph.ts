@@ -31,7 +31,6 @@ export async function callLangGraph(
       metadata: threadId ? { thread_id: threadId } : undefined,
     },
   );
-  lemmaHandler.recordResult(result);
   await lemmaHandler.flush();
 
   return result.output;

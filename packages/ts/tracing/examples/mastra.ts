@@ -25,7 +25,6 @@ export const mastra = new Mastra({
 
 const agent = mastra.getAgent("supportAgent");
 const result = await agent.generate("Where is my order?");
-lemmaExporter.recordResult(result);
 await lemmaExporter.flush();
 
 console.log(result.text);

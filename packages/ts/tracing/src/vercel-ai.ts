@@ -157,8 +157,7 @@ type VercelAIV6FinishEvent = {
   error?: unknown;
   /**
    * Token usage when the AI SDK finish payload includes it. Often omitted on
-   * AI SDK 6 `experimental_telemetry` — call `recordResult(result)` so
-   * `generateText` usage still reaches the same spans.
+   * AI SDK 6 `experimental_telemetry` even when `generateText` returns tokens.
    */
   usage?: unknown;
   totalUsage?: unknown;
@@ -214,9 +213,8 @@ export type VercelAITelemetryIntegration = {
   /** Mark the active run as failed and end the owned trace. */
   fail: (error: unknown) => Promise<void>;
   /**
-   * Copy token usage from a `generateText` / `streamText` result onto the
-   * generation spans this integration already opened. Call after the
-   * operation returns.
+   * Optional. Copy token usage from a `generateText` / `streamText` result
+   * onto generation spans whose telemetry event omitted it.
    */
   recordResult: (result: unknown) => number;
   /** Send the integration's completed traces and await ingest delivery. */
@@ -778,9 +776,9 @@ export function vercelAI(
 
     endingTrace = ownedTrace;
 
-    // Delay the HTTP send until after generateText returns so recordResult
-    // can stamp usage onto the same generation spans. A macrotask fallback
-    // still delivers if the caller never waits for ingest.
+    // Delay the HTTP send until after generateText returns so optional
+    // recordResult can stamp usage onto the same generation spans. A
+    // macrotask fallback still delivers if the caller never waits for ingest.
     let delivered = false;
     const deliver = async () => {
       if (delivered) return;

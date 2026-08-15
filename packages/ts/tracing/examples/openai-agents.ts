@@ -19,5 +19,4 @@ const result = await run(agent, "Where is my order?", {
 });
 
 console.log(result.finalOutput);
-processor.recordResult(result);
 await processor.forceFlush();

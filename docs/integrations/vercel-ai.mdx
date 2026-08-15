@@ -49,7 +49,6 @@ try {
       integrations: [lemmaTelemetry],
     },
   });
-  lemmaTelemetry.recordResult(result);
   await lemmaTelemetry.flush();
   return result.text;
 } catch (error) {
@@ -57,8 +56,6 @@ try {
   throw error;
 }
 ```
-
-AI SDK 6 telemetry finish events often omit `usage` even when `generateText` returns tokens. Call `recordResult(result)` so Lemma writes `span.usage` on the same generation spans, then `flush()` to send the trace. Do not stamp spans yourself.
 
 ## AI SDK v6
 
@@ -96,7 +93,6 @@ try {
       integrations: [lemmaTelemetry],
     },
   });
-  lemmaTelemetry.recordResult(result);
   await lemmaTelemetry.flush();
   return result.text;
 } catch (error) {
@@ -107,7 +103,7 @@ try {
 
 ## Streaming
 
-Use the same per-operation integration with `streamText`. Call `recordResult(result)` after the stream finishes, then `flush()` to send the trace. Call `fail(error)` if the call throws before a terminal callback.
+Use the same per-operation integration with `streamText`. Call `flush()` after the stream finishes to send the trace. Call `fail(error)` if the call throws before a terminal callback.
 
 ```typescript
 import { streamText } from "ai";
@@ -136,7 +132,6 @@ for await (const _part of result.fullStream) {
   // stream to your response
 }
 
-lemmaTelemetry.recordResult(result);
 await lemmaTelemetry.flush();
 ```
 
@@ -185,7 +180,6 @@ try {
       integrations: [lemmaTelemetry],
     },
   });
-  lemmaTelemetry.recordResult(result);
   await lemmaTelemetry.flush();
   return result.text;
 } catch (error) {
