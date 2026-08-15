@@ -135,7 +135,7 @@ span as `ERROR` without failing the root when a later generation succeeds.
 
 ## Flush and shutdown
 
-Call `forceFlush()` / `force_flush()` (or `shutdown()`) to finalize any still-open
+Call `forceFlush()` / `force_flush()` (or `shutdown()`) to send any still-open
 traces exactly once. A later `onTraceEnd` / `on_trace_end` for a flushed trace is
 a no-op, so spans are never duplicated in the append-only ingest store.
 

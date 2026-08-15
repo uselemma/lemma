@@ -512,16 +512,15 @@ export class LemmaMastraExporter {
 
   /**
    * Copy token usage from an `agent.generate()` result onto generation spans
-   * whose exported event omitted it. Call after generate returns, before flush.
+   * whose exported event omitted it. Call after generate returns.
    */
   recordResult(result: unknown): number {
     this.pendingUsage = result;
     return 0;
   }
 
-  /** Stamp optional operation-result usage, then await outstanding deliveries. */
-  async flush(result?: unknown): Promise<void> {
-    if (arguments.length > 0) this.recordResult(result);
+  /** Send completed traces and await ingest delivery. */
+  async flush(): Promise<void> {
     await Promise.all(Array.from(this.pending));
   }
 

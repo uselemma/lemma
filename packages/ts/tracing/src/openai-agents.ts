@@ -42,11 +42,11 @@ export type OpenAIAgentsTracingProcessor = {
   onSpanEnd: (span: OpenAIAgentsSpan) => Promise<void>;
   /**
    * Copy token usage from a `run()` result onto generation spans whose
-   * processor event omitted it. Call after `run()` returns, before flush.
+   * processor event omitted it. Call after `run()` returns.
    */
   recordResult: (result: unknown) => number;
   shutdown: (timeout?: number) => Promise<void>;
-  forceFlush: (result?: unknown) => Promise<void>;
+  forceFlush: () => Promise<void>;
 };
 
 export type OpenAIAgentsIntegrationOptions = {
@@ -561,8 +561,7 @@ export function openAIAgents(
       await finalizeAll();
       await Promise.all(pending);
     },
-    forceFlush: async (result?: unknown) => {
-      if (arguments.length > 0) recordResult(result);
+    forceFlush: async () => {
       await finalizeAll();
       await Promise.all(pending);
     },

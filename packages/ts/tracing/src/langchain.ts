@@ -916,8 +916,7 @@ export class LemmaLangChainCallbackHandler {
 
   /**
    * Copy token usage from an `invoke` / chain result onto generation spans
-   * whose callback event omitted it. Call after the operation returns,
-   * before `flush()`.
+   * whose callback event omitted it. Call after the operation returns.
    */
   recordResult(result: unknown): number {
     let stamped = 0;
@@ -1476,9 +1475,8 @@ export class LemmaLangChainCallbackHandler {
     void this.maybeFinalizeOwner(run, endedAt);
   }
 
-  /** Stamp optional operation-result usage, then await outstanding deliveries. */
-  async flush(result?: unknown): Promise<void> {
-    if (arguments.length > 0) this.recordResult(result);
+  /** Send completed traces and await ingest delivery. */
+  async flush(): Promise<void> {
     await Promise.all([
       ...Array.from(this.traces.entries(), ([id, stored]) =>
         this.finalizeTrace(id, stored),

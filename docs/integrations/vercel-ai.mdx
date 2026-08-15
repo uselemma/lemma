@@ -49,7 +49,8 @@ try {
       integrations: [lemmaTelemetry],
     },
   });
-  await lemmaTelemetry.flush(result);
+  lemmaTelemetry.recordResult(result);
+  await lemmaTelemetry.flush();
   return result.text;
 } catch (error) {
   await lemmaTelemetry.fail(error);
@@ -57,7 +58,7 @@ try {
 }
 ```
 
-AI SDK 6 telemetry finish events often omit `usage` even when `generateText` returns tokens. Pass that result to `flush(result)` (or call `recordResult(result)` first) so Lemma writes `span.usage` on the same generation spans. Do not stamp spans yourself.
+AI SDK 6 telemetry finish events often omit `usage` even when `generateText` returns tokens. Call `recordResult(result)` so Lemma writes `span.usage` on the same generation spans, then `flush()` to send the trace. Do not stamp spans yourself.
 
 ## AI SDK v6
 
@@ -95,7 +96,8 @@ try {
       integrations: [lemmaTelemetry],
     },
   });
-  await lemmaTelemetry.flush(result);
+  lemmaTelemetry.recordResult(result);
+  await lemmaTelemetry.flush();
   return result.text;
 } catch (error) {
   await lemmaTelemetry.fail(error);
@@ -105,7 +107,7 @@ try {
 
 ## Streaming
 
-Use the same per-operation integration with `streamText`. Call `flush()` after the stream finishes, or `fail()` / `shutdown()` in short-lived runtimes when the process may exit before delivery completes.
+Use the same per-operation integration with `streamText`. Call `recordResult(result)` after the stream finishes, then `flush()` to send the trace. Call `fail(error)` if the call throws before a terminal callback.
 
 ```typescript
 import { streamText } from "ai";
@@ -134,6 +136,7 @@ for await (const _part of result.fullStream) {
   // stream to your response
 }
 
+lemmaTelemetry.recordResult(result);
 await lemmaTelemetry.flush();
 ```
 
@@ -167,7 +170,7 @@ Prompts, tool inputs, tool outputs, model output, and error messages are always 
 | Method | When to use |
 | --- | --- |
 | `fail(error)` | The AI SDK call threw or was aborted before a terminal telemetry callback |
-| `flush()` | Await outstanding ingest deliveries before returning from a request |
+| `flush()` | Send the integration's completed traces and await ingest delivery |
 | `shutdown()` | Flush and clear state in workers / serverless teardown |
 
 ```typescript
@@ -182,6 +185,7 @@ try {
       integrations: [lemmaTelemetry],
     },
   });
+  lemmaTelemetry.recordResult(result);
   await lemmaTelemetry.flush();
   return result.text;
 } catch (error) {

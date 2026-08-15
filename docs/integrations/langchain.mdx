@@ -11,8 +11,8 @@ wall-clock timing. Standalone LLM/tool/retriever callbacks finalize their own
 owned trace. Missing-parent events never overwrite concurrent trace state.
 
 You do not need to wrap LangChain calls in `lemma.trace()`. Pass the callback
-handler through LangChain's `callbacks` option, then `flush()` / `shutdown()`
-when the process exits.
+handler through LangChain's `callbacks` option, then `flush()` to send the
+trace.
 
 ## TypeScript
 
