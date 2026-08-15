@@ -41,19 +41,20 @@ const graph = new StateGraph<GraphState>()
   .compile();
 
 export async function callGraph(userMessage: string) {
+  const lemmaHandler = langGraph({
+    apiKey: process.env.LEMMA_API_KEY,
+    projectId: process.env.LEMMA_PROJECT_ID,
+    release: process.env.LEMMA_RELEASE,
+    agentName: "support-graph",
+  });
   const result = await graph.invoke(
     { input: userMessage },
     {
-      callbacks: [
-        langGraph({
-          apiKey: process.env.LEMMA_API_KEY,
-          projectId: process.env.LEMMA_PROJECT_ID,
-          release: process.env.LEMMA_RELEASE,
-          agentName: "support-graph",
-        }),
-      ],
+      callbacks: [lemmaHandler],
     },
   );
+  lemmaHandler.recordResult(result);
+  await lemmaHandler.flush();
 
   return result.output;
 }

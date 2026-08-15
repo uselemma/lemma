@@ -5,6 +5,7 @@ import {
   type TraceHandle,
 } from "./client";
 import { describeError } from "./error-message";
+import { scheduleMacrotask } from "./schedule";
 import { toolResultError } from "./tool-result";
 import { normalizeTokenUsage, type TokenUsage } from "./usage";
 
@@ -303,6 +304,7 @@ export class LemmaMastraExporter {
   private lemma: Lemma | undefined;
   private readonly buffers = new Map<string, BufferedTrace>();
   private readonly pending = new Set<Promise<void>>();
+  private pendingUsage: unknown;
 
   constructor(private readonly options: MastraIntegrationOptions = {}) {
     this.lemma = options.lemma;
@@ -452,6 +454,10 @@ export class LemmaMastraExporter {
         resolveParentId(child.parentSpanId, root.id, recordedIds),
       );
     }
+    if (this.pendingUsage !== undefined) {
+      trace.applyGenerationUsage(this.pendingUsage);
+      this.pendingUsage = undefined;
+    }
 
     const rootError = errorInfoMessage(root.errorInfo);
     if (rootError) {
@@ -490,14 +496,32 @@ export class LemmaMastraExporter {
       const buffer = this.buffers.get(span.traceId);
       const children = buffer?.children ?? [];
       this.buffers.delete(span.traceId);
-      await this.deliver(span, children);
+      // Delay send so recordResult(generate return) can stamp usage first.
+      const promise = new Promise<void>((resolve, reject) => {
+        scheduleMacrotask(() => {
+          this.deliver(span, children).then(resolve, reject);
+        });
+      });
+      this.pending.add(promise);
+      void promise.finally(() => this.pending.delete(promise));
       return;
     }
 
     this.pushChild(span);
   }
 
-  async flush(): Promise<void> {
+  /**
+   * Copy token usage from an `agent.generate()` result onto generation spans
+   * whose exported event omitted it. Call after generate returns, before flush.
+   */
+  recordResult(result: unknown): number {
+    this.pendingUsage = result;
+    return 0;
+  }
+
+  /** Stamp optional operation-result usage, then await outstanding deliveries. */
+  async flush(result?: unknown): Promise<void> {
+    if (arguments.length > 0) this.recordResult(result);
     await Promise.all(Array.from(this.pending));
   }
 

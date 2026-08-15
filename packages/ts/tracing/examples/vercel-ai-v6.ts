@@ -29,7 +29,7 @@ export async function runVercelAIV6(
         integrations: [lemmaTelemetry],
       },
     });
-    await lemmaTelemetry.flush();
+    await lemmaTelemetry.flush(result);
     return result.text;
   } catch (error) {
     await lemmaTelemetry.fail(error);

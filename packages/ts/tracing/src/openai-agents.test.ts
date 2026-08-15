@@ -83,6 +83,7 @@ describe("openAIAgents", () => {
       groupId: "thread-1",
       metadata: { userId: "user-1" },
     });
+    await processor.forceFlush();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = jsonBody(fetchMock.mock.calls[0]);
@@ -176,6 +177,7 @@ describe("openAIAgents", () => {
       traceId: "trace_usage",
       name: "support-agent",
     });
+    await processor.forceFlush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.spans[0]).toMatchObject({
@@ -197,6 +199,77 @@ describe("openAIAgents", () => {
         "gen_ai.usage.reasoning.output_tokens": 2,
       },
     });
+  });
+
+  it("stamps run result usage when the span event omits it", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await processor.onTraceStart({
+      traceId: "trace_result_usage",
+      name: "support-agent",
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_result_usage",
+      spanId: "span_gen",
+      spanData: {
+        type: "generation",
+        model: "gpt-4o",
+        input: [{ role: "user", content: "hi" }],
+        output: [{ role: "assistant", content: "hello" }],
+      },
+    });
+    expect(
+      processor.recordResult({
+        rawResponses: [{ usage: { input_tokens: 8, output_tokens: 2 } }],
+      }),
+    ).toBe(1);
+    await processor.onTraceEnd({
+      traceId: "trace_result_usage",
+      name: "support-agent",
+    });
+    await processor.forceFlush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      usage: { input_tokens: 8, output_tokens: 2 },
+    });
+  });
+
+  it("omits usage when the span event and run result have no token facts", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await processor.onTraceStart({
+      traceId: "trace_no_usage",
+      name: "support-agent",
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_no_usage",
+      spanId: "span_gen",
+      spanData: {
+        type: "generation",
+        model: "gpt-4o",
+        output: [{ role: "assistant", content: "hello" }],
+      },
+    });
+    expect(processor.recordResult({ rawResponses: [{}] })).toBe(0);
+    await processor.onTraceEnd({
+      traceId: "trace_no_usage",
+      name: "support-agent",
+    });
+    await processor.forceFlush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).not.toHaveProperty("usage");
   });
 
   it("records function spans with isError output as error without output", async () => {
@@ -237,6 +310,7 @@ describe("openAIAgents", () => {
       traceId: "trace_err",
       name: "support-agent",
     });
+    await processor.forceFlush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.spans[0]).toMatchObject({
@@ -300,6 +374,7 @@ describe("openAIAgents", () => {
       traceId: "trace_timing",
       name: "support-agent",
     });
+    await processor.forceFlush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     const generation = body.trace.spans.find(
@@ -337,6 +412,7 @@ describe("openAIAgents", () => {
       },
     });
     await processor.onTraceEnd({ traceId: "trace_once", name: "agent" });
+    await processor.forceFlush();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
@@ -379,6 +455,7 @@ describe("openAIAgents", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     await processor.onTraceEnd({ traceId: "trace_flush", name: "agent" });
+    await processor.forceFlush();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -417,6 +494,7 @@ describe("openAIAgents", () => {
       traceId: "trace_response",
       name: "support-agent",
     });
+    await processor.forceFlush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
@@ -468,6 +546,7 @@ describe("openAIAgents", () => {
       traceId: "trace_soft",
       name: "support-agent",
     });
+    await processor.forceFlush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
@@ -503,6 +582,7 @@ describe("openAIAgents", () => {
       traceId: "trace_agent_err",
       name: "support-agent",
     });
+    await processor.forceFlush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
@@ -534,6 +614,7 @@ describe("openAIAgents", () => {
       traceId: "trace_agent_bare_err",
       name: "support-agent",
     });
+    await processor.forceFlush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
@@ -578,6 +659,7 @@ describe("openAIAgents", () => {
         customerId: "cust-3",
       },
     });
+    await processor.forceFlush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
@@ -671,6 +753,7 @@ describe("openAIAgents", () => {
       traceId: "trace_openai_2",
       name: "debug-agent",
     });
+    await processor.forceFlush();
   });
 
   it("forwards release onto the ingest payload", async () => {
@@ -690,6 +773,7 @@ describe("openAIAgents", () => {
       traceId: "trace_openai_release",
       name: "support-agent",
     });
+    await processor.forceFlush();
 
     expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
   });

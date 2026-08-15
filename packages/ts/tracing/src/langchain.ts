@@ -5,6 +5,7 @@ import {
   type TraceHandle,
 } from "./client";
 import { describeError } from "./error-message";
+import { scheduleMacrotask } from "./schedule";
 import { toolResultError } from "./tool-result";
 import { normalizeTokenUsage, type TokenUsage } from "./usage";
 
@@ -900,11 +901,31 @@ export class LemmaLangChainCallbackHandler {
   private maybeFinalizeOwner(run: StoredRun, endedAt: Date) {
     if (!run.ownsTrace) return;
     const stored = this.traces.get(run.owningTraceId);
-    if (!stored) return;
+    if (!stored || stored.ended) return;
     this.noteBounds(stored, run.startedAt, endedAt);
-    const promise = this.finalizeTrace(run.owningTraceId, stored);
+    // Delay the HTTP send so recordResult(invoke return) can stamp usage
+    // onto generations whose callback event omitted it.
+    const promise = new Promise<void>((resolve, reject) => {
+      scheduleMacrotask(() => {
+        this.finalizeTrace(run.owningTraceId, stored).then(resolve, reject);
+      });
+    });
     this.trackPending(promise);
     return promise;
+  }
+
+  /**
+   * Copy token usage from an `invoke` / chain result onto generation spans
+   * whose callback event omitted it. Call after the operation returns,
+   * before `flush()`.
+   */
+  recordResult(result: unknown): number {
+    let stamped = 0;
+    for (const stored of this.traces.values()) {
+      if (stored.ended) continue;
+      stamped += stored.handle.applyGenerationUsage(result);
+    }
+    return stamped;
   }
 
   private traceName(serialized: Serialized | undefined, fallback: string) {
@@ -1204,7 +1225,7 @@ export class LemmaLangChainCallbackHandler {
     this.runs.delete(runId);
 
     if (run.ownsTrace) {
-      await this.maybeFinalizeOwner(run, endedAt);
+      void this.maybeFinalizeOwner(run, endedAt);
       return;
     }
 
@@ -1212,7 +1233,7 @@ export class LemmaLangChainCallbackHandler {
     const deferred = this.deferredOwnerFor(run.owningTraceId);
     if (deferred) {
       this.runs.delete(deferred.rootRunId);
-      await this.maybeFinalizeOwner(deferred, endedAt);
+      void this.maybeFinalizeOwner(deferred, endedAt);
     }
   }
 
@@ -1226,7 +1247,7 @@ export class LemmaLangChainCallbackHandler {
     const stored = this.storedTrace(deferred.owningTraceId);
     if (stored && rootError) this.noteRootError(stored, rootError);
     this.runs.delete(deferred.rootRunId);
-    await this.maybeFinalizeOwner(deferred, endedAt);
+    void this.maybeFinalizeOwner(deferred, endedAt);
   }
 
   async handleLLMError(error: unknown, runId: RunId) {
@@ -1250,10 +1271,10 @@ export class LemmaLangChainCallbackHandler {
 
     this.runs.delete(runId);
     if (run.ownsTrace) {
-      await this.maybeFinalizeOwner(run, endedAt);
+      void this.maybeFinalizeOwner(run, endedAt);
       return;
     }
-    await this.finalizeDeferredOwner(run.owningTraceId, endedAt, message);
+    void this.finalizeDeferredOwner(run.owningTraceId, endedAt, message);
   }
 
   handleToolStart(
@@ -1335,7 +1356,7 @@ export class LemmaLangChainCallbackHandler {
     }
 
     this.runs.delete(runId);
-    await this.maybeFinalizeOwner(run, endedAt);
+    void this.maybeFinalizeOwner(run, endedAt);
   }
 
   async handleToolError(error: unknown, runId: RunId) {
@@ -1359,10 +1380,10 @@ export class LemmaLangChainCallbackHandler {
 
     this.runs.delete(runId);
     if (run.ownsTrace) {
-      await this.maybeFinalizeOwner(run, endedAt);
+      void this.maybeFinalizeOwner(run, endedAt);
       return;
     }
-    await this.finalizeDeferredOwner(run.owningTraceId, endedAt, message);
+    void this.finalizeDeferredOwner(run.owningTraceId, endedAt, message);
   }
 
   handleRetrieverStart(
@@ -1429,7 +1450,7 @@ export class LemmaLangChainCallbackHandler {
     }
 
     this.runs.delete(runId);
-    await this.maybeFinalizeOwner(run, endedAt);
+    void this.maybeFinalizeOwner(run, endedAt);
   }
 
   async handleRetrieverError(error: unknown, runId: RunId) {
@@ -1452,11 +1473,12 @@ export class LemmaLangChainCallbackHandler {
     }
 
     this.runs.delete(runId);
-    await this.maybeFinalizeOwner(run, endedAt);
+    void this.maybeFinalizeOwner(run, endedAt);
   }
 
-  /** Await outstanding terminal deliveries. */
-  async flush(): Promise<void> {
+  /** Stamp optional operation-result usage, then await outstanding deliveries. */
+  async flush(result?: unknown): Promise<void> {
+    if (arguments.length > 0) this.recordResult(result);
     await Promise.all([
       ...Array.from(this.traces.entries(), ([id, stored]) =>
         this.finalizeTrace(id, stored),

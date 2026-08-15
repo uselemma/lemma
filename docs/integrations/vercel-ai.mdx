@@ -49,13 +49,15 @@ try {
       integrations: [lemmaTelemetry],
     },
   });
-  await lemmaTelemetry.flush();
+  await lemmaTelemetry.flush(result);
   return result.text;
 } catch (error) {
   await lemmaTelemetry.fail(error);
   throw error;
 }
 ```
+
+AI SDK 6 telemetry finish events often omit `usage` even when `generateText` returns tokens. Pass that result to `flush(result)` (or call `recordResult(result)` first) so Lemma writes `span.usage` on the same generation spans. Do not stamp spans yourself.
 
 ## AI SDK v6
 
@@ -93,7 +95,7 @@ try {
       integrations: [lemmaTelemetry],
     },
   });
-  await lemmaTelemetry.flush();
+  await lemmaTelemetry.flush(result);
   return result.text;
 } catch (error) {
   await lemmaTelemetry.fail(error);

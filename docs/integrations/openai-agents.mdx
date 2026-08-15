@@ -45,10 +45,15 @@ addTraceProcessor(
 );
 ```
 
-Then run your agent normally:
+Then run your agent normally. Pass the `run()` result to `recordResult` when
+the processor event omitted token usage:
 
 ```typescript
-import { Agent, run } from "@openai/agents";
+import { Agent, addTraceProcessor, run } from "@openai/agents";
+import { openAIAgents } from "@uselemma/tracing";
+
+const processor = openAIAgents();
+addTraceProcessor(processor);
 
 const agent = new Agent({
   name: "support-agent",
@@ -57,6 +62,8 @@ const agent = new Agent({
 
 export async function callAgent(userMessage: string) {
   const result = await run(agent, userMessage);
+  processor.recordResult(result);
+  await processor.forceFlush();
   return result.finalOutput;
 }
 ```

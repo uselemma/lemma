@@ -53,13 +53,17 @@ exporters: [
 ]
 ```
 
-Then run your agent normally:
+Then run your agent normally. Pass the generate result to `recordResult` when
+the exported span omitted token usage:
 
 ```typescript
+const lemmaExporter = new LemmaMastraExporter();
 const agent = mastra.getAgent("supportAgent");
 
 export async function callAgent(userMessage: string) {
   const result = await agent.generate(userMessage);
+  lemmaExporter.recordResult(result);
+  await lemmaExporter.flush();
   return result.text;
 }
 ```

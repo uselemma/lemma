@@ -21,6 +21,7 @@ import {
 import { failureMessage } from "./error-message";
 import { normalizeRelease } from "./release";
 import {
+  attachResultUsage,
   normalizeTokenUsage,
   tokenUsageAttributes,
   toWireTokenUsage,
@@ -28,8 +29,12 @@ import {
   type WireTokenUsage,
 } from "./usage";
 
-export type { TokenUsage, WireTokenUsage } from "./usage";
-export { normalizeTokenUsage, toWireTokenUsage } from "./usage";
+export type { OperationUsageResult, TokenUsage, WireTokenUsage } from "./usage";
+export {
+  attachResultUsage,
+  normalizeTokenUsage,
+  toWireTokenUsage,
+} from "./usage";
 
 export type JsonValue =
   | string
@@ -841,6 +846,17 @@ export class TraceContext {
   /** @deprecated Use recordTool() or startTool(). */
   tool(options: string | ToolOptions) {
     this.recordTool(options);
+  }
+
+  /**
+   * Stamp operation-result token usage onto generation spans that omitted it.
+   * Does not invent zeros or overwrite usage already recorded on a span.
+   */
+  applyGenerationUsage(result: unknown): number {
+    const generations = this.spans.filter((span) => span.type === "generation");
+    const stamped = attachResultUsage(generations, result);
+    if (stamped > 0) this.changed();
+    return stamped;
   }
 
   toPayload(

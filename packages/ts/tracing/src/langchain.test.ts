@@ -63,6 +63,7 @@ describe("langChain", () => {
     await h.handleToolEnd([{ title: "Shipping" }], "tool-1");
     await h.handleChainEnd({ answer: "It arrives Friday." }, "chain-1");
 
+    await h.flush();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
@@ -202,6 +203,7 @@ describe("langChain", () => {
       "llm-usage",
     );
 
+    await h.flush();
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.spans[0]).toMatchObject({
       type: "generation",
@@ -253,6 +255,7 @@ describe("langChain", () => {
       "llm-zero",
     );
 
+    await h.flush();
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.spans[0]).toMatchObject({
       usage: {
@@ -265,6 +268,32 @@ describe("langChain", () => {
         "gen_ai.usage.input_tokens": 0,
         "gen_ai.usage.output_tokens": 0,
       },
+    });
+  });
+
+  it("stamps invoke result usage when the LLM end event omits it", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock);
+
+    h.handleLLMStart(
+      { id: ["langchain", "chat_models", "openai", "ChatOpenAI"] },
+      ["hi"],
+      "llm-result-usage",
+    );
+    await h.handleLLMEnd(
+      { generations: [[{ text: "hello" }]] },
+      "llm-result-usage",
+    );
+    expect(
+      h.recordResult({
+        usage_metadata: { input_tokens: 9, output_tokens: 3 },
+      }),
+    ).toBe(1);
+    await h.flush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      usage: { input_tokens: 9, output_tokens: 3 },
     });
   });
 
@@ -282,6 +311,7 @@ describe("langChain", () => {
       "llm-no-usage",
     );
 
+    await h.flush();
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.spans[0]).not.toHaveProperty("usage");
     expect(body.trace.spans[0].attributes).not.toHaveProperty(
@@ -306,6 +336,7 @@ describe("langChain", () => {
     );
     await h.handleChainEnd("ok", "chain-1");
 
+    await h.flush();
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.thread_id).toBe("conv-meta");
     expect(body.trace.user_id).toBe("cust-meta");
@@ -331,6 +362,7 @@ describe("langChain", () => {
     await h.handleChainEnd("out-a", "chain-a");
     await h.handleChainEnd("out-b", "chain-b");
 
+    await h.flush();
     expect(fetchMock).toHaveBeenCalledTimes(3);
     const traces = fetchMock.mock.calls.map((call) => jsonBody(call).trace);
     const byName = Object.fromEntries(traces.map((t: { name: string }) => [t.name, t]));
@@ -354,6 +386,7 @@ describe("langChain", () => {
     await h.handleToolError(new Error("lookup failed"), "tool-1");
     await h.handleChainError(new Error("agent failed"), "chain-1");
 
+    await h.flush();
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
       name: "support-agent",
@@ -378,6 +411,7 @@ describe("langChain", () => {
     await h.handleToolError(new RangeError(), "tool-1");
     await h.handleChainError(new Error(), "chain-1");
 
+    await h.flush();
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({ status: "ERROR", error: "Error" });
     expect(body.trace.spans[0]).toMatchObject({
@@ -394,6 +428,7 @@ describe("langChain", () => {
     h.handleChainStart({ name: "support-agent" }, "hello", "chain-1");
     await h.handleChainError(new TypeError("x is not a function"), "chain-1");
 
+    await h.flush();
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
       status: "ERROR",
@@ -423,6 +458,7 @@ describe("langChain", () => {
     );
     await h.handleChainEnd({ ok: true }, "chain-1");
 
+    await h.flush();
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.spans[0]).toMatchObject({
       name: "pdf_server_pdf",
@@ -456,6 +492,7 @@ describe("langChain", () => {
     await h.handleToolError(new Error("boom"), "tool-1");
     await h.handleChainError(new Error("failed"), "chain-1");
 
+    await h.flush();
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
       name: "agent",
@@ -612,6 +649,7 @@ describe("langChain", () => {
       "llm-2",
     );
 
+    await h.flush();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
@@ -648,6 +686,7 @@ describe("langChain", () => {
 
     await h.handleChainEnd("late", "chain-1");
     await h.shutdown();
+    await h.flush();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -658,6 +697,7 @@ describe("langChain", () => {
     h.handleToolStart({ name: "solo-tool" }, { q: 1 }, "tool-1", "ghost-parent");
     await h.handleToolEnd({ ok: true }, "tool-1");
 
+    await h.flush();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.name).toBe("solo-tool");
@@ -680,6 +720,7 @@ describe("langChain", () => {
     );
     await h.handleChainEnd({ answer: "ok" }, "chain-1");
 
+    await h.flush();
     expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
   });
 });
@@ -727,6 +768,7 @@ describe("langGraph", () => {
     await h.handleChainEnd({ answer: "done" }, "node-2");
     await h.handleChainEnd({ answer: "done" }, "graph-1");
 
+    await h.flush();
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
       name: "langgraph-agent",
@@ -784,6 +826,7 @@ describe("langGraph", () => {
       "graph-1",
     );
 
+    await h.flush();
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
       name: "langgraph-agent",
@@ -805,6 +848,7 @@ describe("langGraph", () => {
     h.handleChainStart({ name: "StateGraph" }, { topic: "docs" }, "graph-1");
     await h.handleChainEnd({ answer: "done" }, "graph-1");
 
+    await h.flush();
     expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
   });
 });

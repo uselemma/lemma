@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  attachResultUsage,
   normalizeTokenUsage,
   toWireTokenUsage,
   tokenUsageAttributes,
@@ -176,5 +177,73 @@ describe("toWireTokenUsage / tokenUsageAttributes", () => {
       input_tokens: 1,
     });
     expect(toWireTokenUsage(undefined)).toBeUndefined();
+  });
+});
+
+describe("attachResultUsage", () => {
+  function generation() {
+    return { type: "generation" as const, attributes: {} };
+  }
+
+  it("stamps totalUsage onto a single generation", () => {
+    const gen = generation();
+    const tool = { type: "tool" as const };
+    expect(
+      attachResultUsage([gen], {
+        totalUsage: { inputTokens: 30, outputTokens: 9 },
+        steps: [
+          { usage: { inputTokens: 10, outputTokens: 3 } },
+          { usage: { inputTokens: 20, outputTokens: 6 } },
+        ],
+      }),
+    ).toBe(1);
+    expect(gen.usage).toEqual({ input_tokens: 30, output_tokens: 9 });
+    expect(gen.attributes).toMatchObject({
+      "gen_ai.usage.input_tokens": 30,
+      "gen_ai.usage.output_tokens": 9,
+    });
+    expect(tool).not.toHaveProperty("usage");
+  });
+
+  it("zips per-step usage onto matching generation spans", () => {
+    const spans = [generation(), generation()];
+    expect(
+      attachResultUsage(spans, {
+        totalUsage: { inputTokens: 30, outputTokens: 9 },
+        steps: [
+          { usage: { inputTokens: 10, outputTokens: 3 } },
+          { usage: { inputTokens: 20, outputTokens: 6 } },
+        ],
+      }),
+    ).toBe(2);
+    expect(spans[0]?.usage).toEqual({ input_tokens: 10, output_tokens: 3 });
+    expect(spans[1]?.usage).toEqual({ input_tokens: 20, output_tokens: 6 });
+  });
+
+  it("does not write the same total onto every generation", () => {
+    const spans = [generation(), generation()];
+    expect(
+      attachResultUsage(spans, {
+        totalUsage: { inputTokens: 30, outputTokens: 9 },
+        steps: [],
+      }),
+    ).toBe(1);
+    expect(spans[0]?.usage).toEqual({ input_tokens: 30, output_tokens: 9 });
+    expect(spans[1]?.usage).toBeUndefined();
+  });
+
+  it("leaves spans that already have usage and omits empty results", () => {
+    const existing = {
+      ...generation(),
+      usage: { input_tokens: 1, output_tokens: 1 },
+    };
+    expect(
+      attachResultUsage([existing], {
+        usage: { inputTokens: 9, outputTokens: 9 },
+      }),
+    ).toBe(0);
+    expect(existing.usage).toEqual({ input_tokens: 1, output_tokens: 1 });
+    expect(attachResultUsage([generation()], { steps: [] })).toBe(0);
+    expect(attachResultUsage([generation()], { totalTokens: 12 })).toBe(0);
   });
 });

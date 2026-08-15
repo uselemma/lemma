@@ -6,6 +6,7 @@ import {
   type TraceHandle,
 } from "./client";
 import { describeError } from "./error-message";
+import { scheduleMacrotask } from "./schedule";
 import { toolResultError } from "./tool-result";
 import { normalizeTokenUsage, type TokenUsage } from "./usage";
 
@@ -46,6 +47,7 @@ type VercelAIEndEvent = {
   error?: unknown;
   /** Optional usage when a future AI SDK finish payload includes it. */
   usage?: unknown;
+  totalUsage?: unknown;
 };
 
 type VercelAIToolExecutionEndEvent = {
@@ -106,6 +108,7 @@ type VercelAIStepEndEvent = {
   error?: unknown;
   /** Optional usage when present on step end. */
   usage?: unknown;
+  totalUsage?: unknown;
 };
 
 type VercelAIV6ModelInfo = {
@@ -132,6 +135,7 @@ type VercelAIV6StepFinishEvent = {
   error?: unknown;
   /** Optional usage when present on step finish. */
   usage?: unknown;
+  totalUsage?: unknown;
 };
 
 type VercelAIV6StartEvent = {
@@ -152,11 +156,12 @@ type VercelAIV6FinishEvent = {
   metadata?: Record<string, unknown>;
   error?: unknown;
   /**
-   * TODO: Vercel AI SDK telemetry finish events do not consistently expose
-   * token usage today. Support `usage` when present so Analytics can consume
-   * it without a follow-up SDK change once the AI SDK emits it.
+   * Token usage when the AI SDK finish payload includes it. Often omitted on
+   * AI SDK 6 `experimental_telemetry` — use `recordResult(result)` /
+   * `flush(result)` so `generateText` usage still reaches the same spans.
    */
   usage?: unknown;
+  totalUsage?: unknown;
 };
 
 type VercelAIV6ToolCallFinishEvent = {
@@ -208,8 +213,18 @@ export type VercelAITelemetryIntegration = {
   ) => MaybePromise<void>;
   /** Mark the active run as failed and end the owned trace. */
   fail: (error: unknown) => Promise<void>;
-  /** Await outstanding terminal deliveries. */
-  flush: () => Promise<void>;
+  /**
+   * Copy token usage from a `generateText` / `streamText` result onto the
+   * generation spans this integration already opened. Call after the
+   * operation returns, before `flush()`.
+   */
+  recordResult: (result: unknown) => number;
+  /**
+   * Stamp optional operation-result usage, then await outstanding deliveries.
+   * Pass the `generateText` result so usage reaches ingest when telemetry
+   * finish events omitted it.
+   */
+  flush: (result?: unknown) => Promise<void>;
   /** Flush and reset integration state for short-lived runtimes. */
   shutdown: () => Promise<void>;
 };
@@ -499,8 +514,11 @@ function endOutput(event: TerminalEvent) {
 }
 
 /** Extract usage from a finish/end event when the AI SDK exposes it. */
-function eventUsage(event: { usage?: unknown }): TokenUsage | undefined {
-  return normalizeTokenUsage(event.usage);
+function eventUsage(event: {
+  usage?: unknown;
+  totalUsage?: unknown;
+}): TokenUsage | undefined {
+  return normalizeTokenUsage(event.usage) ?? normalizeTokenUsage(event.totalUsage);
 }
 
 function withIntegrationAttrs(
@@ -540,6 +558,7 @@ export function vercelAI(
         output: (value: unknown) => void;
       }
     | undefined;
+  let deliverOwnedTrace: (() => Promise<void>) | undefined;
 
   function resetRunState() {
     phase = "idle";
@@ -558,6 +577,7 @@ export function vercelAI(
     runStartedAt = undefined;
     runError = undefined;
     endingTrace = undefined;
+    deliverOwnedTrace = undefined;
   }
 
   function trackGeneration(handle: SpanHandle) {
@@ -762,17 +782,19 @@ export function vercelAI(
 
     endingTrace = ownedTrace;
 
-    const endPromise = (async () => {
+    // Delay the HTTP send until after generateText returns so recordResult /
+    // flush(result) can stamp usage onto the same generation spans. A macrotask
+    // fallback still delivers if the caller never flushes.
+    let delivered = false;
+    const deliver = async () => {
+      if (delivered) return;
+      delivered = true;
       try {
         if (!ownedTrace) return;
-        // Yield so a racing fail()/trailing callback in this turn can settle.
-        await Promise.resolve();
         const terminalError = runError;
         // Explicit handles already own startedAt from construction; only pass
         // durationMs for managed traces we started with runStartedAt.
-        const timing = explicit
-          ? { endedAt }
-          : { durationMs, endedAt };
+        const timing = explicit ? { endedAt } : { durationMs, endedAt };
         if (terminalError) {
           ownedTrace.fail(terminalError);
           ownedTrace.output(undefined);
@@ -791,9 +813,21 @@ export function vercelAI(
         // Fully reset so the same integration object can be reused sequentially.
         resetRunState();
       }
-    })();
+    };
+    deliverOwnedTrace = deliver;
+    trackPending(
+      new Promise<void>((resolve, reject) => {
+        scheduleMacrotask(() => {
+          deliver().then(resolve, reject);
+        });
+      }),
+    );
+  }
 
-    await trackPending(endPromise);
+  function recordResult(result: unknown): number {
+    const trace = (options.trace ?? managedTrace) as TraceContext | undefined;
+    if (!trace) return 0;
+    return trace.applyGenerationUsage(result);
   }
 
   function recordV6Generation(
@@ -1296,9 +1330,15 @@ export function vercelAI(
         beginActivity();
       }
       await endOwnedTrace({ error });
+      // Failures have no operation result to wait for — deliver now.
+      if (deliverOwnedTrace) await deliverOwnedTrace();
     },
 
-    async flush() {
+    recordResult,
+
+    async flush(result?: unknown) {
+      if (arguments.length > 0) recordResult(result);
+      if (deliverOwnedTrace) await deliverOwnedTrace();
       await Promise.all(Array.from(pending));
     },
 

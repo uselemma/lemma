@@ -3,6 +3,8 @@ import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
 import { LemmaMastraExporter } from "@uselemma/tracing";
 
+const lemmaExporter = new LemmaMastraExporter();
+
 export const mastra = new Mastra({
   agents: {
     supportAgent: new Agent({
@@ -15,7 +17,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: "support-app",
-        exporters: [new LemmaMastraExporter()],
+        exporters: [lemmaExporter],
       },
     },
   }),
@@ -23,5 +25,7 @@ export const mastra = new Mastra({
 
 const agent = mastra.getAgent("supportAgent");
 const result = await agent.generate("Where is my order?");
+lemmaExporter.recordResult(result);
+await lemmaExporter.flush();
 
 console.log(result.text);

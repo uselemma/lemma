@@ -39,6 +39,7 @@ describe("vercelAI", () => {
     } as never);
 
     await integration.onEnd?.({ text: "It arrives Friday." });
+    await integration.flush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
@@ -82,6 +83,7 @@ describe("vercelAI", () => {
     } as never);
 
     await integration.onEnd?.({ text: "hi" });
+    await integration.flush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
@@ -128,6 +130,7 @@ describe("vercelAI", () => {
     } as never);
 
     await integration.onEnd?.({ text: "hi" });
+    await integration.flush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.spans[0]).toMatchObject({
@@ -151,6 +154,129 @@ describe("vercelAI", () => {
     });
   });
 
+  it("stamps generateText usage when the finish event omits it", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      prompt: "hello",
+    });
+    await integration.onFinish?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "hi",
+    });
+    expect(
+      integration.recordResult({
+        usage: { inputTokens: 15, outputTokens: 4 },
+        totalUsage: { inputTokens: 15, outputTokens: 4 },
+      }),
+    ).toBe(1);
+    await integration.flush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      type: "generation",
+      usage: { input_tokens: 15, output_tokens: 4 },
+    });
+  });
+
+  it("zips per-step usage and does not copy the same total onto every span", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      prompt: "hello",
+    });
+    integration.onStepStart?.({
+      stepNumber: 0,
+      model: { provider: "openai", modelId: "gpt-4o" },
+      messages: [{ role: "user", content: "hello" }],
+    });
+    integration.onStepFinish?.({
+      stepNumber: 0,
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "step one",
+    });
+    integration.onStepStart?.({
+      stepNumber: 1,
+      model: { provider: "openai", modelId: "gpt-4o" },
+      messages: [{ role: "user", content: "hello" }],
+    });
+    integration.onStepFinish?.({
+      stepNumber: 1,
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "step two",
+    });
+    await integration.onFinish?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "step two",
+    });
+    integration.recordResult({
+      totalUsage: { inputTokens: 30, outputTokens: 9 },
+      steps: [
+        { usage: { inputTokens: 10, outputTokens: 3 } },
+        { usage: { inputTokens: 20, outputTokens: 6 } },
+      ],
+    });
+    await integration.flush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    const generations = body.trace.spans.filter(
+      (span: { type?: string }) => span.type === "generation",
+    );
+    expect(generations).toHaveLength(2);
+    expect(generations[0].usage).toEqual({
+      input_tokens: 10,
+      output_tokens: 3,
+    });
+    expect(generations[1].usage).toEqual({
+      input_tokens: 20,
+      output_tokens: 6,
+    });
+  });
+
+  it("omits usage when the event and result have no token facts", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      prompt: "hello",
+    });
+    await integration.onFinish?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "hi",
+    });
+    expect(integration.recordResult({ totalTokens: 12, steps: [] })).toBe(0);
+    await integration.flush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).not.toHaveProperty("usage");
+    expect(body.trace.spans[0].attributes).not.toHaveProperty(
+      "gen_ai.usage.input_tokens",
+    );
+  });
+
   it("creates and ends an AI SDK v6 trace without lemma.trace", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const integration = vercelAI({
@@ -169,6 +295,7 @@ describe("vercelAI", () => {
       model: { provider: "openai", modelId: "gpt-4o" },
       text: "hi",
     });
+    await integration.flush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
@@ -235,6 +362,7 @@ describe("vercelAI", () => {
       model: { provider: "openai", modelId: "gpt-4o" },
       text: "Found docs.",
     });
+    await integration.flush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     const [generation, tool] = body.trace.spans;
@@ -601,6 +729,7 @@ describe("vercelAI", () => {
     const integration = vercelAI({ trace });
 
     await integration.onEnd?.({ text: "hi" });
+    await integration.flush();
 
     const body = jsonBody(fetchMock.mock.calls.at(-1)!);
     expect(body.trace).toMatchObject({
@@ -628,6 +757,7 @@ describe("vercelAI", () => {
       model: { provider: "openai", modelId: "gpt-4o" },
       text: "hi",
     });
+    await integration.flush();
 
     const body = jsonBody(fetchMock.mock.calls.at(-1)!);
     expect(body.trace).toMatchObject({
@@ -835,6 +965,7 @@ describe("vercelAI", () => {
         userId: "user-7",
       },
     });
+    await integration.flush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace).toMatchObject({
@@ -870,6 +1001,7 @@ describe("vercelAI", () => {
       model: { provider: "openai", modelId: "gpt-4o" },
       text: "Ships Friday.",
     });
+    await integration.flush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.input).toBe("Summarize shipping.");
@@ -925,6 +1057,7 @@ describe("vercelAI", () => {
         },
       ],
     });
+    await integration.flush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.spans[0].output).toEqual([
@@ -964,6 +1097,7 @@ describe("vercelAI", () => {
       model: { provider: "openai", modelId: "gpt-4o" },
       text: "one",
     });
+    await integration.flush();
 
     integration.onStart?.({
       functionId: "support-agent",
@@ -975,6 +1109,7 @@ describe("vercelAI", () => {
       model: { provider: "openai", modelId: "gpt-4o" },
       text: "two",
     });
+    await integration.flush();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(jsonBody(fetchMock.mock.calls[0]).trace.input).toBe("first");
@@ -1042,12 +1177,14 @@ describe("vercelAI", () => {
       model: { provider: "openai", modelId: "gpt-4o" },
       text: "hi",
     });
+    await integration.flush();
     await integration.onFinish?.({
       functionId: "support-agent",
       model: { provider: "openai", modelId: "gpt-4o" },
       text: "hi again",
     });
     await integration.onEnd?.({ text: "hi again" });
+    await integration.flush();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -1076,22 +1213,22 @@ describe("vercelAI", () => {
       model: { provider: "openai", modelId: "gpt-4o" },
       text: "hi",
     });
-
-    for (let i = 0; i < 10 && !resolveFetch; i++) {
-      await Promise.resolve();
-    }
-    expect(resolveFetch).toBeTypeOf("function");
+    await finishPromise;
 
     const flushPromise = integration.flush();
     let flushed = false;
     void flushPromise.then(() => {
       flushed = true;
     });
+
+    for (let i = 0; i < 10 && !resolveFetch; i++) {
+      await Promise.resolve();
+    }
+    expect(resolveFetch).toBeTypeOf("function");
     await Promise.resolve();
     expect(flushed).toBe(false);
 
     resolveFetch?.(new Response("{}", { status: 201 }));
-    await finishPromise;
     await flushPromise;
     expect(flushed).toBe(true);
 
@@ -1201,9 +1338,14 @@ describe("vercelAI", () => {
       } as never),
     ).not.toThrow();
 
+    const flushPromise = integration.flush();
+    for (let i = 0; i < 10 && !resolveFetch; i++) {
+      await Promise.resolve();
+    }
     expect(resolveFetch).toBeTypeOf("function");
     resolveFetch?.(new Response("{}", { status: 201 }));
     await finishPromise;
+    await flushPromise;
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -1249,6 +1391,7 @@ describe("vercelAI", () => {
       model: { provider: "openai", modelId: "gpt-4o" },
       text: "ok",
     });
+    await integration.flush();
 
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.duration_ms).toBeGreaterThanOrEqual(15);
@@ -1272,6 +1415,7 @@ describe("vercelAI", () => {
       prompt: "where is my order?",
     });
     await integration.onEnd?.({ text: "It arrives Friday." });
+    await integration.flush();
 
     expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
   });

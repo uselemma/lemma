@@ -1,5 +1,6 @@
 import { Lemma, type SpanHandle, type TraceHandle } from "./client";
 import { describeError } from "./error-message";
+import { scheduleMacrotask } from "./schedule";
 import { toolResultError } from "./tool-result";
 import { normalizeTokenUsage, type TokenUsage } from "./usage";
 
@@ -39,8 +40,13 @@ export type OpenAIAgentsTracingProcessor = {
   onTraceEnd: (trace: OpenAIAgentsTrace) => Promise<void>;
   onSpanStart: (span: OpenAIAgentsSpan) => Promise<void>;
   onSpanEnd: (span: OpenAIAgentsSpan) => Promise<void>;
+  /**
+   * Copy token usage from a `run()` result onto generation spans whose
+   * processor event omitted it. Call after `run()` returns, before flush.
+   */
+  recordResult: (result: unknown) => number;
   shutdown: (timeout?: number) => Promise<void>;
-  forceFlush: () => Promise<void>;
+  forceFlush: (result?: unknown) => Promise<void>;
 };
 
 export type OpenAIAgentsIntegrationOptions = {
@@ -248,6 +254,16 @@ export function openAIAgents(
   const spans = new Map<string, { handle: SpanHandle; traceId: string }>();
   /** Ended handles kept only until their trace finalizes (for parent extend). */
   const endedSpans = new Map<string, { handle: SpanHandle; traceId: string }>();
+  const pending = new Set<Promise<void>>();
+
+  function recordResult(result: unknown): number {
+    let stamped = 0;
+    for (const stored of traces.values()) {
+      if (stored.ended) continue;
+      stamped += stored.handle.applyGenerationUsage(result);
+    }
+    return stamped;
+  }
 
   function resolveThreadId(
     groupId?: string | null,
@@ -519,7 +535,14 @@ export function openAIAgents(
       const stored = traces.get(trace.traceId);
       if (!stored) return;
       applyIdentity(stored, trace.groupId, trace.metadata);
-      await finalizeTrace(trace.traceId, stored);
+      // Delay send so recordResult(run return) can stamp usage first.
+      const promise = new Promise<void>((resolve, reject) => {
+        scheduleMacrotask(() => {
+          finalizeTrace(trace.traceId, stored).then(resolve, reject);
+        });
+      });
+      pending.add(promise);
+      void promise.finally(() => pending.delete(promise));
     },
     onSpanStart: async (span) => {
       // Repair missing parents only when the owning trace is already known.
@@ -531,13 +554,17 @@ export function openAIAgents(
       if (!traces.has(span.traceId)) return;
       endSpan(span);
     },
+    recordResult,
     // Shutdown/forceFlush finalize any still-open traces (a one-time terminal
     // send for traces that never received onTraceEnd), then drop them.
     shutdown: async () => {
       await finalizeAll();
+      await Promise.all(pending);
     },
-    forceFlush: async () => {
+    forceFlush: async (result?: unknown) => {
+      if (arguments.length > 0) recordResult(result);
       await finalizeAll();
+      await Promise.all(pending);
     },
   };
 }
