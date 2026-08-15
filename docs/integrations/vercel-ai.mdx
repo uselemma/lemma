@@ -103,7 +103,7 @@ try {
 
 ## Streaming
 
-Use the same per-operation integration with `streamText`. Call `flush()` after the stream finishes, or `fail()` / `shutdown()` in short-lived runtimes when the process may exit before delivery completes.
+Use the same per-operation integration with `streamText`. Call `flush()` after the stream finishes to send the trace. Call `fail(error)` if the call throws before a terminal callback.
 
 ```typescript
 import { streamText } from "ai";
@@ -165,7 +165,7 @@ Prompts, tool inputs, tool outputs, model output, and error messages are always 
 | Method | When to use |
 | --- | --- |
 | `fail(error)` | The AI SDK call threw or was aborted before a terminal telemetry callback |
-| `flush()` | Await outstanding ingest deliveries before returning from a request |
+| `flush()` | Send the integration's completed traces and await ingest delivery |
 | `shutdown()` | Flush and clear state in workers / serverless teardown |
 
 ```typescript

@@ -182,6 +182,26 @@ describe("Lemma", () => {
     });
   });
 
+  it("keeps recordGeneration usage on toPayload", () => {
+    const startedAt = new Date("2026-08-15T12:00:00.000Z");
+    const endedAt = new Date("2026-08-15T12:00:01.000Z");
+    const trace = new TraceContext({ name: "manual-usage" });
+    trace.recordGeneration({
+      name: "answer",
+      model: "gpt-4o",
+      usage: { inputTokens: 11, outputTokens: 4 },
+    });
+    expect(trace.applyGenerationUsage({ usage: { inputTokens: 99 } })).toBe(0);
+    const payload = trace.toPayload(
+      "10000000-0000-0000-0000-000000000001",
+      startedAt,
+      endedAt,
+    );
+    expect(payload.trace.spans[0]).toMatchObject({
+      usage: { input_tokens: 11, output_tokens: 4 },
+    });
+  });
+
   it("supports live span handles", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const lemma = new Lemma({

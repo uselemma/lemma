@@ -186,6 +186,106 @@ export function normalizeTokenUsage(raw: unknown): TokenUsage | undefined {
   return usage;
 }
 
+/** Operation result shapes that may carry token usage after a framework event. */
+export type OperationUsageResult = {
+  usage?: unknown;
+  totalUsage?: unknown;
+  steps?: ReadonlyArray<{ usage?: unknown }>;
+  usage_metadata?: unknown;
+  response_metadata?: unknown;
+  rawResponses?: ReadonlyArray<{ usage?: unknown }>;
+};
+
+function asUsageResult(raw: unknown): OperationUsageResult | undefined {
+  return asRecord(raw);
+}
+
+function resultStepUsages(
+  result: OperationUsageResult,
+): Array<TokenUsage | undefined> {
+  if (Array.isArray(result.steps)) {
+    return result.steps.map((step) => normalizeTokenUsage(step?.usage));
+  }
+  if (Array.isArray(result.rawResponses)) {
+    return result.rawResponses.map((response) =>
+      normalizeTokenUsage(response?.usage),
+    );
+  }
+  return [];
+}
+
+function resultTotalUsage(result: OperationUsageResult): TokenUsage | undefined {
+  return (
+    normalizeTokenUsage(result.totalUsage) ??
+    normalizeTokenUsage(result.usage) ??
+    normalizeTokenUsage(result.usage_metadata) ??
+    normalizeTokenUsage(result.response_metadata) ??
+    normalizeTokenUsage(result)
+  );
+}
+
+function spanHasUsage(span: {
+  usage?: WireTokenUsage;
+}): boolean {
+  return span.usage != null && Object.keys(span.usage).length > 0;
+}
+
+function stampSpanUsage(
+  span: {
+    usage?: WireTokenUsage;
+    attributes?: Record<string, unknown>;
+  },
+  usage: TokenUsage | undefined,
+): boolean {
+  if (!usage || spanHasUsage(span)) return false;
+  const wire = toWireTokenUsage(usage);
+  if (!wire) return false;
+  span.usage = wire;
+  span.attributes = {
+    ...span.attributes,
+    ...tokenUsageAttributes(usage),
+  };
+  return true;
+}
+
+/**
+ * Copy operation-result usage onto existing generation spans.
+ *
+ * One generation → `totalUsage` / `usage` so a multi-step call is not
+ * undercounted. Several generations → per-step (or `rawResponses`) usage in
+ * order. Never write the same total onto every span.
+ *
+ * Spans that already have usage are left alone. Returns the number of spans
+ * that received usage.
+ */
+export function attachResultUsage(
+  generations: Array<{
+    usage?: WireTokenUsage;
+    attributes?: Record<string, unknown>;
+  }>,
+  result: unknown,
+): number {
+  if (generations.length === 0) return 0;
+  const parsed = asUsageResult(result);
+  if (!parsed) return 0;
+
+  const steps = resultStepUsages(parsed);
+  const total = resultTotalUsage(parsed);
+
+  if (generations.length === 1) {
+    return stampSpanUsage(generations[0]!, total ?? steps[0]) ? 1 : 0;
+  }
+
+  let stamped = 0;
+  for (let i = 0; i < generations.length; i += 1) {
+    if (stampSpanUsage(generations[i]!, steps[i])) stamped += 1;
+  }
+  if (stamped === 0 && total) {
+    return stampSpanUsage(generations[0]!, total) ? 1 : 0;
+  }
+  return stamped;
+}
+
 /** Convert TokenUsage to the ingest wire object. Omits undefined fields. */
 export function toWireTokenUsage(
   usage: TokenUsage | undefined,

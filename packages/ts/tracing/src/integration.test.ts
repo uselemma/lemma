@@ -120,6 +120,7 @@ describe("HTTP tracing integration", () => {
       performance: { responseTimeMs: 12 },
     } as never);
     await integration.onEnd?.({ text: "hello" });
+    await integration.flush();
 
     const openAIProcessor = openAIAgents({
       apiKey: "key",
@@ -165,6 +166,7 @@ describe("HTTP tracing integration", () => {
       traceId: "trace_openai",
       name: "openai-agents-trace",
     });
+    await openAIProcessor.forceFlush();
 
     const langChainHandler = langChain({
       apiKey: "key",
@@ -189,6 +191,7 @@ describe("HTTP tracing integration", () => {
       "llm-1",
     );
     await langChainHandler.handleChainEnd({ output: "hello" }, "chain-1");
+    await langChainHandler.flush();
 
     expect(ingest.requests).toHaveLength(6);
     for (const request of ingest.requests) {

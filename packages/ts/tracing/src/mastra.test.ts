@@ -28,6 +28,7 @@ async function emit(
   exportedSpan: MastraExportedSpan,
 ) {
   await exporter.exportTracingEvent({ type, exportedSpan });
+  if (exportedSpan.isRootSpan) await exporter.flush();
 }
 
 describe("mastra / LemmaMastraExporter", () => {
@@ -692,6 +693,85 @@ describe("mastra / LemmaMastraExporter", () => {
     });
   });
 
+  it("stamps generate result usage when the exported span omits it", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "gen_result_usage",
+        name: "llm: 'gpt-4o'",
+        type: "model_generation",
+        parentSpanId: "root_result_usage",
+        input: [{ role: "user", content: "hi" }],
+        output: { text: "hello" },
+        attributes: { model: "gpt-4o", provider: "openai" },
+      }),
+    );
+    exporter.recordResult({ usage: { inputTokens: 10, outputTokens: 4 } });
+    await exporter.exportTracingEvent({
+      type: "span_ended",
+      exportedSpan: span({
+        id: "root_result_usage",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        input: "hi",
+        output: "hello",
+      }),
+    });
+    await exporter.flush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      usage: { input_tokens: 10, output_tokens: 4 },
+    });
+  });
+
+  it("omits usage when the exported span and generate result have no token facts", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "gen_no_usage",
+        name: "llm: 'gpt-4o'",
+        type: "model_generation",
+        parentSpanId: "root_no_usage",
+        output: { text: "hello", usage: { totalTokens: 12 } },
+        attributes: { model: "gpt-4o" },
+      }),
+    );
+    exporter.recordResult({ usage: { totalTokens: 12 } });
+    await exporter.exportTracingEvent({
+      type: "span_ended",
+      exportedSpan: span({
+        id: "root_no_usage",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        input: "hi",
+        output: "hello",
+      }),
+    });
+    await exporter.flush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).not.toHaveProperty("usage");
+  });
+
   it("resolves toolName from entityId/entityName and tool: span names", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const exporter = mastra({
@@ -1009,10 +1089,9 @@ describe("mastra / LemmaMastraExporter", () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const deliver = emit(
-      exporter,
-      "span_ended",
-      span({
+    await exporter.exportTracingEvent({
+      type: "span_ended",
+      exportedSpan: span({
         id: "root_flush",
         name: "agent-run",
         type: "agent_run",
@@ -1020,15 +1099,21 @@ describe("mastra / LemmaMastraExporter", () => {
         input: "hi",
         output: "hello",
       }),
-    );
-
-    await Promise.resolve();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
 
     const flushPromise = exporter.flush();
+    let flushed = false;
+    void flushPromise.then(() => {
+      flushed = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(resolveFetch).toBeTypeOf("function");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(flushed).toBe(false);
+
     resolveFetch?.(new Response("{}", { status: 201 }));
-    await deliver;
     await flushPromise;
+    expect(flushed).toBe(true);
     await exporter.shutdown();
   });
 

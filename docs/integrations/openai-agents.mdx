@@ -48,7 +48,11 @@ addTraceProcessor(
 Then run your agent normally:
 
 ```typescript
-import { Agent, run } from "@openai/agents";
+import { Agent, addTraceProcessor, run } from "@openai/agents";
+import { openAIAgents } from "@uselemma/tracing";
+
+const processor = openAIAgents();
+addTraceProcessor(processor);
 
 const agent = new Agent({
   name: "support-agent",
@@ -57,6 +61,7 @@ const agent = new Agent({
 
 export async function callAgent(userMessage: string) {
   const result = await run(agent, userMessage);
+  await processor.forceFlush();
   return result.finalOutput;
 }
 ```
@@ -128,7 +133,7 @@ span as `ERROR` without failing the root when a later generation succeeds.
 
 ## Flush and shutdown
 
-Call `forceFlush()` / `force_flush()` (or `shutdown()`) to finalize any still-open
+Call `forceFlush()` / `force_flush()` (or `shutdown()`) to send any still-open
 traces exactly once. A later `onTraceEnd` / `on_trace_end` for a flushed trace is
 a no-op, so spans are never duplicated in the append-only ingest store.
 
