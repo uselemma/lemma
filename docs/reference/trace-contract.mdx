@@ -124,7 +124,7 @@ Deliver **one complete trace** when the execution (agent turn) finishes. This is
 | `thread_id` | Groups multi-turn conversation traces |
 | `user_id` | Per-user slicing |
 | `release` | Optional deployed app version from the SDK client (`release` / `LEMMA_RELEASE`). Trimmed; empty, over 200 characters, or values with newlines, tabs, or carriage returns are omitted (unreleased) |
-| `metadata` | Arbitrary JSON attached to the root. Each key becomes a span attribute (no reserved keys) |
+| `metadata` | Arbitrary JSON attached to the root |
 | `spans` | Child work |
 
 **Semantic guidance:** include root `input` and either `output` or `error`. Without them, the dashboard can show timing but not what the user asked or whether the run succeeded.
@@ -147,7 +147,7 @@ Every child is a named object in `trace.spans[]`.
 | `model` | Generation model name |
 | `usage` | Token counts when the provider supplied them (omit when unknown) |
 | `attributes` | Flattened contract attributes and escape-hatch keys |
-| `metadata` | Arbitrary JSON for the child. Each key becomes a span attribute (no reserved keys) |
+| `metadata` | Arbitrary JSON for the child |
 
 ### Typed children
 
