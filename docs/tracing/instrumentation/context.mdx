@@ -1,6 +1,6 @@
 ---
 title: "Threads & context"
-description: "Group multi-turn conversations and attach users"
+description: "Group multi-turn conversations, attach users, and add custom metadata"
 ---
 
 Set trace-level context when you open the trace.
@@ -73,17 +73,11 @@ When one user has a back-and-forth with your agent, each turn is its own trace. 
   </Tab>
 </Tabs>
 
-## Environment & service name
+## Metadata
 
-To separate environments or set a service name, use the mechanism that matches your goal:
+Attach any custom keys on the trace or a child span. There is no reserved set — `firm.slug`, `plan`, or any other key works. Ingest copies each key onto that span as an attribute, so you can filter with `attr.<key>:<value>`.
 
-| Goal | Mechanism |
-| --- | --- |
-| Isolate staging from production | Use separate Lemma projects |
-| Label the environment on a trace | Set `metadata["deployment.environment.name"]` |
-| Set a custom service name | Use the OTLP resource `service.name` — the SDK ingest path always stores `service_name: "lemma-sdk"` |
-
-Attach the environment label through trace `metadata`:
+Use dotted string keys, not nested objects. `metadata: { "firm.slug": "acme" }` becomes the attribute `firm.slug`. `metadata: { firm: { slug: "acme" } }` becomes one object-valued `firm` attribute and will not filter cleanly.
 
 <Tabs>
   <Tab title="TypeScript">
@@ -92,7 +86,10 @@ Attach the environment label through trace `metadata`:
       {
         name: "support-agent",
         input: userMessage,
-        metadata: { "deployment.environment.name": "staging" },
+        metadata: {
+          "firm.slug": "acme",
+          plan: "enterprise",
+        },
       },
       async (trace) => runAgent(userMessage, trace),
     );
@@ -104,15 +101,15 @@ Attach the environment label through trace `metadata`:
         "support-agent",
         lambda trace: run_agent(user_message, trace),
         input=user_message,
-        metadata={"deployment.environment.name": "staging"},
+        metadata={"firm.slug": "acme", "plan": "enterprise"},
     )
     ```
   </Tab>
 </Tabs>
 
-<Note>
-  `TraceOptions.environment` was removed and was never persisted on the SDK ingest path. Use a separate project or the `deployment.environment.name` metadata key instead.
-</Note>
+Filter those traces with `attr.firm.slug:acme`.
+
+To keep staging data out of production, use a separate Lemma project. The SDK ingest path always stores `service_name: "lemma-sdk"`; set a custom service name through the OTLP resource `service.name`.
 
 ## Reference
 
@@ -121,7 +118,7 @@ Attach the environment label through trace `metadata`:
 | Agent name | `name` | `trace.name` | `gen_ai.agent.name`, `ai.agent.name` |
 | Thread / conversation | `threadId` / `thread_id` | `trace.thread_id` | `lemma.thread_id` |
 | User | `userId` / `user_id` | `trace.user_id` | `user.id`, `enduser.id` |
-| Environment | `metadata["deployment.environment.name"]` | `trace.metadata` | `deployment.environment.name` |
+| Metadata | `metadata` | `trace.metadata` / `spans[].metadata` | Each key becomes a span attribute |
 
 See the [trace contract](/reference/trace-contract) for how each field is sent and normalized.
 
