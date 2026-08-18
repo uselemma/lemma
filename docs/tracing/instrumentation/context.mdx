@@ -109,7 +109,9 @@ Use dotted string keys, not nested objects. `metadata: { "firm.slug": "acme" }` 
 
 Filter those traces with `attr.firm.slug:acme`.
 
-To keep staging data out of production, use a separate Lemma project. The SDK ingest path always stores `service_name: "lemma-sdk"`; set a custom service name through the OTLP resource `service.name`.
+<Note>
+  To keep staging data out of production, use a separate Lemma project. The SDK ingest path always stores `service_name: "lemma-sdk"`; set a custom service name through the OTLP resource `service.name`.
+</Note>
 
 ## Reference
 
