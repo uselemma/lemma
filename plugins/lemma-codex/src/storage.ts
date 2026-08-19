@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -31,6 +32,9 @@ type PendingCodingAgentTurn = {
   apiUrl: string;
   projectId: string;
   turn: CompletedCodingAgentTurn;
+  deliveryId?: string;
+  readyAt?: string;
+  sourceRevision?: string;
 };
 
 export type StorageOptions = {
@@ -40,15 +44,14 @@ export type StorageOptions = {
   homeDir?: string;
 };
 
+type DataDirLocation = { version: 1; dataDir: string };
+
 function safeId(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-export function resolveDataDir(options: StorageOptions = {}): string {
-  if (options.dataDir) return options.dataDir;
+function defaultDataDir(options: StorageOptions): string {
   const env = options.env ?? process.env;
-  const override = env.LEMMA_CODEX_DATA_DIR?.trim();
-  if (override) return override;
   const platform = options.platform ?? process.platform;
   const home = options.homeDir ?? homedir();
   const platformPath = platform === "win32" ? win32 : posix;
@@ -75,6 +78,34 @@ export function resolveDataDir(options: StorageOptions = {}): string {
     "lemma",
     "codex",
   );
+}
+
+function dataDirLocationPath(options: StorageOptions): string {
+  return join(defaultDataDir(options), "data-dir-location.json");
+}
+
+export function resolveDataDir(options: StorageOptions = {}): string {
+  if (options.dataDir) return options.dataDir;
+  const env = options.env ?? process.env;
+  const override = env.LEMMA_CODEX_DATA_DIR?.trim();
+  if (override) return override;
+  const fallback = defaultDataDir(options);
+  try {
+    const value = JSON.parse(
+      readFileSync(dataDirLocationPath(options), "utf8"),
+    ) as unknown;
+    if (
+      isRecord(value) &&
+      value.version === 1 &&
+      typeof value.dataDir === "string" &&
+      value.dataDir.trim().length > 0
+    ) {
+      return value.dataDir;
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  return fallback;
 }
 
 async function ensurePrivateDirectory(path: string): Promise<void> {
@@ -141,6 +172,10 @@ export function isCodingAgentTurn(value: unknown): value is CodingAgentTurn {
   );
 }
 
+export function codingAgentTurnRevision(turn: CodingAgentTurn): string {
+  return createHash("sha256").update(JSON.stringify(turn)).digest("hex");
+}
+
 function isPendingCodingAgentTurn(
   value: unknown,
 ): value is PendingCodingAgentTurn {
@@ -149,6 +184,10 @@ function isPendingCodingAgentTurn(
     value.version === 1 &&
     typeof value.apiUrl === "string" &&
     typeof value.projectId === "string" &&
+    (value.deliveryId === undefined || typeof value.deliveryId === "string") &&
+    (value.readyAt === undefined || typeof value.readyAt === "string") &&
+    (value.sourceRevision === undefined ||
+      typeof value.sourceRevision === "string") &&
     isCodingAgentTurn(value.turn) &&
     value.turn.status === "completed"
   );
@@ -183,6 +222,24 @@ export async function writeCredentials(
   await writeSecureJson(credentialsPath(dataDir), credentials);
 }
 
+export async function writeDataDirLocation(
+  dataDir: string,
+  options: StorageOptions = {},
+): Promise<void> {
+  const fallback = defaultDataDir(options);
+  const locationPath = dataDirLocationPath(options);
+  if (dataDir === fallback) {
+    await unlink(locationPath).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    });
+    return;
+  }
+  await writeSecureJson(locationPath, {
+    version: 1,
+    dataDir,
+  } satisfies DataDirLocation);
+}
+
 export async function readTurn(
   dataDir: string,
   sessionId: string,
@@ -206,13 +263,24 @@ export async function queueCompletedTurn(
   dataDir: string,
   turn: CompletedCodingAgentTurn,
   destination: Pick<LemmaCodexCredentials, "apiUrl" | "projectId">,
+  options: { readyAt?: string; sourceRevision?: string } = {},
 ): Promise<void> {
   await writeSecureJson(pendingPath(dataDir, turn.traceId), {
     version: 1,
     apiUrl: destination.apiUrl,
     projectId: destination.projectId,
     turn,
+    deliveryId: randomUUID(),
+    readyAt: options.readyAt,
+    sourceRevision: options.sourceRevision,
   } satisfies PendingCodingAgentTurn);
+}
+
+export async function removePendingTurn(
+  dataDir: string,
+  traceId: string,
+): Promise<void> {
+  await removePending(pendingPath(dataDir, traceId));
 }
 
 export async function removeTurn(
@@ -262,6 +330,9 @@ export async function listPendingTurns(dataDir: string): Promise<
     apiUrl: string;
     projectId: string;
     turn: CompletedCodingAgentTurn;
+    deliveryId?: string;
+    readyAt?: string;
+    sourceRevision?: string;
   }>
 > {
   const directory = join(dataDir, "pending");
@@ -274,6 +345,9 @@ export async function listPendingTurns(dataDir: string): Promise<
     apiUrl: string;
     projectId: string;
     turn: CompletedCodingAgentTurn;
+    deliveryId?: string;
+    readyAt?: string;
+    sourceRevision?: string;
   }> = [];
   for (const entry of entries.filter((name) => name.endsWith(".json")).sort()) {
     const path = join(directory, entry);
@@ -286,9 +360,34 @@ export async function listPendingTurns(dataDir: string): Promise<
       apiUrl: value.apiUrl,
       projectId: value.projectId,
       turn: value.turn,
+      deliveryId: value.deliveryId,
+      readyAt: value.readyAt,
+      sourceRevision: value.sourceRevision,
     });
   }
   return pending;
+}
+
+export async function readPendingTurn(
+  path: string,
+): Promise<
+  | {
+      path: string;
+      apiUrl: string;
+      projectId: string;
+      turn: CompletedCodingAgentTurn;
+      deliveryId?: string;
+      readyAt?: string;
+      sourceRevision?: string;
+    }
+  | null
+> {
+  const value = await readJson(path);
+  if (value === null) return null;
+  if (!isPendingCodingAgentTurn(value)) {
+    throw new Error(`Lemma Codex pending turn is invalid: ${path}`);
+  }
+  return { path, ...value };
 }
 
 export async function removePending(path: string): Promise<void> {

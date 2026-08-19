@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -369,6 +369,137 @@ describe("Codex hook turn assembly", () => {
     );
 
     expect(sent[0].tools[0].error).toMatchObject({ isError: true });
+  });
+
+  it("marks nonzero command exits found in the Codex transcript as failed", async () => {
+    const dataDir = await temporaryDataDir();
+    const transcriptPath = join(dataDir, "transcript.jsonl");
+    const sent: CompletedCodingAgentTurn[] = [];
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        prompt: "run a failing command",
+        transcript_path: transcriptPath,
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "PostToolUse",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        tool_use_id: "call-1",
+        tool_name: "exec_command",
+        tool_response: "command output",
+      },
+      { dataDir },
+    );
+    await writeFile(
+      transcriptPath,
+      `${JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "function_call_output",
+          call_id: "call-1",
+          output: "Chunk ID: abc\nProcess exited with code 7\nFinal output:\nfailed",
+        },
+      })}\n`,
+      "utf8",
+    );
+
+    await handleCodexHook(
+      {
+        hook_event_name: "Stop",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        last_assistant_message: "The command failed.",
+      },
+      { dataDir, sendTrace: async ({ turn }) => void sent.push(turn) },
+    );
+
+    expect(sent[0].tools[0]).toMatchObject({
+      output: "command output",
+      error: "Process exited with code 7",
+    });
+  });
+
+  it("records every prompt submitted while Codex steers the same turn", async () => {
+    const dataDir = await temporaryDataDir();
+    const sent: CompletedCodingAgentTurn[] = [];
+    for (const prompt of ["Implement the change", "Also keep Linux working"]) {
+      await handleCodexHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          session_id: "session-1",
+          turn_id: "turn-1",
+          prompt,
+        },
+        { dataDir },
+      );
+    }
+    await handleCodexHook(
+      {
+        hook_event_name: "Stop",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        last_assistant_message: "Done.",
+      },
+      { dataDir, sendTrace: async ({ turn }) => void sent.push(turn) },
+    );
+
+    expect(sent[0].prompt).toBe(
+      "Implement the change\n\nAlso keep Linux working",
+    );
+  });
+
+  it("replaces an early Stop candidate when another Stop hook continues the turn", async () => {
+    const dataDir = await temporaryDataDir();
+    const sent: CompletedCodingAgentTurn[] = [];
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        prompt: "finish the work",
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "Stop",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        last_assistant_message: "Initial response",
+        stop_hook_active: false,
+      },
+      { dataDir, settleDelayMs: 60_000 },
+    );
+    expect((await listPendingTurns(dataDir))[0].turn.response).toBe(
+      "Initial response",
+    );
+
+    await handleCodexHook(
+      {
+        hook_event_name: "Stop",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        last_assistant_message: "Final continued response",
+        stop_hook_active: true,
+      },
+      { dataDir, settleDelayMs: 0 },
+    );
+    await flushPendingTurns({
+      dataDir,
+      sendTrace: async ({ turn }) => void sent.push(turn),
+    });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0].response).toBe("Final continued response");
+    await expect(
+      readTurn(dataDir, "session-1", "turn-1"),
+    ).resolves.toBeNull();
   });
 
   it("marks tools without a PostToolUse result as failed", async () => {

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   resolveDataDir,
+  writeDataDirLocation,
   writeCredentials,
   type LemmaCodexCredentials,
 } from "./storage.js";
@@ -45,6 +46,7 @@ export type SetupDependencies = {
   installLocalPlugin?: (marketplaceRoot: string) => Promise<void>;
   sleep?: (milliseconds: number) => Promise<void>;
   output?: (message: string) => void;
+  persistDataDirLocation?: (dataDir: string) => Promise<void>;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -195,18 +197,21 @@ export function browserCommand(
 async function commandOutput(
   command: string,
   args: string[],
-): Promise<{ code: number; output: string }> {
+): Promise<{ code: number; output: string; stdout: string }> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
-    let output = "";
+    let stdout = "";
+    let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
-      output += chunk.toString("utf8");
+      stdout += chunk.toString("utf8");
     });
     child.stderr.on("data", (chunk: Buffer) => {
-      output += chunk.toString("utf8");
+      stderr += chunk.toString("utf8");
     });
     child.once("error", reject);
-    child.once("close", (code) => resolvePromise({ code: code ?? 1, output }));
+    child.once("close", (code) =>
+      resolvePromise({ code: code ?? 1, output: `${stdout}${stderr}`, stdout }),
+    );
   });
 }
 
@@ -292,7 +297,7 @@ export async function installLocalPlugin(
         `Could not add the local Lemma marketplace: ${marketplace.output}`,
       );
     }
-    const existingSource = marketplaceSource(list.output);
+    const existingSource = marketplaceSource(list.stdout);
     if (!existingSource) {
       throw new Error(
         `Could not add the local Lemma marketplace: ${marketplace.output}`,
@@ -305,7 +310,7 @@ export async function installLocalPlugin(
           `Could not inspect installed Codex plugins: ${plugins.output}`,
         );
       }
-      if (hasInstalledLemmaPlugin(plugins.output)) {
+      if (hasInstalledLemmaPlugin(plugins.stdout)) {
         const removePlugin = await runCommand("codex", [
           "plugin",
           "remove",
@@ -351,8 +356,8 @@ export async function installLocalPlugin(
       `Could not inspect installed Codex plugins: ${installed.output}`,
     );
   }
-  if (hasInstalledLemmaPlugin(installed.output)) {
-    const source = installedPluginMarketplaceSource(installed.output);
+  if (hasInstalledLemmaPlugin(installed.stdout)) {
+    const source = installedPluginMarketplaceSource(installed.stdout);
     if (!source || !sameLocalPath(source, marketplaceRoot)) {
       throw new Error(
         "The installed Lemma Codex plugin does not belong to the configured local marketplace",
@@ -470,6 +475,9 @@ export async function runSetup(
     };
     const dataDir = resolveDataDir({ dataDir: options.dataDir });
     await writeCredentials(dataDir, credentials);
+    await (dependencies.persistDataDirLocation ?? writeDataDirLocation)(
+      dataDir,
+    );
     output(`Lemma Codex is connected to project ${result.projectId}.`);
     return credentials;
   }

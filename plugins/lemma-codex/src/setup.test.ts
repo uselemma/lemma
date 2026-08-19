@@ -6,7 +6,12 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { browserCommand, installLocalPlugin, runSetup } from "./setup.js";
-import { credentialsPath, readCredentials, resolveDataDir } from "./storage.js";
+import {
+  credentialsPath,
+  readCredentials,
+  resolveDataDir,
+  writeDataDirLocation,
+} from "./storage.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -47,6 +52,7 @@ describe("Lemma Codex setup", () => {
       );
     const install = vi.fn(async () => undefined);
     const open = vi.fn(async () => undefined);
+    const persistDataDirLocation = vi.fn(async () => undefined);
     const output: string[] = [];
 
     const credentials = await runSetup(
@@ -59,12 +65,14 @@ describe("Lemma Codex setup", () => {
         fetch: fetchMock,
         installLocalPlugin: install,
         launchBrowser: open,
+        persistDataDirLocation,
         sleep: async () => undefined,
         output: (message) => output.push(message),
       },
     );
 
     expect(install).toHaveBeenCalledWith("/checkout/lemma");
+    expect(persistDataDirLocation).toHaveBeenCalledWith(dataDir);
     expect(open).toHaveBeenCalledWith(
       "https://dev.platform.uselemma.ai/connect/coding-harness?user_code=ABCDE-FGHJK",
     );
@@ -115,6 +123,21 @@ describe("Lemma Codex setup", () => {
     },
   );
 
+  it("persists a custom data directory for later hook processes", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "lemma-codex-home-test-"));
+    temporaryDirectories.push(homeDir);
+    const customDataDir = join(homeDir, "custom-state");
+    const options = {
+      platform: "linux" as const,
+      env: { XDG_STATE_HOME: join(homeDir, "state") },
+      homeDir,
+    };
+
+    await writeDataDirLocation(customDataDir, options);
+
+    expect(resolveDataDir(options)).toBe(customDataDir);
+  });
+
   it("uses the native browser launcher on macOS, Linux, and Windows", () => {
     const url = "https://platform.uselemma.ai/connect/coding-harness";
     expect(browserCommand("darwin", url)).toEqual({
@@ -132,7 +155,11 @@ describe("Lemma Codex setup", () => {
   });
 
   it("repoints a stale local marketplace before installing", async () => {
-    const result = (code: number, output: string) => ({ code, output });
+    const result = (code: number, output: string, stderr = "") => ({
+      code,
+      output: `${output}${stderr}`,
+      stdout: output,
+    });
     const runCommand = vi
       .fn<
         (
@@ -141,6 +168,7 @@ describe("Lemma Codex setup", () => {
         ) => Promise<{
           code: number;
           output: string;
+          stdout: string;
         }>
       >()
       .mockResolvedValueOnce(result(1, "marketplace name already exists"))
@@ -193,7 +221,11 @@ describe("Lemma Codex setup", () => {
   });
 
   it("refreshes an already installed local plugin", async () => {
-    const result = (code: number, output: string) => ({ code, output });
+    const result = (code: number, output: string, stderr = "") => ({
+      code,
+      output: `${output}${stderr}`,
+      stdout: output,
+    });
     const runCommand = vi
       .fn<
         (
@@ -202,6 +234,7 @@ describe("Lemma Codex setup", () => {
         ) => Promise<{
           code: number;
           output: string;
+          stdout: string;
         }>
       >()
       .mockResolvedValueOnce(result(0, "{}"))
@@ -229,6 +262,54 @@ describe("Lemma Codex setup", () => {
       ["plugin", "marketplace", "add", "/checkout/lemma", "--json"],
       ["plugin", "list", "--json"],
       ["plugin", "remove", "lemma-codex@lemma-local", "--json"],
+      ["plugin", "add", "lemma-codex@lemma-local", "--json"],
+    ]);
+  });
+
+  it("parses Codex JSON from stdout when stderr contains a warning", async () => {
+    const result = (code: number, stdout: string, stderr = "") => ({
+      code,
+      stdout,
+      output: `${stdout}${stderr}`,
+    });
+    const runCommand = vi
+      .fn<
+        (
+          command: string,
+          args: string[],
+        ) => Promise<{
+          code: number;
+          output: string;
+          stdout: string;
+        }>
+      >()
+      .mockResolvedValueOnce(result(1, "", "already exists"))
+      .mockResolvedValueOnce(
+        result(
+          0,
+          JSON.stringify({
+            marketplaces: [
+              {
+                name: "lemma-local",
+                marketplaceSource: {
+                  sourceType: "local",
+                  source: "/checkout/lemma",
+                },
+              },
+            ],
+          }),
+          "warning: experimental command\n",
+        ),
+      )
+      .mockResolvedValueOnce(result(0, JSON.stringify({ installed: [] })))
+      .mockResolvedValue(result(0, "{}"));
+
+    await installLocalPlugin("/checkout/lemma", runCommand);
+
+    expect(runCommand.mock.calls.map(([, args]) => args)).toEqual([
+      ["plugin", "marketplace", "add", "/checkout/lemma", "--json"],
+      ["plugin", "marketplace", "list", "--json"],
+      ["plugin", "list", "--json"],
       ["plugin", "add", "lemma-codex@lemma-local", "--json"],
     ]);
   });

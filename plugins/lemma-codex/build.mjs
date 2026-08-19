@@ -17,6 +17,11 @@ await Promise.all([
   }),
   build({
     ...shared,
+    entryPoints: ["src/flush-entry.ts"],
+    outfile: "runtime/flush.mjs",
+  }),
+  build({
+    ...shared,
     entryPoints: ["src/setup-entry.ts"],
     outfile: "scripts/setup.mjs",
   }),
