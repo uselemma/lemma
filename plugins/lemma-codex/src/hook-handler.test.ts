@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { CompletedCodingAgentTurn } from "../../../packages/ts/tracing/src/index.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { handleCodexHook } from "./hook-handler.js";
+import { flushPendingTurns, handleCodexHook } from "./hook-handler.js";
 import { listPendingTurns, readTurn, writeCredentials } from "./storage.js";
 
 const temporaryDirectories: string[] = [];
@@ -186,6 +186,260 @@ describe("Codex hook turn assembly", () => {
       status: "open",
       prompt: "second",
     });
+  });
+
+  it("persists a new prompt before awaiting a slow retry", async () => {
+    const dataDir = await temporaryDataDir();
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        prompt: "first",
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "Stop",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        last_assistant_message: "done",
+      },
+      { dataDir, sendTrace: async () => Promise.reject(new Error("offline")) },
+    );
+
+    let releaseRetry: (() => void) | undefined;
+    const retry = new Promise<void>((resolve) => {
+      releaseRetry = resolve;
+    });
+    const promptHook = handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "turn-2",
+        prompt: "second",
+      },
+      { dataDir, sendTrace: async () => retry },
+    );
+
+    await vi.waitFor(async () => {
+      await expect(
+        readTurn(dataDir, "session-1", "turn-2"),
+      ).resolves.toMatchObject({ status: "open", prompt: "second" });
+    });
+    releaseRetry?.();
+    await promptHook;
+  });
+
+  it("keeps failed traces bound to their original project", async () => {
+    const dataDir = await temporaryDataDir();
+    const sendTrace = vi.fn(async () => Promise.reject(new Error("offline")));
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        prompt: "private project one prompt",
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "Stop",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        last_assistant_message: "private project one response",
+      },
+      { dataDir, sendTrace },
+    );
+    await writeCredentials(dataDir, {
+      version: 1,
+      apiUrl: "https://api.example.test",
+      projectId: "20000000-0000-0000-0000-000000000002",
+      credentialId: "credential-2",
+      accessToken: "lemma_ci_secret_two",
+    });
+    const warnings: string[] = [];
+
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "turn-2",
+        prompt: "project two prompt",
+      },
+      { dataDir, sendTrace, warn: (message) => warnings.push(message) },
+    );
+
+    expect(sendTrace).toHaveBeenCalledTimes(1);
+    expect(await listPendingTurns(dataDir)).toHaveLength(1);
+    expect(warnings).toEqual([
+      expect.stringContaining("another configured project"),
+    ]);
+  });
+
+  it("continues flushing after one pending trace fails", async () => {
+    const dataDir = await temporaryDataDir();
+    for (const turnId of ["turn-1", "turn-2"]) {
+      await handleCodexHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          session_id: "session-1",
+          turn_id: turnId,
+          prompt: turnId,
+        },
+        { dataDir },
+      );
+      await handleCodexHook(
+        {
+          hook_event_name: "Stop",
+          session_id: "session-1",
+          turn_id: turnId,
+          last_assistant_message: "done",
+        },
+        {
+          dataDir,
+          sendTrace: async () => Promise.reject(new Error("offline")),
+        },
+      );
+    }
+
+    const warnings: string[] = [];
+    const sent = await flushPendingTurns({
+      dataDir,
+      sendTrace: async ({ turn }) => {
+        if (turn.turnId === "turn-1") throw new Error("rejected");
+      },
+      warn: (message) => warnings.push(message),
+    });
+
+    expect(sent).toBe(1);
+    expect(
+      (await listPendingTurns(dataDir)).map(({ turn }) => turn.turnId),
+    ).toEqual(["turn-1"]);
+    expect(warnings).toEqual([expect.stringContaining("rejected")]);
+  });
+
+  it("marks MCP tool results with isError as failed", async () => {
+    const dataDir = await temporaryDataDir();
+    const sent: CompletedCodingAgentTurn[] = [];
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        prompt: "call MCP",
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "PreToolUse",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        tool_use_id: "tool-1",
+        tool_name: "mcp__example__read",
+        tool_input: { id: "missing" },
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "PostToolUse",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        tool_use_id: "tool-1",
+        tool_name: "mcp__example__read",
+        tool_response: {
+          isError: true,
+          content: [{ type: "text", text: "missing" }],
+        },
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "Stop",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        last_assistant_message: "The tool failed.",
+      },
+      { dataDir, sendTrace: async ({ turn }) => void sent.push(turn) },
+    );
+
+    expect(sent[0].tools[0].error).toMatchObject({ isError: true });
+  });
+
+  it("marks tools without a PostToolUse result as failed", async () => {
+    const dataDir = await temporaryDataDir();
+    const sent: CompletedCodingAgentTurn[] = [];
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        prompt: "run a blocked tool",
+        timestamp: "2026-08-19T10:00:00.000Z",
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "PreToolUse",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        tool_use_id: "tool-1",
+        tool_name: "exec_command",
+        tool_input: { cmd: "blocked" },
+        timestamp: "2026-08-19T10:00:01.000Z",
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "Stop",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        last_assistant_message: "The tool did not run.",
+        timestamp: "2026-08-19T10:00:02.000Z",
+      },
+      { dataDir, sendTrace: async ({ turn }) => void sent.push(turn) },
+    );
+
+    expect(sent[0].tools[0]).toMatchObject({
+      error: "Codex ended the turn without a PostToolUse result",
+      endedAt: "2026-08-19T10:00:02.000Z",
+    });
+  });
+
+  it("removes a superseded open turn on the next prompt", async () => {
+    const dataDir = await temporaryDataDir();
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "interrupted-turn",
+        prompt: "This turn is interrupted",
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "next-turn",
+        prompt: "Continue",
+      },
+      { dataDir },
+    );
+
+    await expect(
+      readTurn(dataDir, "session-1", "interrupted-turn"),
+    ).resolves.toBeNull();
+    await expect(
+      readTurn(dataDir, "session-1", "next-turn"),
+    ).resolves.toMatchObject({ status: "open", prompt: "Continue" });
   });
 
   it("serializes concurrent tool hooks without losing calls", async () => {

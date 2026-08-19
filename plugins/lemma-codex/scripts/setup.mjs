@@ -197,8 +197,52 @@ async function commandOutput(command, args) {
     child.once("close", (code) => resolvePromise({ code: code ?? 1, output }));
   });
 }
-async function installLocalPlugin(marketplaceRoot) {
-  const marketplace = await commandOutput("codex", [
+function parsedObject(output) {
+  try {
+    const value = JSON.parse(output);
+    return isRecord(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function marketplaceSource(output) {
+  const body = parsedObject(output);
+  const marketplaces = body?.marketplaces;
+  if (!Array.isArray(marketplaces)) return null;
+  for (const marketplace of marketplaces) {
+    if (!isRecord(marketplace) || marketplace.name !== "lemma-local") continue;
+    if (isRecord(marketplace.marketplaceSource)) {
+      const source = marketplace.marketplaceSource.source;
+      if (typeof source === "string") return source;
+    }
+    return typeof marketplace.root === "string" ? marketplace.root : null;
+  }
+  return null;
+}
+function installedPluginMarketplaceSource(output) {
+  const body = parsedObject(output);
+  const installed = body?.installed;
+  if (!Array.isArray(installed)) return null;
+  for (const plugin of installed) {
+    if (!isRecord(plugin) || plugin.pluginId !== "lemma-codex@lemma-local" || !isRecord(plugin.marketplaceSource)) {
+      continue;
+    }
+    const source = plugin.marketplaceSource.source;
+    return typeof source === "string" ? source : null;
+  }
+  return null;
+}
+function hasInstalledLemmaPlugin(output) {
+  const body = parsedObject(output);
+  return Array.isArray(body?.installed) && body.installed.some(
+    (plugin) => isRecord(plugin) && plugin.pluginId === "lemma-codex@lemma-local"
+  );
+}
+function sameLocalPath(left, right) {
+  return resolve(left) === resolve(right);
+}
+async function installLocalPlugin(marketplaceRoot, runCommand = commandOutput) {
+  let marketplace = await runCommand("codex", [
     "plugin",
     "marketplace",
     "add",
@@ -206,30 +250,104 @@ async function installLocalPlugin(marketplaceRoot) {
     "--json"
   ]);
   if (marketplace.code !== 0) {
-    const list = await commandOutput("codex", [
+    const list = await runCommand("codex", [
       "plugin",
       "marketplace",
-      "list"
+      "list",
+      "--json"
     ]);
-    if (list.code !== 0 || !list.output.includes("lemma-local")) {
+    if (list.code !== 0) {
       throw new Error(
         `Could not add the local Lemma marketplace: ${marketplace.output}`
       );
     }
+    const existingSource = marketplaceSource(list.output);
+    if (!existingSource) {
+      throw new Error(
+        `Could not add the local Lemma marketplace: ${marketplace.output}`
+      );
+    }
+    if (!sameLocalPath(existingSource, marketplaceRoot)) {
+      const plugins = await runCommand("codex", ["plugin", "list", "--json"]);
+      if (plugins.code !== 0) {
+        throw new Error(
+          `Could not inspect installed Codex plugins: ${plugins.output}`
+        );
+      }
+      if (installedPluginMarketplaceSource(plugins.output)) {
+        const removePlugin = await runCommand("codex", [
+          "plugin",
+          "remove",
+          "lemma-codex@lemma-local",
+          "--json"
+        ]);
+        if (removePlugin.code !== 0) {
+          throw new Error(
+            `Could not replace the local Lemma plugin: ${removePlugin.output}`
+          );
+        }
+      }
+      const removeMarketplace = await runCommand("codex", [
+        "plugin",
+        "marketplace",
+        "remove",
+        "lemma-local",
+        "--json"
+      ]);
+      if (removeMarketplace.code !== 0) {
+        throw new Error(
+          `Could not replace the local Lemma marketplace: ${removeMarketplace.output}`
+        );
+      }
+      marketplace = await runCommand("codex", [
+        "plugin",
+        "marketplace",
+        "add",
+        marketplaceRoot,
+        "--json"
+      ]);
+      if (marketplace.code !== 0) {
+        throw new Error(
+          `Could not add the local Lemma marketplace: ${marketplace.output}`
+        );
+      }
+    }
   }
-  const install = await commandOutput("codex", [
+  const installed = await runCommand("codex", ["plugin", "list", "--json"]);
+  if (installed.code !== 0) {
+    throw new Error(
+      `Could not inspect installed Codex plugins: ${installed.output}`
+    );
+  }
+  if (hasInstalledLemmaPlugin(installed.output)) {
+    const source = installedPluginMarketplaceSource(installed.output);
+    if (!source || !sameLocalPath(source, marketplaceRoot)) {
+      throw new Error(
+        "The installed Lemma Codex plugin does not belong to the configured local marketplace"
+      );
+    }
+    const remove = await runCommand("codex", [
+      "plugin",
+      "remove",
+      "lemma-codex@lemma-local",
+      "--json"
+    ]);
+    if (remove.code !== 0) {
+      throw new Error(
+        `Could not refresh the Lemma Codex plugin: ${remove.output}`
+      );
+    }
+  }
+  const install = await runCommand("codex", [
     "plugin",
     "add",
     "lemma-codex@lemma-local",
     "--json"
   ]);
   if (install.code !== 0) {
-    const list = await commandOutput("codex", ["plugin", "list", "--json"]);
-    if (list.code !== 0 || !list.output.includes("lemma-codex")) {
-      throw new Error(
-        `Could not install the Lemma Codex plugin: ${install.output}`
-      );
-    }
+    throw new Error(
+      `Could not install the Lemma Codex plugin: ${install.output}`
+    );
   }
 }
 function inferredMarketplaceRoot() {

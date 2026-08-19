@@ -1597,6 +1597,9 @@ function isCredentials(value) {
 function isCodingAgentTurn(value) {
   return isRecord(value) && value.version === 1 && (value.status === "open" || value.status === "completed") && typeof value.harness === "string" && typeof value.sessionId === "string" && typeof value.turnId === "string" && typeof value.traceId === "string" && typeof value.generationId === "string" && typeof value.prompt === "string" && typeof value.startedAt === "string" && Array.isArray(value.tools) && (value.status === "open" || typeof value.response === "string" && typeof value.endedAt === "string");
 }
+function isPendingCodingAgentTurn(value) {
+  return isRecord(value) && value.version === 1 && typeof value.apiUrl === "string" && typeof value.projectId === "string" && isCodingAgentTurn(value.turn) && value.turn.status === "completed";
+}
 function credentialsPath(dataDir) {
   return join(dataDir, "credentials.json");
 }
@@ -1623,13 +1626,39 @@ async function readTurn(dataDir, sessionId, turnId) {
 async function writeTurn(dataDir, turn) {
   await writeSecureJson(turnPath(dataDir, turn.sessionId, turn.turnId), turn);
 }
-async function queueCompletedTurn(dataDir, turn) {
-  await writeSecureJson(pendingPath(dataDir, turn.traceId), turn);
+async function queueCompletedTurn(dataDir, turn, destination) {
+  await writeSecureJson(pendingPath(dataDir, turn.traceId), {
+    version: 1,
+    apiUrl: destination.apiUrl,
+    projectId: destination.projectId,
+    turn
+  });
 }
 async function removeTurn(dataDir, sessionId, turnId) {
   await unlink(turnPath(dataDir, sessionId, turnId)).catch((error) => {
     if (error.code !== "ENOENT") throw error;
   });
+}
+async function removeAbandonedTurns(dataDir, options) {
+  const directory = join(dataDir, "turns");
+  const entries = await readdir(directory).catch((error) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+  let removed = 0;
+  for (const entry of entries.filter((name) => name.endsWith(".json"))) {
+    const path = join(directory, entry);
+    const value = await readJson(path);
+    if (!isCodingAgentTurn(value) || value.status !== "open") continue;
+    const supersededInSession = value.sessionId === options.sessionId && value.turnId !== options.currentTurnId;
+    const isExpired = Date.parse(value.startedAt) < options.olderThan.getTime();
+    if (!supersededInSession && !isExpired) continue;
+    await unlink(path).catch((error) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+    removed += 1;
+  }
+  return removed;
 }
 async function listPendingTurns(dataDir) {
   const directory = join(dataDir, "pending");
@@ -1641,10 +1670,15 @@ async function listPendingTurns(dataDir) {
   for (const entry of entries.filter((name) => name.endsWith(".json")).sort()) {
     const path = join(directory, entry);
     const value = await readJson(path);
-    if (!isCodingAgentTurn(value) || value.status !== "completed") {
+    if (!isPendingCodingAgentTurn(value)) {
       throw new Error(`Lemma Codex pending turn is invalid: ${entry}`);
     }
-    pending.push({ path, turn: value });
+    pending.push({
+      path,
+      apiUrl: value.apiUrl,
+      projectId: value.projectId,
+      turn: value.turn
+    });
   }
   return pending;
 }
@@ -1685,6 +1719,7 @@ async function withSessionLock(dataDir, sessionId, callback) {
 }
 
 // src/hook-handler.ts
+var OPEN_TURN_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
 function stringField(input, name) {
   const value = input[name];
   return typeof value === "string" && value.length > 0 ? value : void 0;
@@ -1727,8 +1762,11 @@ function toolOutput(input) {
 function toolError(input) {
   if (input.error !== void 0) return input.error;
   const output = toolOutput(input);
-  if (typeof output === "object" && output !== null && "error" in output) {
-    return output.error;
+  if (typeof output === "object" && output !== null) {
+    if ("error" in output) return output.error;
+    if ("isError" in output && output.isError === true) {
+      return output;
+    }
   }
   return void 0;
 }
@@ -1751,14 +1789,26 @@ async function flushPendingTurns(dependencies = {}) {
   const sendTrace = dependencies.sendTrace ?? defaultSendTrace;
   let sent = 0;
   for (const pending of await listPendingTurns(dataDir)) {
-    await sendTrace({
-      apiUrl: credentials.apiUrl,
-      projectId: credentials.projectId,
-      accessToken: credentials.accessToken,
-      turn: pending.turn
-    });
-    await removePending(pending.path);
-    sent += 1;
+    if (pending.apiUrl !== credentials.apiUrl || pending.projectId !== credentials.projectId) {
+      dependencies.warn?.(
+        `Lemma Codex retained trace ${pending.turn.traceId}: it belongs to another configured project`
+      );
+      continue;
+    }
+    try {
+      await sendTrace({
+        apiUrl: credentials.apiUrl,
+        projectId: credentials.projectId,
+        accessToken: credentials.accessToken,
+        turn: pending.turn
+      });
+      await removePending(pending.path);
+      sent += 1;
+    } catch (error) {
+      dependencies.warn?.(
+        `Lemma Codex retained a trace for retry (${pending.turn.traceId}): ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
   return sent;
 }
@@ -1780,10 +1830,17 @@ async function handleCodexHook(input, dependencies = {}) {
   const dataDir = resolveDataDir({ dataDir: dependencies.dataDir });
   const now = dependencies.now ?? (() => /* @__PURE__ */ new Date());
   if (event === "UserPromptSubmit") {
-    await flushWithoutBlockingEvent(dependencies);
     const prompt = stringField(input, "prompt");
     if (!prompt) return { status: "ignored" };
+    const startedAt = eventTimestamp(input, now);
     await withSessionLock(dataDir, sessionId, async () => {
+      await removeAbandonedTurns(dataDir, {
+        sessionId,
+        currentTurnId: turnId,
+        olderThan: new Date(
+          new Date(startedAt).getTime() - OPEN_TURN_MAX_AGE_MS
+        )
+      });
       if (await readTurn(dataDir, sessionId, turnId)) return;
       await writeTurn(
         dataDir,
@@ -1792,13 +1849,14 @@ async function handleCodexHook(input, dependencies = {}) {
           sessionId,
           turnId,
           prompt,
-          startedAt: eventTimestamp(input, now),
+          startedAt,
           model: stringField(input, "model"),
           provider: "openai",
           metadata: turnMetadata(input)
         })
       );
     });
+    await flushWithoutBlockingEvent(dependencies);
     return { status: "recorded", event };
   }
   if (event === "PreToolUse") {
@@ -1842,20 +1900,40 @@ async function handleCodexHook(input, dependencies = {}) {
     return { status: "recorded", event };
   }
   const response = stringField(input, "last_assistant_message") ?? "";
+  const endedAt = eventTimestamp(input, now);
+  const credentials = await readCredentials(dataDir);
   let traceId = null;
   await withSessionLock(dataDir, sessionId, async () => {
     const turn = await readTurn(dataDir, sessionId, turnId);
     if (!turn) return;
-    const completed = completeCodingAgentTurn(turn, {
+    const closedTurn = turn.tools.filter((tool) => !tool.endedAt).reduce(
+      (current, tool) => recordCodingAgentToolResult(current, {
+        toolUseId: tool.toolUseId,
+        toolName: tool.toolName,
+        input: tool.input,
+        error: "Codex ended the turn without a PostToolUse result",
+        endedAt
+      }),
+      turn
+    );
+    const completed = completeCodingAgentTurn(closedTurn, {
       response,
-      endedAt: eventTimestamp(input, now),
+      endedAt,
       model: stringField(input, "model"),
       provider: "openai"
     });
-    await queueCompletedTurn(dataDir, completed);
+    if (credentials) {
+      await queueCompletedTurn(dataDir, completed, credentials);
+    }
     await removeTurn(dataDir, sessionId, turnId);
-    traceId = completed.traceId;
+    traceId = credentials ? completed.traceId : null;
   });
+  if (!credentials) {
+    dependencies.warn?.(
+      "Lemma Codex did not queue the completed turn because setup is incomplete"
+    );
+    return { status: "ignored" };
+  }
   await flushWithoutBlockingEvent(dependencies);
   return traceId ? { status: "queued", traceId } : { status: "ignored" };
 }

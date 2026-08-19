@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { browserCommand, runSetup } from "./setup.js";
+import { browserCommand, installLocalPlugin, runSetup } from "./setup.js";
 import { credentialsPath, readCredentials, resolveDataDir } from "./storage.js";
 
 const temporaryDirectories: string[] = [];
@@ -129,6 +129,108 @@ describe("Lemma Codex setup", () => {
       command: "cmd.exe",
       args: ["/d", "/s", "/c", "start", "", url],
     });
+  });
+
+  it("repoints a stale local marketplace before installing", async () => {
+    const result = (code: number, output: string) => ({ code, output });
+    const runCommand = vi
+      .fn<
+        (
+          command: string,
+          args: string[],
+        ) => Promise<{
+          code: number;
+          output: string;
+        }>
+      >()
+      .mockResolvedValueOnce(result(1, "marketplace name already exists"))
+      .mockResolvedValueOnce(
+        result(
+          0,
+          JSON.stringify({
+            marketplaces: [
+              {
+                name: "lemma-local",
+                marketplaceSource: {
+                  sourceType: "local",
+                  source: "/old/checkout",
+                },
+              },
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        result(
+          0,
+          JSON.stringify({
+            installed: [
+              {
+                pluginId: "lemma-codex@lemma-local",
+                marketplaceSource: {
+                  sourceType: "local",
+                  source: "/old/checkout",
+                },
+              },
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValue(result(0, "{}"));
+
+    await installLocalPlugin("/new/checkout", runCommand);
+
+    expect(runCommand.mock.calls.map(([, args]) => args)).toEqual([
+      ["plugin", "marketplace", "add", "/new/checkout", "--json"],
+      ["plugin", "marketplace", "list", "--json"],
+      ["plugin", "list", "--json"],
+      ["plugin", "remove", "lemma-codex@lemma-local", "--json"],
+      ["plugin", "marketplace", "remove", "lemma-local", "--json"],
+      ["plugin", "marketplace", "add", "/new/checkout", "--json"],
+      ["plugin", "list", "--json"],
+      ["plugin", "add", "lemma-codex@lemma-local", "--json"],
+    ]);
+  });
+
+  it("refreshes an already installed local plugin", async () => {
+    const result = (code: number, output: string) => ({ code, output });
+    const runCommand = vi
+      .fn<
+        (
+          command: string,
+          args: string[],
+        ) => Promise<{
+          code: number;
+          output: string;
+        }>
+      >()
+      .mockResolvedValueOnce(result(0, "{}"))
+      .mockResolvedValueOnce(
+        result(
+          0,
+          JSON.stringify({
+            installed: [
+              {
+                pluginId: "lemma-codex@lemma-local",
+                marketplaceSource: {
+                  sourceType: "local",
+                  source: "/checkout/lemma",
+                },
+              },
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValue(result(0, "{}"));
+
+    await installLocalPlugin("/checkout/lemma", runCommand);
+
+    expect(runCommand.mock.calls.map(([, args]) => args)).toEqual([
+      ["plugin", "marketplace", "add", "/checkout/lemma", "--json"],
+      ["plugin", "list", "--json"],
+      ["plugin", "remove", "lemma-codex@lemma-local", "--json"],
+      ["plugin", "add", "lemma-codex@lemma-local", "--json"],
+    ]);
   });
 
   it("rejects plaintext remote API endpoints", async () => {

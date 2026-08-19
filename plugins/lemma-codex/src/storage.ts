@@ -26,6 +26,13 @@ export type LemmaCodexCredentials = {
   accessToken: string;
 };
 
+type PendingCodingAgentTurn = {
+  version: 1;
+  apiUrl: string;
+  projectId: string;
+  turn: CompletedCodingAgentTurn;
+};
+
 export type StorageOptions = {
   dataDir?: string;
   platform?: NodeJS.Platform;
@@ -134,6 +141,19 @@ export function isCodingAgentTurn(value: unknown): value is CodingAgentTurn {
   );
 }
 
+function isPendingCodingAgentTurn(
+  value: unknown,
+): value is PendingCodingAgentTurn {
+  return (
+    isRecord(value) &&
+    value.version === 1 &&
+    typeof value.apiUrl === "string" &&
+    typeof value.projectId === "string" &&
+    isCodingAgentTurn(value.turn) &&
+    value.turn.status === "completed"
+  );
+}
+
 export function credentialsPath(dataDir: string): string {
   return join(dataDir, "credentials.json");
 }
@@ -185,8 +205,14 @@ export async function writeTurn(
 export async function queueCompletedTurn(
   dataDir: string,
   turn: CompletedCodingAgentTurn,
+  destination: Pick<LemmaCodexCredentials, "apiUrl" | "projectId">,
 ): Promise<void> {
-  await writeSecureJson(pendingPath(dataDir, turn.traceId), turn);
+  await writeSecureJson(pendingPath(dataDir, turn.traceId), {
+    version: 1,
+    apiUrl: destination.apiUrl,
+    projectId: destination.projectId,
+    turn,
+  } satisfies PendingCodingAgentTurn);
 }
 
 export async function removeTurn(
@@ -199,22 +225,68 @@ export async function removeTurn(
   });
 }
 
-export async function listPendingTurns(
+export async function removeAbandonedTurns(
   dataDir: string,
-): Promise<Array<{ path: string; turn: CompletedCodingAgentTurn }>> {
+  options: {
+    sessionId: string;
+    currentTurnId: string;
+    olderThan: Date;
+  },
+): Promise<number> {
+  const directory = join(dataDir, "turns");
+  const entries = await readdir(directory).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  });
+  let removed = 0;
+  for (const entry of entries.filter((name) => name.endsWith(".json"))) {
+    const path = join(directory, entry);
+    const value = await readJson(path);
+    if (!isCodingAgentTurn(value) || value.status !== "open") continue;
+    const supersededInSession =
+      value.sessionId === options.sessionId &&
+      value.turnId !== options.currentTurnId;
+    const isExpired = Date.parse(value.startedAt) < options.olderThan.getTime();
+    if (!supersededInSession && !isExpired) continue;
+    await unlink(path).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    });
+    removed += 1;
+  }
+  return removed;
+}
+
+export async function listPendingTurns(dataDir: string): Promise<
+  Array<{
+    path: string;
+    apiUrl: string;
+    projectId: string;
+    turn: CompletedCodingAgentTurn;
+  }>
+> {
   const directory = join(dataDir, "pending");
   const entries = await readdir(directory).catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   });
-  const pending: Array<{ path: string; turn: CompletedCodingAgentTurn }> = [];
+  const pending: Array<{
+    path: string;
+    apiUrl: string;
+    projectId: string;
+    turn: CompletedCodingAgentTurn;
+  }> = [];
   for (const entry of entries.filter((name) => name.endsWith(".json")).sort()) {
     const path = join(directory, entry);
     const value = await readJson(path);
-    if (!isCodingAgentTurn(value) || value.status !== "completed") {
+    if (!isPendingCodingAgentTurn(value)) {
       throw new Error(`Lemma Codex pending turn is invalid: ${entry}`);
     }
-    pending.push({ path, turn: value });
+    pending.push({
+      path,
+      apiUrl: value.apiUrl,
+      projectId: value.projectId,
+      turn: value.turn,
+    });
   }
   return pending;
 }

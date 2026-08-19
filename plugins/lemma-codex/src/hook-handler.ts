@@ -12,6 +12,7 @@ import {
   queueCompletedTurn,
   readCredentials,
   readTurn,
+  removeAbandonedTurns,
   removePending,
   removeTurn,
   resolveDataDir,
@@ -20,6 +21,8 @@ import {
 } from "./storage.js";
 
 type HookEventName = "UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "Stop";
+
+const OPEN_TURN_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
 
 export type CodexHookInput = Record<string, unknown> & {
   hook_event_name?: unknown;
@@ -101,8 +104,14 @@ function toolOutput(input: CodexHookInput): unknown {
 function toolError(input: CodexHookInput): unknown {
   if (input.error !== undefined) return input.error;
   const output = toolOutput(input);
-  if (typeof output === "object" && output !== null && "error" in output) {
-    return (output as { error?: unknown }).error;
+  if (typeof output === "object" && output !== null) {
+    if ("error" in output) return (output as { error?: unknown }).error;
+    if (
+      "isError" in output &&
+      (output as { isError?: unknown }).isError === true
+    ) {
+      return output;
+    }
   }
   return undefined;
 }
@@ -134,14 +143,29 @@ export async function flushPendingTurns(
   const sendTrace = dependencies.sendTrace ?? defaultSendTrace;
   let sent = 0;
   for (const pending of await listPendingTurns(dataDir)) {
-    await sendTrace({
-      apiUrl: credentials.apiUrl,
-      projectId: credentials.projectId,
-      accessToken: credentials.accessToken,
-      turn: pending.turn,
-    });
-    await removePending(pending.path);
-    sent += 1;
+    if (
+      pending.apiUrl !== credentials.apiUrl ||
+      pending.projectId !== credentials.projectId
+    ) {
+      dependencies.warn?.(
+        `Lemma Codex retained trace ${pending.turn.traceId}: it belongs to another configured project`,
+      );
+      continue;
+    }
+    try {
+      await sendTrace({
+        apiUrl: credentials.apiUrl,
+        projectId: credentials.projectId,
+        accessToken: credentials.accessToken,
+        turn: pending.turn,
+      });
+      await removePending(pending.path);
+      sent += 1;
+    } catch (error) {
+      dependencies.warn?.(
+        `Lemma Codex retained a trace for retry (${pending.turn.traceId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
   return sent;
 }
@@ -172,10 +196,17 @@ export async function handleCodexHook(
   const now = dependencies.now ?? (() => new Date());
 
   if (event === "UserPromptSubmit") {
-    await flushWithoutBlockingEvent(dependencies);
     const prompt = stringField(input, "prompt");
     if (!prompt) return { status: "ignored" };
+    const startedAt = eventTimestamp(input, now);
     await withSessionLock(dataDir, sessionId, async () => {
+      await removeAbandonedTurns(dataDir, {
+        sessionId,
+        currentTurnId: turnId,
+        olderThan: new Date(
+          new Date(startedAt).getTime() - OPEN_TURN_MAX_AGE_MS,
+        ),
+      });
       if (await readTurn(dataDir, sessionId, turnId)) return;
       await writeTurn(
         dataDir,
@@ -184,13 +215,14 @@ export async function handleCodexHook(
           sessionId,
           turnId,
           prompt,
-          startedAt: eventTimestamp(input, now),
+          startedAt,
           model: stringField(input, "model"),
           provider: "openai",
           metadata: turnMetadata(input),
         }),
       );
     });
+    await flushWithoutBlockingEvent(dependencies);
     return { status: "recorded", event };
   }
 
@@ -237,20 +269,43 @@ export async function handleCodexHook(
   }
 
   const response = stringField(input, "last_assistant_message") ?? "";
+  const endedAt = eventTimestamp(input, now);
+  const credentials = await readCredentials(dataDir);
   let traceId: string | null = null;
   await withSessionLock(dataDir, sessionId, async () => {
     const turn = await readTurn(dataDir, sessionId, turnId);
     if (!turn) return;
-    const completed = completeCodingAgentTurn(turn, {
+    const closedTurn = turn.tools
+      .filter((tool) => !tool.endedAt)
+      .reduce(
+        (current, tool) =>
+          recordCodingAgentToolResult(current, {
+            toolUseId: tool.toolUseId,
+            toolName: tool.toolName,
+            input: tool.input,
+            error: "Codex ended the turn without a PostToolUse result",
+            endedAt,
+          }),
+        turn,
+      );
+    const completed = completeCodingAgentTurn(closedTurn, {
       response,
-      endedAt: eventTimestamp(input, now),
+      endedAt,
       model: stringField(input, "model"),
       provider: "openai",
     });
-    await queueCompletedTurn(dataDir, completed);
+    if (credentials) {
+      await queueCompletedTurn(dataDir, completed, credentials);
+    }
     await removeTurn(dataDir, sessionId, turnId);
-    traceId = completed.traceId;
+    traceId = credentials ? completed.traceId : null;
   });
+  if (!credentials) {
+    dependencies.warn?.(
+      "Lemma Codex did not queue the completed turn because setup is incomplete",
+    );
+    return { status: "ignored" };
+  }
   await flushWithoutBlockingEvent(dependencies);
   return traceId ? { status: "queued", traceId } : { status: "ignored" };
 }
