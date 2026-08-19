@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { TraceContext } from "./client";
 import { failureMessage } from "./error-message";
 
@@ -20,9 +22,6 @@ export type CodingAgentToolCall = {
   startTimeMissing?: boolean;
   resultMissing?: boolean;
 };
-
-const MISSING_TOOL_RESULT_ERROR =
-  "Coding agent turn completed without a tool result";
 
 type CodingAgentTurnBase = {
   version: 1;
@@ -47,6 +46,8 @@ export type CompletedCodingAgentTurn = CodingAgentTurnBase & {
   status: "completed";
   response: string;
   endedAt: string;
+  generationStartedAt?: string;
+  generationEndedAt?: string;
 };
 
 export type CodingAgentTurn = OpenCodingAgentTurn | CompletedCodingAgentTurn;
@@ -85,6 +86,9 @@ export type CompleteCodingAgentTurnOptions = {
   endedAt: string;
   model?: string;
   provider?: string;
+  /** Exact model-call bounds. Omit both when the harness does not expose them. */
+  generationStartedAt?: string;
+  generationEndedAt?: string;
 };
 
 export type CodingAgentTurnTrace = {
@@ -111,6 +115,16 @@ function harnessAttributes(turn: CodingAgentTurn): Record<string, unknown> {
   };
 }
 
+function deterministicUuid(value: string): string {
+  const hash = createHash("sha256").update(value).digest("hex");
+  const variant = (8 + (Number.parseInt(hash[16], 16) % 4)).toString(16);
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-${variant}${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
+
+function turnIdentity(options: StartCodingAgentTurnOptions): string {
+  return `${options.harness}\0${options.sessionId}\0${options.turnId}`;
+}
+
 export function startCodingAgentTurn(
   options: StartCodingAgentTurnOptions,
 ): OpenCodingAgentTurn {
@@ -120,8 +134,14 @@ export function startCodingAgentTurn(
     harness: options.harness,
     sessionId: options.sessionId,
     turnId: options.turnId,
-    traceId: options.traceId ?? crypto.randomUUID(),
-    generationId: options.generationId ?? crypto.randomUUID(),
+    traceId:
+      options.traceId ??
+      deterministicUuid(`lemma-coding-agent-trace\0${turnIdentity(options)}`),
+    generationId:
+      options.generationId ??
+      deterministicUuid(
+        `lemma-coding-agent-generation\0${turnIdentity(options)}`,
+      ),
     prompt: options.prompt,
     startedAt: options.startedAt,
     model: options.model,
@@ -136,8 +156,21 @@ export function recordCodingAgentToolStart(
   event: CodingAgentToolStart,
 ): OpenCodingAgentTurn {
   const open = requireOpen(turn);
-  if (open.tools.some((tool) => tool.toolUseId === event.toolUseId)) {
-    return open;
+  const existingIndex = open.tools.findIndex(
+    (tool) => tool.toolUseId === event.toolUseId,
+  );
+  if (existingIndex >= 0) {
+    const existing = open.tools[existingIndex];
+    if (!existing.startTimeMissing) return open;
+    const tools = [...open.tools];
+    tools[existingIndex] = {
+      ...existing,
+      toolName: event.toolName,
+      input: event.input ?? existing.input,
+      startedAt: event.startedAt,
+      startTimeMissing: undefined,
+    };
+    return { ...open, tools };
   }
   return {
     ...open,
@@ -173,9 +206,7 @@ export function recordCodingAgentToolResult(
       existingIndex >= 0 ? open.tools[existingIndex].startedAt : event.endedAt,
     endedAt: event.endedAt,
     startTimeMissing:
-      existingIndex >= 0
-        ? open.tools[existingIndex].startTimeMissing
-        : true,
+      existingIndex >= 0 ? open.tools[existingIndex].startTimeMissing : true,
   };
   if (existingIndex < 0) {
     return { ...open, tools: [...open.tools, completed] };
@@ -190,13 +221,21 @@ export function completeCodingAgentTurn(
   event: CompleteCodingAgentTurnOptions,
 ): CompletedCodingAgentTurn {
   if (turn.status === "completed") return turn;
+  if (
+    (event.generationStartedAt === undefined) !==
+    (event.generationEndedAt === undefined)
+  ) {
+    throw new Error(
+      "Coding agent generation timing requires both startedAt and endedAt",
+    );
+  }
   const tools = turn.tools.map((tool) => {
     const error = failureMessage(tool.error) ?? undefined;
     return tool.endedAt
       ? { ...tool, error }
       : {
           ...tool,
-          error: error ?? MISSING_TOOL_RESULT_ERROR,
+          error,
           endedAt: event.endedAt,
           resultMissing: true,
         };
@@ -209,6 +248,8 @@ export function completeCodingAgentTurn(
     endedAt: event.endedAt,
     model: event.model ?? turn.model,
     provider: event.provider ?? turn.provider,
+    generationStartedAt: event.generationStartedAt,
+    generationEndedAt: event.generationEndedAt,
   };
 }
 
@@ -234,9 +275,7 @@ export function codingAgentTurnTrace(
       tool.startTimeMissing === true || tool.startedAt === undefined;
     const missingResult =
       tool.resultMissing === true || tool.endedAt === undefined;
-    const error = missingResult
-      ? (tool.error ?? MISSING_TOOL_RESULT_ERROR)
-      : tool.error;
+    const error = tool.error;
     context.recordTool({
       id: tool.toolUseId,
       name: tool.toolName,
@@ -244,7 +283,7 @@ export function codingAgentTurnTrace(
       input: tool.input,
       output: tool.output,
       error,
-      status: error == null ? "OK" : "ERROR",
+      status: error == null ? (missingResult ? undefined : "OK") : "ERROR",
       startedAt: tool.startedAt ?? tool.endedAt ?? turn.endedAt,
       endedAt: tool.endedAt ?? turn.endedAt,
       attributes,
@@ -256,19 +295,21 @@ export function codingAgentTurnTrace(
     });
   }
 
-  context.recordGeneration({
-    id: turn.generationId,
-    name: `${turn.harness} response`,
-    input: turn.prompt,
-    output: turn.response,
-    model: turn.model,
-    llmProvider: turn.provider,
-    llmInputMessages: [{ role: "user", content: turn.prompt }],
-    llmOutputMessages: [{ role: "assistant", content: turn.response }],
-    startedAt: turn.startedAt,
-    endedAt: turn.endedAt,
-    attributes,
-  });
+  if (turn.generationStartedAt && turn.generationEndedAt) {
+    context.recordGeneration({
+      id: turn.generationId,
+      name: `${turn.harness} response`,
+      input: turn.prompt,
+      output: turn.response,
+      model: turn.model,
+      llmProvider: turn.provider,
+      llmInputMessages: [{ role: "user", content: turn.prompt }],
+      llmOutputMessages: [{ role: "assistant", content: turn.response }],
+      startedAt: turn.generationStartedAt,
+      endedAt: turn.generationEndedAt,
+      attributes,
+    });
+  }
 
   return {
     context,

@@ -63,6 +63,8 @@ describe("coding-agent turn assembly", () => {
       {
         response: "I found the package manifest.",
         endedAt: "2026-08-19T10:00:03.000Z",
+        generationStartedAt: "2026-08-19T10:00:02.000Z",
+        generationEndedAt: "2026-08-19T10:00:03.000Z",
       },
     );
     const second = completeCodingAgentTurn(
@@ -122,8 +124,31 @@ describe("coding-agent turn assembly", () => {
         model: "gpt-5",
         input: "Inspect the repository",
         output: "I found the package manifest.",
+        started_at: "2026-08-19T10:00:02.000Z",
+        ended_at: "2026-08-19T10:00:03.000Z",
       }),
     ]);
+  });
+
+  it("derives stable trace and generation ids from the turn identity", () => {
+    const options = {
+      harness: "codex" as const,
+      sessionId: "session-1",
+      turnId: "turn-1",
+      prompt: "hello",
+      startedAt: "2026-08-19T10:00:00.000Z",
+    };
+
+    const first = startCodingAgentTurn(options);
+    const replay = startCodingAgentTurn(options);
+    const nextTurn = startCodingAgentTurn({ ...options, turnId: "turn-2" });
+
+    expect(replay.traceId).toBe(first.traceId);
+    expect(replay.generationId).toBe(first.generationId);
+    expect(nextTurn.traceId).not.toBe(first.traceId);
+    expect(first.traceId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
   });
 
   it("finalizes on the assistant response without a session-end event", () => {
@@ -209,7 +234,43 @@ describe("coding-agent turn assembly", () => {
     ]);
   });
 
-  it("closes tools with missing results as errors when the turn completes", async () => {
+  it("merges a delayed start into a result-only tool", () => {
+    const resultOnly = recordCodingAgentToolResult(
+      startCodingAgentTurn({
+        harness: "codex",
+        sessionId: "session-1",
+        turnId: "turn-1",
+        prompt: "hello",
+        startedAt: "2026-08-19T10:00:00.000Z",
+      }),
+      {
+        toolUseId: "tool-1",
+        toolName: "read_file",
+        output: "contents",
+        endedAt: "2026-08-19T10:00:02.000Z",
+      },
+    );
+
+    const merged = recordCodingAgentToolStart(resultOnly, {
+      toolUseId: "tool-1",
+      toolName: "read_file",
+      input: { path: "README.md" },
+      startedAt: "2026-08-19T10:00:01.000Z",
+    });
+
+    expect(merged.tools).toEqual([
+      expect.objectContaining({
+        toolUseId: "tool-1",
+        input: { path: "README.md" },
+        output: "contents",
+        startedAt: "2026-08-19T10:00:01.000Z",
+        endedAt: "2026-08-19T10:00:02.000Z",
+        startTimeMissing: undefined,
+      }),
+    ]);
+  });
+
+  it("marks missing tool telemetry without inventing an execution failure", async () => {
     const completed = completeCodingAgentTurn(
       recordCodingAgentToolStart(
         startCodingAgentTurn({
@@ -245,19 +306,52 @@ describe("coding-agent turn assembly", () => {
     });
 
     expect(completed.tools[0]).toMatchObject({
-      error: "Coding agent turn completed without a tool result",
       endedAt: "2026-08-19T10:00:02.000Z",
       resultMissing: true,
     });
     expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).toMatchObject({
-      status: "ERROR",
-      error: "Coding agent turn completed without a tool result",
       ended_at: "2026-08-19T10:00:02.000Z",
       metadata: {
         tool_use_id: "tool-1",
         result_missing: true,
       },
     });
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).not.toHaveProperty(
+      "status",
+    );
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0].error).toBeNull();
+  });
+
+  it("omits a generation when exact model-call timing is unavailable", async () => {
+    const completed = completeCodingAgentTurn(
+      startCodingAgentTurn({
+        harness: "codex",
+        sessionId: "session-1",
+        turnId: "turn-1",
+        prompt: "hello",
+        startedAt: "2026-08-19T10:00:00.000Z",
+        model: "gpt-5",
+      }),
+      {
+        response: "done",
+        endedAt: "2026-08-19T10:00:02.000Z",
+      },
+    );
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "scoped-key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      baseUrl: "https://api.example.test",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const assembled = codingAgentTurnTrace(completed);
+    await lemma.ingest(assembled.context, {
+      startedAt: new Date(assembled.startedAt),
+      endedAt: new Date(assembled.endedAt),
+    });
+
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans).toEqual([]);
   });
 
   it("treats a null tool error as success and marks missing starts", async () => {

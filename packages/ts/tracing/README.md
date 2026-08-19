@@ -223,7 +223,16 @@ await lemma.ingest(trace.context, {
 Each user turn is its own trace. `sessionId` becomes `thread_id`, so the turns
 remain one conversation without delaying delivery until the harness session
 closes. Persist the turn between events and retry only the same completed turn;
-do not send partial snapshots to the append-only ingest endpoint.
+do not send partial snapshots to the append-only ingest endpoint. Default trace
+and generation IDs are deterministic for the harness, session, and turn, so
+replaying the same lifecycle stream produces the same payload identity.
+
+Pass `generationStartedAt` and `generationEndedAt` to
+`completeCodingAgentTurn` only when the harness exposes exact model-call
+bounds. Without both values, the root still records the final response and the
+assembler omits the generation span instead of counting tool time as model
+latency. Missing tool results are marked with `result_missing` metadata; they
+are not treated as execution errors unless the harness reports an error.
 
 ## Vercel AI SDK
 
