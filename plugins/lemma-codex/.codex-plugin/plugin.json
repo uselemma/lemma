@@ -1,0 +1,27 @@
+{
+  "name": "lemma-codex",
+  "version": "0.1.0",
+  "description": "Capture each completed Codex turn as a Lemma trace without MCP.",
+  "author": {
+    "name": "Lemma",
+    "url": "https://uselemma.ai"
+  },
+  "repository": "https://github.com/uselemma/lemma",
+  "license": "MIT",
+  "keywords": ["codex", "observability", "tracing"],
+  "interface": {
+    "displayName": "Lemma Codex",
+    "shortDescription": "Trace completed Codex turns in Lemma",
+    "longDescription": "Uses Codex lifecycle hooks to assemble prompts, tool calls, tool results, and the final assistant response into one complete Lemma trace per turn. Session IDs link those traces into a conversation.",
+    "developerName": "Lemma",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Per-turn Codex traces",
+      "Full prompt and tool context",
+      "Browser-based project-scoped login",
+      "Durable retry queue"
+    ],
+    "websiteURL": "https://uselemma.ai",
+    "defaultPrompt": "Help me connect this Codex installation to Lemma tracing."
+  }
+}

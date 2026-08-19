@@ -14,13 +14,13 @@
 
 ## Start Here
 
-| Resource | Use it for |
-| --- | --- |
-| [Quickstart](https://docs.uselemma.ai/getting-started/quickstart) | Send your first useful trace to Lemma. |
-| [Trace contract](https://docs.uselemma.ai/reference/trace-contract) | Learn the trace shape Lemma expects. |
-| [TypeScript SDK](packages/ts/tracing) | Instrument Node and TypeScript applications. |
-| [Python SDK](packages/py/tracing) | Instrument Python applications. |
-| [Lemma tracing skill](skills/lemma-tracing) | Let a coding agent add tracing for you. |
+| Resource                                                            | Use it for                                   |
+| ------------------------------------------------------------------- | -------------------------------------------- |
+| [Quickstart](https://docs.uselemma.ai/getting-started/quickstart)   | Send your first useful trace to Lemma.       |
+| [Trace contract](https://docs.uselemma.ai/reference/trace-contract) | Learn the trace shape Lemma expects.         |
+| [TypeScript SDK](packages/ts/tracing)                               | Instrument Node and TypeScript applications. |
+| [Python SDK](packages/py/tracing)                                   | Instrument Python applications.              |
+| [Lemma tracing skill](skills/lemma-tracing)                         | Let a coding agent add tracing for you.      |
 | [Lemma diagnostics skill](skills/lemma-diagnostics) | Let a coding agent audit traces already in Lemma. |
 
 ## Install
@@ -49,25 +49,27 @@ export LEMMA_RELEASE=1.8.3   # optional deployed version
 
 Lemma includes first-party tracing helpers for common agent stacks:
 
-| Integration | Guide |
-| --- | --- |
-| Vercel AI SDK | [docs](https://docs.uselemma.ai/integrations/vercel-ai) |
+| Integration       | Guide                                                       |
+| ----------------- | ----------------------------------------------------------- |
+| Vercel AI SDK     | [docs](https://docs.uselemma.ai/integrations/vercel-ai)     |
 | OpenAI Agents SDK | [docs](https://docs.uselemma.ai/integrations/openai-agents) |
-| LangChain | [docs](https://docs.uselemma.ai/integrations/langchain) |
-| LangGraph | [docs](https://docs.uselemma.ai/integrations/langgraph) |
-| Mastra | [docs](https://docs.uselemma.ai/integrations/mastra) |
+| LangChain         | [docs](https://docs.uselemma.ai/integrations/langchain)     |
+| LangGraph         | [docs](https://docs.uselemma.ai/integrations/langgraph)     |
+| Mastra            | [docs](https://docs.uselemma.ai/integrations/mastra)        |
+| Codex             | [local plugin](plugins/lemma-codex)                         |
 
 For manual instrumentation, start with the [tracing overview](https://docs.uselemma.ai/tracing/overview).
 
 ## Repository Layout
 
-| Path | Contents |
-| --- | --- |
-| [`docs/`](docs) | Mintlify documentation source for [docs.uselemma.ai](https://docs.uselemma.ai). |
-| [`packages/ts/tracing`](packages/ts/tracing) | TypeScript SDK package: `@uselemma/tracing`. |
-| [`packages/py/tracing`](packages/py/tracing) | Python SDK package: `uselemma-tracing`. |
-| [`skills/lemma-tracing`](skills/lemma-tracing) | Lemma tracing skill for coding agents. |
+| Path                                           | Contents                                                                        |
+| ---------------------------------------------- | ------------------------------------------------------------------------------- |
+| [`docs/`](docs)                                | Mintlify documentation source for [docs.uselemma.ai](https://docs.uselemma.ai). |
+| [`packages/ts/tracing`](packages/ts/tracing)   | TypeScript SDK package: `@uselemma/tracing`.                                    |
+| [`packages/py/tracing`](packages/py/tracing)   | Python SDK package: `uselemma-tracing`.                                         |
+| [`skills/lemma-tracing`](skills/lemma-tracing) | Lemma tracing skill for coding agents.                                          |
 | [`skills/lemma-diagnostics`](skills/lemma-diagnostics) | Lemma diagnostics skill for coding agents. |
+| [`plugins/lemma-codex`](plugins/lemma-codex)   | Local Codex lifecycle-hook tracing plugin.                                      |
 
 ## Development
 
@@ -84,6 +86,9 @@ Run TypeScript checks:
 pnpm --filter @uselemma/tracing test
 pnpm --filter @uselemma/tracing type-check
 pnpm --filter @uselemma/tracing build
+pnpm --filter @uselemma/codex-plugin test
+pnpm --filter @uselemma/codex-plugin type-check
+pnpm --filter @uselemma/codex-plugin build
 ```
 
 Run Python checks:
