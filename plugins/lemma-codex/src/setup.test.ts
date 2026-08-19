@@ -234,8 +234,11 @@ describe("Lemma Codex setup", () => {
     temporaryDirectories.push(homeDir);
     const customDataDir = join(homeDir, "custom-state");
     const options = {
-      platform: "linux" as const,
-      env: { XDG_STATE_HOME: join(homeDir, "state") },
+      platform: process.platform,
+      env:
+        process.platform === "win32"
+          ? { LOCALAPPDATA: join(homeDir, "state") }
+          : { XDG_STATE_HOME: join(homeDir, "state") },
       homeDir,
     };
 
@@ -248,8 +251,11 @@ describe("Lemma Codex setup", () => {
     const homeDir = await mkdtemp(join(tmpdir(), "lemma-codex-home-test-"));
     temporaryDirectories.push(homeDir);
     const options = {
-      platform: "linux" as const,
-      env: { XDG_STATE_HOME: join(homeDir, "state") },
+      platform: process.platform,
+      env:
+        process.platform === "win32"
+          ? { LOCALAPPDATA: join(homeDir, "state") }
+          : { XDG_STATE_HOME: join(homeDir, "state") },
       homeDir,
     };
 
