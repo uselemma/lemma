@@ -11,7 +11,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, posix, win32 } from "node:path";
 
 import type {
   CodingAgentTurn,
@@ -44,20 +44,27 @@ export function resolveDataDir(options: StorageOptions = {}): string {
   if (override) return override;
   const platform = options.platform ?? process.platform;
   const home = options.homeDir ?? homedir();
+  const platformPath = platform === "win32" ? win32 : posix;
   if (platform === "darwin") {
-    return join(home, "Library", "Application Support", "Lemma", "Codex");
-  }
-  if (platform === "win32") {
-    return join(
-      env.LOCALAPPDATA?.trim() ||
-        env.APPDATA?.trim() ||
-        join(home, "AppData", "Local"),
+    return platformPath.join(
+      home,
+      "Library",
+      "Application Support",
       "Lemma",
       "Codex",
     );
   }
-  return join(
-    env.XDG_STATE_HOME?.trim() || join(home, ".local", "state"),
+  if (platform === "win32") {
+    return platformPath.join(
+      env.LOCALAPPDATA?.trim() ||
+        env.APPDATA?.trim() ||
+        platformPath.join(home, "AppData", "Local"),
+      "Lemma",
+      "Codex",
+    );
+  }
+  return platformPath.join(
+    env.XDG_STATE_HOME?.trim() || platformPath.join(home, ".local", "state"),
     "lemma",
     "codex",
   );

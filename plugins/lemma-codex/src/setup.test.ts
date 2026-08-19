@@ -100,7 +100,7 @@ describe("Lemma Codex setup", () => {
       "win32",
       { LOCALAPPDATA: "C:\\Users\\ray\\AppData\\Local" },
       "C:\\Users\\ray",
-      join("C:\\Users\\ray\\AppData\\Local", "Lemma", "Codex"),
+      "C:\\Users\\ray\\AppData\\Local\\Lemma\\Codex",
     ],
   ] as const)(
     "resolves a private %s data location",
