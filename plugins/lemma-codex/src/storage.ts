@@ -50,11 +50,19 @@ function safeId(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function pathImplementation(options: StorageOptions): typeof posix {
+  return (options.platform ?? process.platform) === "win32" ? win32 : posix;
+}
+
+function absoluteDataDir(value: string, options: StorageOptions): string {
+  return pathImplementation(options).resolve(value);
+}
+
 function defaultDataDir(options: StorageOptions): string {
   const env = options.env ?? process.env;
   const platform = options.platform ?? process.platform;
   const home = options.homeDir ?? homedir();
-  const platformPath = platform === "win32" ? win32 : posix;
+  const platformPath = pathImplementation(options);
   if (platform === "darwin") {
     return platformPath.join(
       home,
@@ -81,14 +89,17 @@ function defaultDataDir(options: StorageOptions): string {
 }
 
 function dataDirLocationPath(options: StorageOptions): string {
-  return join(defaultDataDir(options), "data-dir-location.json");
+  return pathImplementation(options).join(
+    defaultDataDir(options),
+    "data-dir-location.json",
+  );
 }
 
 export function resolveDataDir(options: StorageOptions = {}): string {
-  if (options.dataDir) return options.dataDir;
+  if (options.dataDir) return absoluteDataDir(options.dataDir, options);
   const env = options.env ?? process.env;
   const override = env.LEMMA_CODEX_DATA_DIR?.trim();
-  if (override) return override;
+  if (override) return absoluteDataDir(override, options);
   const fallback = defaultDataDir(options);
   try {
     const value = JSON.parse(
@@ -100,7 +111,7 @@ export function resolveDataDir(options: StorageOptions = {}): string {
       typeof value.dataDir === "string" &&
       value.dataDir.trim().length > 0
     ) {
-      return value.dataDir;
+      return absoluteDataDir(value.dataDir, options);
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -226,6 +237,7 @@ export async function writeDataDirLocation(
   dataDir: string,
   options: StorageOptions = {},
 ): Promise<void> {
+  dataDir = absoluteDataDir(dataDir, options);
   const fallback = defaultDataDir(options);
   const locationPath = dataDirLocationPath(options);
   if (dataDir === fallback) {

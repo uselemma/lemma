@@ -50,4 +50,4 @@ jobs:
         run: pnpm --filter @uselemma/codex-plugin build
 
       - name: Verify committed bundles
-        run: git diff --exit-code -- plugins/lemma-codex/runtime/hook.mjs plugins/lemma-codex/scripts/setup.mjs
+        run: git diff --exit-code -- plugins/lemma-codex/runtime/hook.mjs plugins/lemma-codex/runtime/flush.mjs plugins/lemma-codex/scripts/setup.mjs

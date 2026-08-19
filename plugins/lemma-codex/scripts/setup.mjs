@@ -20,11 +20,17 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, posix, win32 } from "node:path";
+function pathImplementation(options) {
+  return (options.platform ?? process.platform) === "win32" ? win32 : posix;
+}
+function absoluteDataDir(value, options) {
+  return pathImplementation(options).resolve(value);
+}
 function defaultDataDir(options) {
   const env = options.env ?? process.env;
   const platform = options.platform ?? process.platform;
   const home = options.homeDir ?? homedir();
-  const platformPath = platform === "win32" ? win32 : posix;
+  const platformPath = pathImplementation(options);
   if (platform === "darwin") {
     return platformPath.join(
       home,
@@ -48,20 +54,23 @@ function defaultDataDir(options) {
   );
 }
 function dataDirLocationPath(options) {
-  return join(defaultDataDir(options), "data-dir-location.json");
+  return pathImplementation(options).join(
+    defaultDataDir(options),
+    "data-dir-location.json"
+  );
 }
 function resolveDataDir(options = {}) {
-  if (options.dataDir) return options.dataDir;
+  if (options.dataDir) return absoluteDataDir(options.dataDir, options);
   const env = options.env ?? process.env;
   const override = env.LEMMA_CODEX_DATA_DIR?.trim();
-  if (override) return override;
+  if (override) return absoluteDataDir(override, options);
   const fallback = defaultDataDir(options);
   try {
     const value = JSON.parse(
       readFileSync(dataDirLocationPath(options), "utf8")
     );
     if (isRecord(value) && value.version === 1 && typeof value.dataDir === "string" && value.dataDir.trim().length > 0) {
-      return value.dataDir;
+      return absoluteDataDir(value.dataDir, options);
     }
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
@@ -96,6 +105,7 @@ async function writeCredentials(dataDir, credentials) {
   await writeSecureJson(credentialsPath(dataDir), credentials);
 }
 async function writeDataDirLocation(dataDir, options = {}) {
+  dataDir = absoluteDataDir(dataDir, options);
   const fallback = defaultDataDir(options);
   const locationPath = dataDirLocationPath(options);
   if (dataDir === fallback) {

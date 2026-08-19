@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -136,6 +136,23 @@ describe("Lemma Codex setup", () => {
     await writeDataDirLocation(customDataDir, options);
 
     expect(resolveDataDir(options)).toBe(customDataDir);
+  });
+
+  it("normalizes relative data-directory overrides before persisting them", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "lemma-codex-home-test-"));
+    temporaryDirectories.push(homeDir);
+    const options = {
+      platform: "linux" as const,
+      env: { XDG_STATE_HOME: join(homeDir, "state") },
+      homeDir,
+    };
+
+    await writeDataDirLocation("relative-codex-state", options);
+
+    expect(resolveDataDir(options)).toBe(resolve("relative-codex-state"));
+    expect(
+      resolveDataDir({ ...options, dataDir: "another-relative-state" }),
+    ).toBe(resolve("another-relative-state"));
   });
 
   it("uses the native browser launcher on macOS, Linux, and Windows", () => {

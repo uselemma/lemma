@@ -1382,6 +1382,7 @@ var Lemma = class {
 };
 
 // ../../packages/ts/tracing/src/coding-agent.ts
+var MISSING_TOOL_RESULT_ERROR = "Coding agent turn completed without a tool result";
 function harnessAttributes(turn) {
   return {
     "lemma.harness.id": turn.harness,
@@ -1405,18 +1406,25 @@ function codingAgentTurnTrace(turn) {
     }
   });
   for (const tool of turn.tools) {
+    const missingStart = tool.startedAt === void 0;
+    const missingResult = tool.endedAt === void 0;
+    const error = missingResult ? tool.error ?? MISSING_TOOL_RESULT_ERROR : tool.error;
     context.recordTool({
       id: tool.toolUseId,
       name: tool.toolName,
       toolName: tool.toolName,
       input: tool.input,
       output: tool.output,
-      error: tool.error,
-      status: tool.error === void 0 ? "OK" : "ERROR",
-      startedAt: tool.startedAt,
-      endedAt: tool.endedAt ?? tool.startedAt,
+      error,
+      status: error == null ? "OK" : "ERROR",
+      startedAt: tool.startedAt ?? turn.startedAt,
+      endedAt: tool.endedAt ?? turn.endedAt,
       attributes,
-      metadata: { tool_use_id: tool.toolUseId }
+      metadata: {
+        tool_use_id: tool.toolUseId,
+        ...missingStart ? { start_time_missing: true } : {},
+        ...missingResult ? { result_missing: true } : {}
+      }
     });
   }
   context.recordGeneration({
@@ -1458,11 +1466,17 @@ import { dirname, join, posix, win32 } from "node:path";
 function safeId(value) {
   return createHash("sha256").update(value).digest("hex");
 }
+function pathImplementation(options) {
+  return (options.platform ?? process.platform) === "win32" ? win32 : posix;
+}
+function absoluteDataDir(value, options) {
+  return pathImplementation(options).resolve(value);
+}
 function defaultDataDir(options) {
   const env = options.env ?? process.env;
   const platform = options.platform ?? process.platform;
   const home = options.homeDir ?? homedir();
-  const platformPath = platform === "win32" ? win32 : posix;
+  const platformPath = pathImplementation(options);
   if (platform === "darwin") {
     return platformPath.join(
       home,
@@ -1486,20 +1500,23 @@ function defaultDataDir(options) {
   );
 }
 function dataDirLocationPath(options) {
-  return join(defaultDataDir(options), "data-dir-location.json");
+  return pathImplementation(options).join(
+    defaultDataDir(options),
+    "data-dir-location.json"
+  );
 }
 function resolveDataDir(options = {}) {
-  if (options.dataDir) return options.dataDir;
+  if (options.dataDir) return absoluteDataDir(options.dataDir, options);
   const env = options.env ?? process.env;
   const override = env.LEMMA_CODEX_DATA_DIR?.trim();
-  if (override) return override;
+  if (override) return absoluteDataDir(override, options);
   const fallback = defaultDataDir(options);
   try {
     const value = JSON.parse(
       readFileSync(dataDirLocationPath(options), "utf8")
     );
     if (isRecord(value) && value.version === 1 && typeof value.dataDir === "string" && value.dataDir.trim().length > 0) {
-      return value.dataDir;
+      return absoluteDataDir(value.dataDir, options);
     }
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
