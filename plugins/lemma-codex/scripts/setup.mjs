@@ -743,6 +743,14 @@ async function writeSecureJson(path, value) {
   await rename(temporaryPath, path);
   if (process.platform !== "win32") await chmod(path, 384);
 }
+async function readJson(path) {
+  try {
+    return JSON.parse(await readFile(path, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -754,6 +762,17 @@ function notifyForwarderPath(dataDir) {
 }
 async function writeCredentials(dataDir, credentials) {
   await writeSecureJson(credentialsPath(dataDir), credentials);
+}
+async function readNotifyForwarder(dataDir) {
+  const value = await readJson(notifyForwarderPath(dataDir));
+  if (value === null) return null;
+  if (!isRecord(value) || value.version !== 1 || !(value.command === null || Array.isArray(value.command) && value.command.every((entry) => typeof entry === "string"))) {
+    throw new Error("Lemma Codex notify forwarding state is invalid");
+  }
+  return {
+    version: 1,
+    command: value.command
+  };
 }
 async function writeNotifyForwarder(dataDir, forwarder) {
   await writeSecureJson(notifyForwarderPath(dataDir), forwarder);
@@ -892,6 +911,15 @@ async function configureCodexNotify(input) {
   }
   const next = [process.execPath, resolve(input.notifyRuntimePath)];
   if (isStringArray(current) && current.length > 0 && isLemmaNotifier(current)) {
+    if (input.previousDataDir && resolve(input.previousDataDir) !== resolve(input.dataDir)) {
+      await writeNotifyForwarder(
+        input.dataDir,
+        await readNotifyForwarder(input.previousDataDir) ?? {
+          version: 1,
+          command: null
+        }
+      );
+    }
     if (current[0] === next[0] && resolve(current[1] ?? "") === next[1]) return;
   } else {
     await writeNotifyForwarder(input.dataDir, {
@@ -1066,6 +1094,10 @@ function hasInstalledLemmaPlugin(output) {
     (plugin) => isRecord2(plugin) && plugin.pluginId === "lemma-codex@lemma-local"
   );
 }
+function installedPluginPath(output) {
+  const body = parsedObject(output);
+  return typeof body?.installedPath === "string" ? resolve(body.installedPath) : null;
+}
 function sameLocalPath(left, right) {
   return resolve(left) === resolve(right);
 }
@@ -1177,19 +1209,22 @@ async function installLocalPlugin(marketplaceRoot, runCommand = commandOutput) {
       `Could not install the Lemma Codex plugin: ${install.output}`
     );
   }
+  const installedPath = installedPluginPath(install.stdout);
+  if (!installedPath) {
+    throw new Error("Codex returned an invalid plugin installation path");
+  }
+  return installedPath;
 }
 function inferredMarketplaceRoot() {
   const pluginRoot = resolve(dirname2(fileURLToPath(import.meta.url)), "..");
   const root = resolve(pluginRoot, "..", "..");
   return existsSync(resolve(root, ".agents", "plugins", "marketplace.json")) ? root : null;
 }
-function inferredNotifyRuntimePath() {
-  return resolve(
-    dirname2(fileURLToPath(import.meta.url)),
-    "..",
-    "runtime",
-    "notify.mjs"
-  );
+function inferredPluginRoot() {
+  return resolve(dirname2(fileURLToPath(import.meta.url)), "..");
+}
+function notifyRuntimePath(pluginRoot) {
+  return resolve(pluginRoot, "runtime", "notify.mjs");
 }
 async function runSetup(options = {}, dependencies = {}) {
   const apiUrl = normalizedApiUrl(options.apiUrl ?? DEFAULT_API_URL);
@@ -1198,13 +1233,12 @@ async function runSetup(options = {}, dependencies = {}) {
   const sleep = dependencies.sleep ?? ((milliseconds) => new Promise(
     (resolvePromise) => setTimeout(resolvePromise, milliseconds)
   ));
+  let installedPluginRoot = inferredPluginRoot();
   if (options.installPlugin !== false) {
     const marketplaceRoot = options.marketplaceRoot ?? inferredMarketplaceRoot();
     if (marketplaceRoot) {
       output("Installing the local Lemma Codex plugin\u2026");
-      await (dependencies.installLocalPlugin ?? installLocalPlugin)(
-        marketplaceRoot
-      );
+      installedPluginRoot = await (dependencies.installLocalPlugin ?? installLocalPlugin)(marketplaceRoot);
     } else {
       output("The plugin is already installed; continuing with login.");
     }
@@ -1256,16 +1290,18 @@ async function runSetup(options = {}, dependencies = {}) {
       credentialId: result.credentialId,
       accessToken: result.accessToken
     };
+    const previousDataDir = resolveDataDir();
     const dataDir = resolveDataDir({ dataDir: options.dataDir });
     await writeCredentials(dataDir, credentials);
+    await (dependencies.configureNotify ?? configureCodexNotify)({
+      dataDir,
+      notifyRuntimePath: notifyRuntimePath(installedPluginRoot),
+      previousDataDir,
+      codexHome: options.codexHome
+    });
     await (dependencies.persistDataDirLocation ?? writeDataDirLocation)(
       dataDir
     );
-    await (dependencies.configureNotify ?? configureCodexNotify)({
-      dataDir,
-      notifyRuntimePath: inferredNotifyRuntimePath(),
-      codexHome: options.codexHome
-    });
     output(`Lemma Codex is connected to project ${result.projectId}.`);
     return credentials;
   }

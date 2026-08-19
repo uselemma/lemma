@@ -1759,9 +1759,8 @@ async function removeAbandonedTurns(dataDir, options) {
     const path = join(directory, entry);
     const value = await readJson(path);
     if (!isCodingAgentTurn(value) || value.status !== "open") continue;
-    const supersededInSession = value.sessionId === options.sessionId && value.turnId !== options.currentTurnId;
     const isExpired = Date.parse(value.startedAt) < options.olderThan.getTime();
-    if (!supersededInSession && !isExpired) continue;
+    if (!isExpired) continue;
     await unlink(path).catch((error) => {
       if (error.code !== "ENOENT") throw error;
     });
@@ -1840,6 +1839,16 @@ async function withSessionLock(dataDir, sessionId2, callback) {
 
 // src/hook-handler.ts
 var OPEN_TURN_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
+var TRANSCRIPT_RECONCILIATION_ATTEMPTS = 3;
+var SHELL_TOOL_NAMES = /* @__PURE__ */ new Set([
+  "bash",
+  "exec_command",
+  "functions.exec_command",
+  "shell",
+  "unified_exec",
+  "write_stdin"
+]);
+var ORCHESTRATOR_TOOL_NAMES = /* @__PURE__ */ new Set(["exec", "functions.exec"]);
 function stringField(input, name) {
   const value = input[name];
   return typeof value === "string" && value.length > 0 ? value : void 0;
@@ -1885,9 +1894,15 @@ function turnMetadata(input) {
 function toolOutput(input) {
   return input.tool_response ?? input.tool_output ?? input.response;
 }
+function isCommandTool(toolName) {
+  const normalized = toolName.toLowerCase();
+  return SHELL_TOOL_NAMES.has(normalized) || ORCHESTRATOR_TOOL_NAMES.has(normalized);
+}
 function exitCode(value) {
   if (typeof value === "string") {
-    const match = value.match(/(?:process exited with code|exit code:)\s*(-?\d+)/i);
+    const match = value.match(
+      /(?:process exited with code|exit code:)\s*(-?\d+)/i
+    );
     return match ? Number(match[1]) : void 0;
   }
   if (Array.isArray(value)) {
@@ -1909,20 +1924,33 @@ function exitCode(value) {
 function isRecord2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function toolError(input) {
-  if (input.error !== void 0) return input.error;
-  const output = toolOutput(input);
+function explicitOutputError(output) {
+  if (!isRecord2(output)) return void 0;
+  if (output.error !== void 0) return output.error;
+  if (output.isError === true) return output;
+  return void 0;
+}
+function scriptFailed(output) {
+  if (typeof output === "string" && /^Script failed(?:\n|$)/.test(output)) {
+    return true;
+  }
+  return Array.isArray(output) && output.some(
+    (entry) => isRecord2(entry) && typeof entry.text === "string" && /^Script failed(?:\n|$)/.test(entry.text)
+  );
+}
+function commandFailure(output, toolName) {
+  if (scriptFailed(output)) return "Command failed";
+  if (!SHELL_TOOL_NAMES.has(toolName.toLowerCase())) return void 0;
   const code = exitCode(output);
   if (code !== void 0 && code !== 0) {
     return `Process exited with code ${code}`;
   }
-  if (typeof output === "object" && output !== null) {
-    if ("error" in output) return output.error;
-    if ("isError" in output && output.isError === true) {
-      return output;
-    }
-  }
   return void 0;
+}
+function toolError(input, toolName) {
+  if (input.error !== void 0) return input.error;
+  const output = toolOutput(input);
+  return explicitOutputError(output) ?? (isCommandTool(toolName) ? commandFailure(output, toolName) : void 0);
 }
 function transcriptPath(input, turn) {
   const current = stringField(input, "transcript_path");
@@ -1930,11 +1958,13 @@ function transcriptPath(input, turn) {
   const stored = turn.metadata?.["lemma.harness.transcript_path"];
   return typeof stored === "string" ? stored : void 0;
 }
-async function reconcileTranscriptToolFailures(turn, input, fallbackEndedAt, warn) {
+async function reconcileTranscriptToolResults(turn, input, fallbackEndedAt, warn) {
   const path = transcriptPath(input, turn);
   if (!path) return turn;
-  const toolIds = new Set(turn.tools.map((tool) => tool.toolUseId));
-  const failures = /* @__PURE__ */ new Map();
+  const toolsById = new Map(
+    turn.tools.map((tool) => [tool.toolUseId, tool])
+  );
+  const results = /* @__PURE__ */ new Map();
   try {
     const lines = createInterface({
       input: createReadStream(path, { encoding: "utf8" }),
@@ -1946,32 +1976,34 @@ async function reconcileTranscriptToolFailures(turn, input, fallbackEndedAt, war
         const entry = JSON.parse(line);
         if (!isRecord2(entry) || entry.type !== "response_item") continue;
         const payload = entry.payload;
-        if (!isRecord2(payload) || payload.type !== "function_call_output" || typeof payload.call_id !== "string" || !toolIds.has(payload.call_id)) {
+        if (!isRecord2(payload) || payload.type !== "function_call_output" && payload.type !== "custom_tool_call_output" || typeof payload.call_id !== "string" || !toolsById.has(payload.call_id)) {
           continue;
         }
-        const code = exitCode(payload.output);
-        if (code !== void 0 && code !== 0) {
-          failures.set(payload.call_id, { code, output: payload.output });
-        }
+        const tool = toolsById.get(payload.call_id);
+        if (!tool) continue;
+        results.set(payload.call_id, {
+          output: payload.output,
+          error: explicitOutputError(payload.output) ?? (isCommandTool(tool.toolName) ? commandFailure(payload.output, tool.toolName) : void 0)
+        });
       } catch {
       }
     }
   } catch (error) {
     if (error.code === "ENOENT") return turn;
     warn?.(
-      `Lemma Codex could not inspect the transcript for tool exit codes: ${error instanceof Error ? error.message : String(error)}`
+      `Lemma Codex could not inspect the transcript for tool results: ${error instanceof Error ? error.message : String(error)}`
     );
     return turn;
   }
   return turn.tools.reduce((current, tool) => {
-    const failure = failures.get(tool.toolUseId);
-    if (!failure) return current;
+    const result = results.get(tool.toolUseId);
+    if (!result) return current;
     return recordCodingAgentToolResult(current, {
       toolUseId: tool.toolUseId,
       toolName: tool.toolName,
       input: tool.input,
-      output: tool.output ?? failure.output,
-      error: `Process exited with code ${failure.code}`,
+      output: tool.output ?? result.output,
+      error: result.error ?? tool.error,
       endedAt: tool.endedAt ?? fallbackEndedAt
     });
   }, turn);
@@ -2116,17 +2148,11 @@ async function handleCodexHook(input, dependencies = {}) {
     const startedAt = eventTimestamp(input, now);
     await withSessionLock(dataDir, currentSessionId, async () => {
       await removeAbandonedTurns(dataDir, {
-        sessionId: currentSessionId,
-        currentTurnId,
         olderThan: new Date(
           new Date(startedAt).getTime() - OPEN_TURN_MAX_AGE_MS
         )
       });
-      const existing = await readTurn(
-        dataDir,
-        currentSessionId,
-        currentTurnId
-      );
+      const existing = await readTurn(dataDir, currentSessionId, currentTurnId);
       if (existing?.status === "open") {
         await removePendingTurn(dataDir, existing.traceId);
         await writeTurn(dataDir, {
@@ -2191,7 +2217,7 @@ ${prompt}`,
           toolName,
           input: input.tool_input,
           output: toolOutput(input),
-          error: toolError(input),
+          error: toolError(input, toolName),
           endedAt: eventTimestamp(input, now)
         })
       );
@@ -2202,29 +2228,54 @@ ${prompt}`,
   const endedAt = eventTimestamp(input, now);
   const credentials = await readCredentials(dataDir);
   let traceId = null;
-  await withSessionLock(dataDir, currentSessionId, async () => {
-    const turn = await readTurn(dataDir, currentSessionId, currentTurnId);
-    if (!turn) return;
-    const reconciledTurn = await reconcileTranscriptToolFailures(
-      turn,
+  let snapshot = await withSessionLock(
+    dataDir,
+    currentSessionId,
+    async () => readTurn(dataDir, currentSessionId, currentTurnId)
+  );
+  for (let attempt = 0; snapshot && attempt < TRANSCRIPT_RECONCILIATION_ATTEMPTS; attempt += 1) {
+    const sourceRevision = codingAgentTurnRevision(snapshot);
+    const reconciledTurn = dependencies.reconcileTranscript ? await dependencies.reconcileTranscript(snapshot, input, endedAt) : await reconcileTranscriptToolResults(
+      snapshot,
       input,
       endedAt,
       dependencies.warn
     );
-    const completed = completeCodingAgentTurn(reconciledTurn, {
-      response,
-      endedAt,
-      model: stringField(input, "model"),
-      provider: "openai"
-    });
-    if (credentials) {
-      await writeTurn(dataDir, reconciledTurn);
-      await queueCompletedTurn(dataDir, completed, credentials, {
-        sourceRevision: codingAgentTurnRevision(reconciledTurn)
-      });
-    }
-    traceId = credentials ? completed.traceId : null;
-  });
+    const result = await withSessionLock(
+      dataDir,
+      currentSessionId,
+      async () => {
+        const latest = await readTurn(dataDir, currentSessionId, currentTurnId);
+        if (!latest) return { traceId: null, retry: null };
+        if (codingAgentTurnRevision(latest) !== sourceRevision) {
+          return { traceId: null, retry: latest };
+        }
+        const completed = completeCodingAgentTurn(reconciledTurn, {
+          response,
+          endedAt,
+          model: stringField(input, "model"),
+          provider: "openai"
+        });
+        if (credentials) {
+          await writeTurn(dataDir, reconciledTurn);
+          await queueCompletedTurn(dataDir, completed, credentials, {
+            sourceRevision: codingAgentTurnRevision(reconciledTurn)
+          });
+        }
+        return {
+          traceId: credentials ? completed.traceId : null,
+          retry: null
+        };
+      }
+    );
+    traceId = result.traceId;
+    snapshot = result.retry;
+  }
+  if (snapshot) {
+    dependencies.warn?.(
+      "Lemma Codex retained an open turn because tool state kept changing during completion"
+    );
+  }
   if (!credentials) {
     dependencies.warn?.(
       "Lemma Codex did not queue the completed turn because setup is incomplete"

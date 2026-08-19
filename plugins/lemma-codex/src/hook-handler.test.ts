@@ -371,6 +371,84 @@ describe("Codex hook turn assembly", () => {
     expect(sent[0].tools[0].error).toContain('"isError":true');
   });
 
+  it("does not treat exit-code-shaped MCP data as a command failure", async () => {
+    const dataDir = await temporaryDataDir();
+    const sent: CompletedCodingAgentTurn[] = [];
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        prompt: "read remote metadata",
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "PostToolUse",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        tool_use_id: "tool-1",
+        tool_name: "mcp__example__read",
+        tool_response: {
+          content: [{ type: "text", text: "exit code: 7" }],
+          exit_code: 7,
+        },
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        type: "agent-turn-complete",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        last_assistant_message: "The metadata was read.",
+      },
+      { dataDir, sendTrace: async ({ turn }) => void sent.push(turn) },
+    );
+
+    expect(sent[0].tools[0].error).toBeUndefined();
+  });
+
+  it("uses the orchestrator status instead of nested exit-code-shaped data", async () => {
+    const dataDir = await temporaryDataDir();
+    const sent: CompletedCodingAgentTurn[] = [];
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        prompt: "read an API response",
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "PostToolUse",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        tool_use_id: "tool-1",
+        tool_name: "functions.exec",
+        tool_response: [
+          { type: "input_text", text: "Script completed\n" },
+          { type: "input_text", text: '{"exit_code":7}' },
+        ],
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        type: "agent-turn-complete",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        last_assistant_message: "The API response was returned.",
+      },
+      { dataDir, sendTrace: async ({ turn }) => void sent.push(turn) },
+    );
+
+    expect(sent[0].tools[0].error).toBeUndefined();
+  });
+
   it("marks nonzero command exits found in the Codex transcript as failed", async () => {
     const dataDir = await temporaryDataDir();
     const transcriptPath = join(dataDir, "transcript.jsonl");
@@ -403,7 +481,8 @@ describe("Codex hook turn assembly", () => {
         payload: {
           type: "function_call_output",
           call_id: "call-1",
-          output: "Chunk ID: abc\nProcess exited with code 7\nFinal output:\nfailed",
+          output:
+            "Chunk ID: abc\nProcess exited with code 7\nFinal output:\nfailed",
         },
       })}\n`,
       "utf8",
@@ -423,6 +502,65 @@ describe("Codex hook turn assembly", () => {
       output: "command output",
       error: "Process exited with code 7",
     });
+  });
+
+  it("recovers a missing non-command result from a custom-tool transcript", async () => {
+    const dataDir = await temporaryDataDir();
+    const transcriptPath = join(dataDir, "transcript.jsonl");
+    const sent: CompletedCodingAgentTurn[] = [];
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        prompt: "fetch a page",
+        transcript_path: transcriptPath,
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "PreToolUse",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        tool_use_id: "call-1",
+        tool_name: "mcp__example__fetch",
+        tool_input: { id: "page-1" },
+      },
+      { dataDir },
+    );
+    const recoveredOutput = {
+      isError: true,
+      content: [{ type: "text", text: "page not found" }],
+    };
+    await writeFile(
+      transcriptPath,
+      `${JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "custom_tool_call_output",
+          call_id: "call-1",
+          output: recoveredOutput,
+        },
+      })}\n`,
+      "utf8",
+    );
+
+    await handleCodexHook(
+      {
+        type: "agent-turn-complete",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        last_assistant_message: "The page was unavailable.",
+      },
+      { dataDir, sendTrace: async ({ turn }) => void sent.push(turn) },
+    );
+
+    expect(sent[0].tools[0]).toMatchObject({
+      output: recoveredOutput,
+      endedAt: expect.any(String),
+    });
+    expect(sent[0].tools[0].error).toContain('"isError":true');
   });
 
   it("records every prompt submitted while Codex steers the same turn", async () => {
@@ -492,9 +630,7 @@ describe("Codex hook turn assembly", () => {
 
     expect(sent).toHaveLength(1);
     expect(sent[0].response).toBe("Final continued response");
-    await expect(
-      readTurn(dataDir, "session-1", "turn-1"),
-    ).resolves.toBeNull();
+    await expect(readTurn(dataDir, "session-1", "turn-1")).resolves.toBeNull();
   });
 
   it("marks tools without a PostToolUse result as missing telemetry", async () => {
@@ -540,8 +676,9 @@ describe("Codex hook turn assembly", () => {
     expect(sent[0].tools[0].error).toBeUndefined();
   });
 
-  it("removes a superseded open turn on the next prompt", async () => {
+  it("preserves a prior turn when its asynchronous completion follows the next prompt", async () => {
     const dataDir = await temporaryDataDir();
+    const sent: CompletedCodingAgentTurn[] = [];
     await handleCodexHook(
       {
         hook_event_name: "UserPromptSubmit",
@@ -563,10 +700,62 @@ describe("Codex hook turn assembly", () => {
 
     await expect(
       readTurn(dataDir, "session-1", "interrupted-turn"),
-    ).resolves.toBeNull();
+    ).resolves.toMatchObject({ status: "open" });
     await expect(
       readTurn(dataDir, "session-1", "next-turn"),
     ).resolves.toMatchObject({ status: "open", prompt: "Continue" });
+
+    await handleCodexHook(
+      {
+        type: "agent-turn-complete",
+        session_id: "session-1",
+        turn_id: "interrupted-turn",
+        last_assistant_message: "The first response.",
+      },
+      { dataDir, sendTrace: async ({ turn }) => void sent.push(turn) },
+    );
+    await handleCodexHook(
+      {
+        type: "agent-turn-complete",
+        session_id: "session-1",
+        turn_id: "next-turn",
+        last_assistant_message: "The next response.",
+      },
+      { dataDir, sendTrace: async ({ turn }) => void sent.push(turn) },
+    );
+
+    expect(sent.map((turn) => turn.turnId)).toEqual([
+      "interrupted-turn",
+      "next-turn",
+    ]);
+  });
+
+  it("removes only open turns older than the retention window", async () => {
+    const dataDir = await temporaryDataDir();
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "expired-turn",
+        prompt: "This turn never completed",
+        timestamp: "2026-08-17T09:00:00.000Z",
+      },
+      { dataDir },
+    );
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "current-turn",
+        prompt: "Continue",
+        timestamp: "2026-08-19T10:00:00.000Z",
+      },
+      { dataDir },
+    );
+
+    await expect(
+      readTurn(dataDir, "session-1", "expired-turn"),
+    ).resolves.toBeNull();
   });
 
   it("serializes concurrent tool hooks without losing calls", async () => {
@@ -611,6 +800,70 @@ describe("Codex hook turn assembly", () => {
       "one",
       "three",
       "two",
+    ]);
+  });
+
+  it("scans transcripts outside the session lock and retries a changed turn", async () => {
+    const dataDir = await temporaryDataDir();
+    const sent: CompletedCodingAgentTurn[] = [];
+    let releaseScan: (() => void) | undefined;
+    let markScanStarted: (() => void) | undefined;
+    const scanStarted = new Promise<void>((resolve) => {
+      markScanStarted = resolve;
+    });
+    const scanReleased = new Promise<void>((resolve) => {
+      releaseScan = resolve;
+    });
+    let scans = 0;
+    await handleCodexHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        prompt: "inspect slowly",
+      },
+      { dataDir },
+    );
+
+    const completion = handleCodexHook(
+      {
+        type: "agent-turn-complete",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        last_assistant_message: "done",
+      },
+      {
+        dataDir,
+        reconcileTranscript: async (turn) => {
+          scans += 1;
+          if (scans === 1) {
+            markScanStarted?.();
+            await scanReleased;
+          }
+          return turn;
+        },
+        sendTrace: async ({ turn }) => void sent.push(turn),
+      },
+    );
+    await scanStarted;
+
+    await handleCodexHook(
+      {
+        hook_event_name: "PreToolUse",
+        session_id: "session-1",
+        turn_id: "turn-1",
+        tool_use_id: "late-tool",
+        tool_name: "exec_command",
+        tool_input: { cmd: "pwd" },
+      },
+      { dataDir },
+    );
+    releaseScan?.();
+    await completion;
+
+    expect(scans).toBe(2);
+    expect(sent[0].tools).toEqual([
+      expect.objectContaining({ toolUseId: "late-tool" }),
     ]);
   });
 

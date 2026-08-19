@@ -17,6 +17,7 @@ import {
   readNotifyForwarder,
   resolveDataDir,
   writeDataDirLocation,
+  writeNotifyForwarder,
 } from "./storage.js";
 
 const temporaryDirectories: string[] = [];
@@ -56,7 +57,8 @@ describe("Lemma Codex setup", () => {
           project_id: "10000000-0000-0000-0000-000000000001",
         }),
       );
-    const install = vi.fn(async () => undefined);
+    const installedPluginRoot = join(dataDir, "codex-cache", "lemma-codex");
+    const install = vi.fn(async () => installedPluginRoot);
     const open = vi.fn(async () => undefined);
     const persistDataDirLocation = vi.fn(async () => undefined);
     const configureNotify = vi.fn(async () => undefined);
@@ -83,9 +85,13 @@ describe("Lemma Codex setup", () => {
     expect(persistDataDirLocation).toHaveBeenCalledWith(dataDir);
     expect(configureNotify).toHaveBeenCalledWith({
       dataDir,
-      notifyRuntimePath: expect.stringMatching(/runtime[/\\]notify\.mjs$/),
+      notifyRuntimePath: join(installedPluginRoot, "runtime", "notify.mjs"),
+      previousDataDir: expect.any(String),
       codexHome: undefined,
     });
+    expect(configureNotify.mock.invocationCallOrder[0]).toBeLessThan(
+      persistDataDirLocation.mock.invocationCallOrder[0],
+    );
     expect(open).toHaveBeenCalledWith(
       "https://dev.platform.uselemma.ai/connect/coding-harness?user_code=ABCDE-FGHJK",
     );
@@ -121,7 +127,11 @@ describe("Lemma Codex setup", () => {
       'notify = [\n  "existing-notifier",\n  "Codex",\n]\n\n[features]\nplugins = true\n',
     );
 
-    await configureCodexNotify({ dataDir, notifyRuntimePath: runtimePath, codexHome });
+    await configureCodexNotify({
+      dataDir,
+      notifyRuntimePath: runtimePath,
+      codexHome,
+    });
 
     const config = await readFile(join(codexHome, "config.toml"), "utf8");
     expect(config).toContain(JSON.stringify(process.execPath));
@@ -145,12 +155,50 @@ describe("Lemma Codex setup", () => {
       'notify = ["existing-notifier"]\n',
     );
 
-    await configureCodexNotify({ dataDir, notifyRuntimePath: runtimePath, codexHome });
-    await configureCodexNotify({ dataDir, notifyRuntimePath: runtimePath, codexHome });
+    await configureCodexNotify({
+      dataDir,
+      notifyRuntimePath: runtimePath,
+      codexHome,
+    });
+    await configureCodexNotify({
+      dataDir,
+      notifyRuntimePath: runtimePath,
+      codexHome,
+    });
 
     await expect(readNotifyForwarder(dataDir)).resolves.toEqual({
       version: 1,
       command: ["existing-notifier"],
+    });
+  });
+
+  it("migrates notifier forwarding state when the setup data directory changes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "lemma-codex-notify-test-"));
+    temporaryDirectories.push(root);
+    const codexHome = join(root, "codex-home");
+    const previousDataDir = join(root, "old-state");
+    const dataDir = join(root, "new-state");
+    const runtimePath = join(root, "plugin", "runtime", "notify.mjs");
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(
+      join(codexHome, "config.toml"),
+      `notify = [${JSON.stringify(process.execPath)}, ${JSON.stringify(resolve(runtimePath))}]\n`,
+    );
+    await writeNotifyForwarder(previousDataDir, {
+      version: 1,
+      command: ["existing-notifier", "Codex"],
+    });
+
+    await configureCodexNotify({
+      dataDir,
+      previousDataDir,
+      notifyRuntimePath: runtimePath,
+      codexHome,
+    });
+
+    await expect(readNotifyForwarder(dataDir)).resolves.toEqual({
+      version: 1,
+      command: ["existing-notifier", "Codex"],
     });
   });
 
@@ -279,9 +327,16 @@ describe("Lemma Codex setup", () => {
           }),
         ),
       )
-      .mockResolvedValue(result(0, "{}"));
+      .mockResolvedValue(
+        result(
+          0,
+          JSON.stringify({ installedPath: "/codex/cache/lemma-codex" }),
+        ),
+      );
 
-    await installLocalPlugin("/new/checkout", runCommand);
+    await expect(installLocalPlugin("/new/checkout", runCommand)).resolves.toBe(
+      resolve("/codex/cache/lemma-codex"),
+    );
 
     expect(runCommand.mock.calls.map(([, args]) => args)).toEqual([
       ["plugin", "marketplace", "add", "/new/checkout", "--json"],
@@ -329,9 +384,16 @@ describe("Lemma Codex setup", () => {
           }),
         ),
       )
-      .mockResolvedValue(result(0, "{}"));
+      .mockResolvedValue(
+        result(
+          0,
+          JSON.stringify({ installedPath: "/codex/cache/lemma-codex" }),
+        ),
+      );
 
-    await installLocalPlugin("/checkout/lemma", runCommand);
+    await expect(
+      installLocalPlugin("/checkout/lemma", runCommand),
+    ).resolves.toBe(resolve("/codex/cache/lemma-codex"));
 
     expect(runCommand.mock.calls.map(([, args]) => args)).toEqual([
       ["plugin", "marketplace", "add", "/checkout/lemma", "--json"],
@@ -377,9 +439,16 @@ describe("Lemma Codex setup", () => {
         ),
       )
       .mockResolvedValueOnce(result(0, JSON.stringify({ installed: [] })))
-      .mockResolvedValue(result(0, "{}"));
+      .mockResolvedValue(
+        result(
+          0,
+          JSON.stringify({ installedPath: "/codex/cache/lemma-codex" }),
+        ),
+      );
 
-    await installLocalPlugin("/checkout/lemma", runCommand);
+    await expect(
+      installLocalPlugin("/checkout/lemma", runCommand),
+    ).resolves.toBe(resolve("/codex/cache/lemma-codex"));
 
     expect(runCommand.mock.calls.map(([, args]) => args)).toEqual([
       ["plugin", "marketplace", "add", "/checkout/lemma", "--json"],

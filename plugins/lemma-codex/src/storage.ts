@@ -345,11 +345,7 @@ export async function removeTurn(
 
 export async function removeAbandonedTurns(
   dataDir: string,
-  options: {
-    sessionId: string;
-    currentTurnId: string;
-    olderThan: Date;
-  },
+  options: { olderThan: Date },
 ): Promise<number> {
   const directory = join(dataDir, "turns");
   const entries = await readdir(directory).catch((error: unknown) => {
@@ -361,11 +357,8 @@ export async function removeAbandonedTurns(
     const path = join(directory, entry);
     const value = await readJson(path);
     if (!isCodingAgentTurn(value) || value.status !== "open") continue;
-    const supersededInSession =
-      value.sessionId === options.sessionId &&
-      value.turnId !== options.currentTurnId;
     const isExpired = Date.parse(value.startedAt) < options.olderThan.getTime();
-    if (!supersededInSession && !isExpired) continue;
+    if (!isExpired) continue;
     await unlink(path).catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     });
@@ -418,20 +411,15 @@ export async function listPendingTurns(dataDir: string): Promise<
   return pending;
 }
 
-export async function readPendingTurn(
-  path: string,
-): Promise<
-  | {
-      path: string;
-      apiUrl: string;
-      projectId: string;
-      turn: CompletedCodingAgentTurn;
-      deliveryId?: string;
-      readyAt?: string;
-      sourceRevision?: string;
-    }
-  | null
-> {
+export async function readPendingTurn(path: string): Promise<{
+  path: string;
+  apiUrl: string;
+  projectId: string;
+  turn: CompletedCodingAgentTurn;
+  deliveryId?: string;
+  readyAt?: string;
+  sourceRevision?: string;
+} | null> {
   const value = await readJson(path);
   if (value === null) return null;
   if (!isPendingCodingAgentTurn(value)) {
