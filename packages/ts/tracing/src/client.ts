@@ -188,6 +188,7 @@ type SdkTraceSpanPayload = {
 /** Lemma SDK provenance — lets Analytics attribute coverage gaps. */
 export type SdkIntegration =
   | "manual"
+  | "coding-agent"
   | "vercel-ai"
   | "langchain"
   | "openai-agents"

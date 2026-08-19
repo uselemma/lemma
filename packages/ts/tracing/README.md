@@ -186,6 +186,45 @@ await lemma.ingest(context, { startedAt });
 
 `ingest()` is not an incremental merge API: omitted root fields do not preserve prior values, and after Lemma processes the trace once, a later re-delivery does not re-run issue extraction (occasional late child spans may still append to the tree for display). Retries of the same complete payload are safe — already-stored span IDs are skipped — so a failed send can be retried as-is. It throws on a non-2xx response and never mutates the trace's status.
 
+## Coding Agent Harness Turns
+
+Harness adapters receive prompts, tools, and responses as separate lifecycle
+events, often in separate processes. The coding-agent helpers reduce those
+events into a serializable turn and materialize one complete trace only after
+the assistant response arrives:
+
+```typescript
+import {
+  codingAgentTurnTrace,
+  completeCodingAgentTurn,
+  recordCodingAgentToolResult,
+  recordCodingAgentToolStart,
+  startCodingAgentTurn,
+} from "@uselemma/tracing";
+
+let turn = startCodingAgentTurn({
+  harness: "codex",
+  sessionId,
+  turnId,
+  prompt,
+  startedAt,
+});
+turn = recordCodingAgentToolStart(turn, toolStart);
+turn = recordCodingAgentToolResult(turn, toolResult);
+const completed = completeCodingAgentTurn(turn, { response, endedAt });
+const trace = codingAgentTurnTrace(completed);
+
+await lemma.ingest(trace.context, {
+  startedAt: new Date(trace.startedAt),
+  endedAt: new Date(trace.endedAt),
+});
+```
+
+Each user turn is its own trace. `sessionId` becomes `thread_id`, so the turns
+remain one conversation without delaying delivery until the harness session
+closes. Persist the turn between events and retry only the same completed turn;
+do not send partial snapshots to the append-only ingest endpoint.
+
 ## Vercel AI SDK
 
 Pass a fresh `vercelAI()` to the AI SDK telemetry integrations option for each operation. The integration creates and closes the Lemma trace for the AI SDK run, puts the current user turn on the root, promotes `threadId` / `userId` from telemetry metadata, and records model calls and tool executions as child spans. AI SDK v7 uses `telemetry`; AI SDK v6 uses `experimental_telemetry`.

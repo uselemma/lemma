@@ -23,6 +23,23 @@ export {
   normalizeTokenUsage,
   toWireTokenUsage,
 } from "./client";
+export {
+  codingAgentTurnTrace,
+  completeCodingAgentTurn,
+  recordCodingAgentToolResult,
+  recordCodingAgentToolStart,
+  startCodingAgentTurn,
+  type CodingAgentHarnessId,
+  type CodingAgentToolCall,
+  type CodingAgentToolResult,
+  type CodingAgentToolStart,
+  type CodingAgentTurn,
+  type CodingAgentTurnTrace,
+  type CompleteCodingAgentTurnOptions,
+  type CompletedCodingAgentTurn,
+  type OpenCodingAgentTurn,
+  type StartCodingAgentTurnOptions,
+} from "./coding-agent";
 export { normalizeRelease, RELEASE_MAX_LENGTH } from "./release";
 export {
   disableDebugMode,
