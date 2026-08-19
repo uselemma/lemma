@@ -14,9 +14,12 @@ export type CodingAgentToolCall = {
   input?: unknown;
   output?: unknown;
   error?: unknown;
-  startedAt: string;
+  startedAt?: string;
   endedAt?: string;
 };
+
+const MISSING_TOOL_RESULT_ERROR =
+  "Coding agent turn completed without a tool result";
 
 type CodingAgentTurnBase = {
   version: 1;
@@ -164,7 +167,7 @@ export function recordCodingAgentToolResult(
     output: event.output,
     error: event.error,
     startedAt:
-      existingIndex >= 0 ? open.tools[existingIndex].startedAt : event.endedAt,
+      existingIndex >= 0 ? open.tools[existingIndex].startedAt : undefined,
     endedAt: event.endedAt,
   };
   if (existingIndex < 0) {
@@ -180,8 +183,18 @@ export function completeCodingAgentTurn(
   event: CompleteCodingAgentTurnOptions,
 ): CompletedCodingAgentTurn {
   if (turn.status === "completed") return turn;
+  const tools = turn.tools.map((tool) =>
+    tool.endedAt
+      ? tool
+      : {
+          ...tool,
+          error: tool.error ?? MISSING_TOOL_RESULT_ERROR,
+          endedAt: event.endedAt,
+        },
+  );
   return {
     ...turn,
+    tools,
     status: "completed",
     response: event.response,
     endedAt: event.endedAt,
@@ -208,18 +221,27 @@ export function codingAgentTurnTrace(
   });
 
   for (const tool of turn.tools) {
+    const missingStart = tool.startedAt === undefined;
+    const missingResult = tool.endedAt === undefined;
+    const error = missingResult
+      ? (tool.error ?? MISSING_TOOL_RESULT_ERROR)
+      : tool.error;
     context.recordTool({
       id: tool.toolUseId,
       name: tool.toolName,
       toolName: tool.toolName,
       input: tool.input,
       output: tool.output,
-      error: tool.error,
-      status: tool.error === undefined ? "OK" : "ERROR",
-      startedAt: tool.startedAt,
-      endedAt: tool.endedAt ?? tool.startedAt,
+      error,
+      status: error == null ? "OK" : "ERROR",
+      startedAt: tool.startedAt ?? turn.startedAt,
+      endedAt: tool.endedAt ?? turn.endedAt,
       attributes,
-      metadata: { tool_use_id: tool.toolUseId },
+      metadata: {
+        tool_use_id: tool.toolUseId,
+        ...(missingStart ? { start_time_missing: true } : {}),
+        ...(missingResult ? { result_missing: true } : {}),
+      },
     });
   }
 

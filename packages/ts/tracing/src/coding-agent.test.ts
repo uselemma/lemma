@@ -202,9 +202,102 @@ describe("coding-agent turn assembly", () => {
         toolName: "read_file",
         input: { path: "README.md" },
         error: "permission denied",
-        startedAt: "2026-08-19T10:00:01.000Z",
         endedAt: "2026-08-19T10:00:01.000Z",
       }),
     ]);
+    expect(open.tools[0].startedAt).toBeUndefined();
+  });
+
+  it("closes tools with missing results as errors when the turn completes", async () => {
+    const completed = completeCodingAgentTurn(
+      recordCodingAgentToolStart(
+        startCodingAgentTurn({
+          harness: "codex",
+          sessionId: "session-1",
+          turnId: "turn-1",
+          prompt: "run a tool",
+          startedAt: "2026-08-19T10:00:00.000Z",
+        }),
+        {
+          toolUseId: "tool-1",
+          toolName: "exec_command",
+          startedAt: "2026-08-19T10:00:01.000Z",
+        },
+      ),
+      {
+        response: "The tool result was lost.",
+        endedAt: "2026-08-19T10:00:02.000Z",
+      },
+    );
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "scoped-key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      baseUrl: "https://api.example.test",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const assembled = codingAgentTurnTrace(completed);
+    await lemma.ingest(assembled.context, {
+      startedAt: new Date(assembled.startedAt),
+      endedAt: new Date(assembled.endedAt),
+    });
+
+    expect(completed.tools[0]).toMatchObject({
+      error: "Coding agent turn completed without a tool result",
+      endedAt: "2026-08-19T10:00:02.000Z",
+    });
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).toMatchObject({
+      status: "ERROR",
+      error: "Coding agent turn completed without a tool result",
+      ended_at: "2026-08-19T10:00:02.000Z",
+    });
+  });
+
+  it("treats a null tool error as success and marks missing starts", async () => {
+    const completed = completeCodingAgentTurn(
+      recordCodingAgentToolResult(
+        startCodingAgentTurn({
+          harness: "codex",
+          sessionId: "session-1",
+          turnId: "turn-1",
+          prompt: "read a file",
+          startedAt: "2026-08-19T10:00:00.000Z",
+        }),
+        {
+          toolUseId: "tool-1",
+          toolName: "read_file",
+          error: null,
+          endedAt: "2026-08-19T10:00:01.000Z",
+        },
+      ),
+      {
+        response: "Done.",
+        endedAt: "2026-08-19T10:00:02.000Z",
+      },
+    );
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "scoped-key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      baseUrl: "https://api.example.test",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const assembled = codingAgentTurnTrace(completed);
+    await lemma.ingest(assembled.context, {
+      startedAt: new Date(assembled.startedAt),
+      endedAt: new Date(assembled.endedAt),
+    });
+
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).toMatchObject({
+      status: "OK",
+      started_at: "2026-08-19T10:00:00.000Z",
+      ended_at: "2026-08-19T10:00:01.000Z",
+      metadata: {
+        tool_use_id: "tool-1",
+        start_time_missing: true,
+      },
+    });
   });
 });
