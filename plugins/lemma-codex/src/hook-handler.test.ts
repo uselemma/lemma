@@ -32,7 +32,7 @@ afterEach(async () => {
 });
 
 describe("Codex hook turn assembly", () => {
-  it("sends one complete trace per Stop and links turns by session", async () => {
+  it("sends one complete trace per authoritative completion notification and links turns by session", async () => {
     const dataDir = await temporaryDataDir();
     const sent: CompletedCodingAgentTurn[] = [];
     const sendTrace = vi.fn(async ({ turn }) => {
@@ -79,10 +79,10 @@ describe("Codex hook turn assembly", () => {
     );
     await handleCodexHook(
       {
-        hook_event_name: "Stop",
-        session_id: "session-1",
-        turn_id: "turn-1",
-        last_assistant_message: "I found the package manifest.",
+        type: "agent-turn-complete",
+        "thread-id": "session-1",
+        "turn-id": "turn-1",
+        "last-assistant-message": "I found the package manifest.",
         timestamp: "2026-08-19T10:00:03.000Z",
       },
       { dataDir, sendTrace },
@@ -100,7 +100,7 @@ describe("Codex hook turn assembly", () => {
     );
     await handleCodexHook(
       {
-        hook_event_name: "Stop",
+        type: "agent-turn-complete",
         session_id: "session-1",
         turn_id: "turn-2",
         last_assistant_message: "It is a TypeScript package.",
@@ -137,7 +137,7 @@ describe("Codex hook turn assembly", () => {
     expect(await listPendingTurns(dataDir)).toEqual([]);
   });
 
-  it("retains a failed Stop delivery and retries it on the next prompt", async () => {
+  it("retains a failed completion delivery and retries it on the next prompt", async () => {
     const dataDir = await temporaryDataDir();
     const warnings: string[] = [];
     let attempts = 0;
@@ -157,7 +157,7 @@ describe("Codex hook turn assembly", () => {
     );
     await handleCodexHook(
       {
-        hook_event_name: "Stop",
+        type: "agent-turn-complete",
         session_id: "session-1",
         turn_id: "turn-1",
         last_assistant_message: "done",
@@ -201,7 +201,7 @@ describe("Codex hook turn assembly", () => {
     );
     await handleCodexHook(
       {
-        hook_event_name: "Stop",
+        type: "agent-turn-complete",
         session_id: "session-1",
         turn_id: "turn-1",
         last_assistant_message: "done",
@@ -246,7 +246,7 @@ describe("Codex hook turn assembly", () => {
     );
     await handleCodexHook(
       {
-        hook_event_name: "Stop",
+        type: "agent-turn-complete",
         session_id: "session-1",
         turn_id: "turn-1",
         last_assistant_message: "private project one response",
@@ -293,7 +293,7 @@ describe("Codex hook turn assembly", () => {
       );
       await handleCodexHook(
         {
-          hook_event_name: "Stop",
+          type: "agent-turn-complete",
           session_id: "session-1",
           turn_id: turnId,
           last_assistant_message: "done",
@@ -360,7 +360,7 @@ describe("Codex hook turn assembly", () => {
     );
     await handleCodexHook(
       {
-        hook_event_name: "Stop",
+        type: "agent-turn-complete",
         session_id: "session-1",
         turn_id: "turn-1",
         last_assistant_message: "The tool failed.",
@@ -368,7 +368,7 @@ describe("Codex hook turn assembly", () => {
       { dataDir, sendTrace: async ({ turn }) => void sent.push(turn) },
     );
 
-    expect(sent[0].tools[0].error).toMatchObject({ isError: true });
+    expect(sent[0].tools[0].error).toContain('"isError":true');
   });
 
   it("marks nonzero command exits found in the Codex transcript as failed", async () => {
@@ -411,7 +411,7 @@ describe("Codex hook turn assembly", () => {
 
     await handleCodexHook(
       {
-        hook_event_name: "Stop",
+        type: "agent-turn-complete",
         session_id: "session-1",
         turn_id: "turn-1",
         last_assistant_message: "The command failed.",
@@ -441,7 +441,7 @@ describe("Codex hook turn assembly", () => {
     }
     await handleCodexHook(
       {
-        hook_event_name: "Stop",
+        type: "agent-turn-complete",
         session_id: "session-1",
         turn_id: "turn-1",
         last_assistant_message: "Done.",
@@ -454,7 +454,7 @@ describe("Codex hook turn assembly", () => {
     );
   });
 
-  it("replaces an early Stop candidate when another Stop hook continues the turn", async () => {
+  it("does not finalize from a Stop hook before Codex confirms turn completion", async () => {
     const dataDir = await temporaryDataDir();
     const sent: CompletedCodingAgentTurn[] = [];
     await handleCodexHook(
@@ -466,34 +466,29 @@ describe("Codex hook turn assembly", () => {
       },
       { dataDir },
     );
-    await handleCodexHook(
-      {
-        hook_event_name: "Stop",
-        session_id: "session-1",
-        turn_id: "turn-1",
-        last_assistant_message: "Initial response",
-        stop_hook_active: false,
-      },
-      { dataDir, settleDelayMs: 60_000 },
-    );
-    expect((await listPendingTurns(dataDir))[0].turn.response).toBe(
-      "Initial response",
-    );
+    await expect(
+      handleCodexHook(
+        {
+          hook_event_name: "Stop",
+          session_id: "session-1",
+          turn_id: "turn-1",
+          last_assistant_message: "Initial response",
+          stop_hook_active: false,
+        },
+        { dataDir },
+      ),
+    ).resolves.toEqual({ status: "ignored" });
+    expect(await listPendingTurns(dataDir)).toEqual([]);
 
     await handleCodexHook(
       {
-        hook_event_name: "Stop",
+        type: "agent-turn-complete",
         session_id: "session-1",
         turn_id: "turn-1",
         last_assistant_message: "Final continued response",
-        stop_hook_active: true,
       },
-      { dataDir, settleDelayMs: 0 },
+      { dataDir, sendTrace: async ({ turn }) => void sent.push(turn) },
     );
-    await flushPendingTurns({
-      dataDir,
-      sendTrace: async ({ turn }) => void sent.push(turn),
-    });
 
     expect(sent).toHaveLength(1);
     expect(sent[0].response).toBe("Final continued response");
@@ -529,7 +524,7 @@ describe("Codex hook turn assembly", () => {
     );
     await handleCodexHook(
       {
-        hook_event_name: "Stop",
+        type: "agent-turn-complete",
         session_id: "session-1",
         turn_id: "turn-1",
         last_assistant_message: "The tool did not run.",
@@ -603,7 +598,7 @@ describe("Codex hook turn assembly", () => {
     );
     await handleCodexHook(
       {
-        hook_event_name: "Stop",
+        type: "agent-turn-complete",
         session_id: "session-1",
         turn_id: "turn-1",
         last_assistant_message: "done",

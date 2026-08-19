@@ -1,12 +1,17 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse } from "smol-toml";
 
 import {
   resolveDataDir,
   writeDataDirLocation,
   writeCredentials,
+  writeNotifyForwarder,
   type LemmaCodexCredentials,
 } from "./storage.js";
 
@@ -38,6 +43,7 @@ export type SetupOptions = {
   openBrowser?: boolean;
   installPlugin?: boolean;
   marketplaceRoot?: string;
+  codexHome?: string;
 };
 
 export type SetupDependencies = {
@@ -47,6 +53,11 @@ export type SetupDependencies = {
   sleep?: (milliseconds: number) => Promise<void>;
   output?: (message: string) => void;
   persistDataDirLocation?: (dataDir: string) => Promise<void>;
+  configureNotify?: (input: {
+    dataDir: string;
+    notifyRuntimePath: string;
+    codexHome?: string;
+  }) => Promise<void>;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -65,6 +76,150 @@ function normalizedApiUrl(value: string): string {
     throw new Error("Lemma API URL must use HTTPS (or localhost HTTP)");
   }
   return url.toString().replace(/\/$/, "");
+}
+
+function codexConfigPath(codexHome?: string): string {
+  const root =
+    codexHome || process.env.CODEX_HOME?.trim() || join(homedir(), ".codex");
+  return join(resolve(root), "config.toml");
+}
+
+function notifyAssignmentRange(
+  source: string,
+): { start: number; end: number } | null {
+  let offset = 0;
+  let assignmentStart = -1;
+  let equalsAt = -1;
+  for (const line of source.match(/.*(?:\r?\n|$)/g) ?? []) {
+    if (/^\s*\[/.test(line)) break;
+    const match = line.match(/^\s*notify\s*=/);
+    if (match) {
+      assignmentStart = offset;
+      equalsAt = offset + match[0].lastIndexOf("=");
+      break;
+    }
+    offset += line.length;
+  }
+  if (assignmentStart < 0 || equalsAt < 0) return null;
+
+  let depth = 0;
+  let foundArray = false;
+  let quote: '"' | "'" | null = null;
+  let escaped = false;
+  let comment = false;
+  for (let index = equalsAt + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (comment) {
+      if (character === "\n") comment = false;
+      continue;
+    }
+    if (quote) {
+      if (quote === '"' && escaped) {
+        escaped = false;
+        continue;
+      }
+      if (quote === '"' && character === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (character === quote) quote = null;
+      continue;
+    }
+    if (character === "#") {
+      comment = true;
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      continue;
+    }
+    if (character === "[") {
+      foundArray = true;
+      depth += 1;
+      continue;
+    }
+    if (character !== "]" || !foundArray) continue;
+    depth -= 1;
+    if (depth !== 0) continue;
+    const newline = source.indexOf("\n", index);
+    return {
+      start: assignmentStart,
+      end: newline < 0 ? source.length : newline + 1,
+    };
+  }
+  throw new Error("Codex notify configuration is not a complete TOML array");
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((entry) => typeof entry === "string")
+  );
+}
+
+function isLemmaNotifier(command: string[]): boolean {
+  const script = command[1]?.replaceAll("\\", "/");
+  return script?.endsWith("/runtime/notify.mjs") === true;
+}
+
+function tomlStringArray(values: string[]): string {
+  return `[${values.map((value) => JSON.stringify(value)).join(", ")}]`;
+}
+
+async function writePrivateFile(path: string, contents: string): Promise<void> {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  await writeFile(temporaryPath, contents, { encoding: "utf8", mode: 0o600 });
+  if (process.platform !== "win32") await chmod(temporaryPath, 0o600);
+  await rename(temporaryPath, path);
+  if (process.platform !== "win32") await chmod(path, 0o600);
+}
+
+export async function configureCodexNotify(input: {
+  dataDir: string;
+  notifyRuntimePath: string;
+  codexHome?: string;
+}): Promise<void> {
+  const configPath = codexConfigPath(input.codexHome);
+  const source = await readFile(configPath, "utf8").catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return "";
+      throw error;
+    },
+  );
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = parse(source) as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(
+      `Could not parse ${configPath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const current = parsed.notify;
+  if (current !== undefined && !isStringArray(current)) {
+    throw new Error("Codex notify must be an array of command strings");
+  }
+
+  const next = [process.execPath, resolve(input.notifyRuntimePath)];
+  if (isStringArray(current) && current.length > 0 && isLemmaNotifier(current)) {
+    if (current[0] === next[0] && resolve(current[1] ?? "") === next[1]) return;
+  } else {
+    await writeNotifyForwarder(input.dataDir, {
+      version: 1,
+      command: isStringArray(current) && current.length > 0 ? current : null,
+    });
+  }
+
+  const assignment = `notify = ${tomlStringArray(next)}\n`;
+  const range = notifyAssignmentRange(source);
+  if (current !== undefined && !range) {
+    throw new Error(
+      "Codex notify uses an unsupported quoted or dotted key; configure it as a root `notify = [...]` assignment",
+    );
+  }
+  const nextSource = range
+    ? `${source.slice(0, range.start)}${assignment}${source.slice(range.end)}`
+    : `${assignment}${source.length > 0 ? "\n" : ""}${source}`;
+  await writePrivateFile(configPath, nextSource);
 }
 
 async function jsonResponse(response: Response): Promise<unknown> {
@@ -397,6 +552,15 @@ function inferredMarketplaceRoot(): string | null {
     : null;
 }
 
+function inferredNotifyRuntimePath(): string {
+  return resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "runtime",
+    "notify.mjs",
+  );
+}
+
 export async function runSetup(
   options: SetupOptions = {},
   dependencies: SetupDependencies = {},
@@ -478,6 +642,11 @@ export async function runSetup(
     await (dependencies.persistDataDirLocation ?? writeDataDirLocation)(
       dataDir,
     );
+    await (dependencies.configureNotify ?? configureCodexNotify)({
+      dataDir,
+      notifyRuntimePath: inferredNotifyRuntimePath(),
+      codexHome: options.codexHome,
+    });
     output(`Lemma Codex is connected to project ${result.projectId}.`);
     return credentials;
   }

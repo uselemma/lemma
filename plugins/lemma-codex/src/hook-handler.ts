@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { createInterface } from "node:readline";
 
 import {
   Lemma,
@@ -26,10 +27,11 @@ import {
   writeTurn,
 } from "./storage.js";
 
-type HookEventName = "UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "Stop";
+type HookEventName = "UserPromptSubmit" | "PreToolUse" | "PostToolUse";
+type TurnCompleteEventName = "AgentTurnComplete";
+type CodexEventName = HookEventName | TurnCompleteEventName;
 
 const OPEN_TURN_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
-const STOP_SETTLE_DELAY_MS = 30_000;
 
 export type CodexHookInput = Record<string, unknown> & {
   hook_event_name?: unknown;
@@ -46,14 +48,13 @@ export type HookHandlerDependencies = {
     accessToken: string;
     turn: Parameters<typeof codingAgentTurnTrace>[0];
   }) => Promise<void>;
-  settleDelayMs?: number;
   waitUntilReady?: boolean;
   warn?: (message: string) => void;
 };
 
 export type HookHandlerResult =
   | { status: "ignored" }
-  | { status: "recorded"; event: HookEventName }
+  | { status: "recorded"; event: CodexEventName }
   | { status: "queued"; traceId: string };
 
 function stringField(input: CodexHookInput, name: string): string | undefined {
@@ -61,16 +62,24 @@ function stringField(input: CodexHookInput, name: string): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function eventName(input: CodexHookInput): HookEventName | null {
+function eventName(input: CodexHookInput): CodexEventName | null {
+  if (input.type === "agent-turn-complete") return "AgentTurnComplete";
   switch (input.hook_event_name) {
     case "UserPromptSubmit":
     case "PreToolUse":
     case "PostToolUse":
-    case "Stop":
       return input.hook_event_name;
     default:
       return null;
   }
+}
+
+function sessionId(input: CodexHookInput): string | undefined {
+  return stringField(input, "session_id") ?? stringField(input, "thread-id");
+}
+
+function turnId(input: CodexHookInput): string | undefined {
+  return stringField(input, "turn_id") ?? stringField(input, "turn-id");
 }
 
 function isMainAgent(input: CodexHookInput): boolean {
@@ -173,38 +182,43 @@ async function reconcileTranscriptToolFailures(
 ): Promise<CodingAgentTurn> {
   const path = transcriptPath(input, turn);
   if (!path) return turn;
-  let transcript: string;
+  const toolIds = new Set(turn.tools.map((tool) => tool.toolUseId));
+  const failures = new Map<string, { code: number; output: unknown }>();
   try {
-    transcript = await readFile(path, "utf8");
+    const lines = createInterface({
+      input: createReadStream(path, { encoding: "utf8" }),
+      crlfDelay: Infinity,
+    });
+    for await (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const entry = JSON.parse(line) as unknown;
+        if (!isRecord(entry) || entry.type !== "response_item") continue;
+        const payload = entry.payload;
+        if (
+          !isRecord(payload) ||
+          payload.type !== "function_call_output" ||
+          typeof payload.call_id !== "string" ||
+          !toolIds.has(payload.call_id)
+        ) {
+          continue;
+        }
+        const code = exitCode(payload.output);
+        if (code !== undefined && code !== 0) {
+          failures.set(payload.call_id, { code, output: payload.output });
+        }
+      } catch {
+        // Ignore malformed or partially written JSONL records. The completion
+        // notification itself is authoritative even when transcript repair is
+        // unavailable.
+      }
+    }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return turn;
     warn?.(
       `Lemma Codex could not inspect the transcript for tool exit codes: ${error instanceof Error ? error.message : String(error)}`,
     );
     return turn;
-  }
-
-  const failures = new Map<string, { code: number; output: unknown }>();
-  for (const line of transcript.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      const entry = JSON.parse(line) as unknown;
-      if (!isRecord(entry) || entry.type !== "response_item") continue;
-      const payload = entry.payload;
-      if (
-        !isRecord(payload) ||
-        payload.type !== "function_call_output" ||
-        typeof payload.call_id !== "string"
-      ) {
-        continue;
-      }
-      const code = exitCode(payload.output);
-      if (code !== undefined && code !== 0) {
-        failures.set(payload.call_id, { code, output: payload.output });
-      }
-    } catch {
-      // A partially written JSONL tail is safe to ignore; later Stop hooks retry.
-    }
   }
 
   return turn.tools.reduce((current, tool) => {
@@ -377,9 +391,9 @@ export async function handleCodexHook(
 ): Promise<HookHandlerResult> {
   const event = eventName(input);
   if (!event || !isMainAgent(input)) return { status: "ignored" };
-  const sessionId = stringField(input, "session_id");
-  const turnId = stringField(input, "turn_id");
-  if (!sessionId || !turnId) return { status: "ignored" };
+  const currentSessionId = sessionId(input);
+  const currentTurnId = turnId(input);
+  if (!currentSessionId || !currentTurnId) return { status: "ignored" };
 
   const dataDir = resolveDataDir({ dataDir: dependencies.dataDir });
   const now = dependencies.now ?? (() => new Date());
@@ -388,15 +402,19 @@ export async function handleCodexHook(
     const prompt = stringField(input, "prompt");
     if (!prompt) return { status: "ignored" };
     const startedAt = eventTimestamp(input, now);
-    await withSessionLock(dataDir, sessionId, async () => {
+    await withSessionLock(dataDir, currentSessionId, async () => {
       await removeAbandonedTurns(dataDir, {
-        sessionId,
-        currentTurnId: turnId,
+        sessionId: currentSessionId,
+        currentTurnId,
         olderThan: new Date(
           new Date(startedAt).getTime() - OPEN_TURN_MAX_AGE_MS,
         ),
       });
-      const existing = await readTurn(dataDir, sessionId, turnId);
+      const existing = await readTurn(
+        dataDir,
+        currentSessionId,
+        currentTurnId,
+      );
       if (existing?.status === "open") {
         await removePendingTurn(dataDir, existing.traceId);
         await writeTurn(dataDir, {
@@ -414,8 +432,8 @@ export async function handleCodexHook(
         dataDir,
         startCodingAgentTurn({
           harness: "codex",
-          sessionId,
-          turnId,
+          sessionId: currentSessionId,
+          turnId: currentTurnId,
           prompt,
           startedAt,
           model: stringField(input, "model"),
@@ -432,8 +450,8 @@ export async function handleCodexHook(
     const toolUseId = stringField(input, "tool_use_id");
     const toolName = stringField(input, "tool_name");
     if (!toolUseId || !toolName) return { status: "ignored" };
-    await withSessionLock(dataDir, sessionId, async () => {
-      const turn = await readTurn(dataDir, sessionId, turnId);
+    await withSessionLock(dataDir, currentSessionId, async () => {
+      const turn = await readTurn(dataDir, currentSessionId, currentTurnId);
       if (!turn || turn.status !== "open") return;
       await removePendingTurn(dataDir, turn.traceId);
       await writeTurn(
@@ -453,8 +471,8 @@ export async function handleCodexHook(
     const toolUseId = stringField(input, "tool_use_id");
     const toolName = stringField(input, "tool_name");
     if (!toolUseId || !toolName) return { status: "ignored" };
-    await withSessionLock(dataDir, sessionId, async () => {
-      const turn = await readTurn(dataDir, sessionId, turnId);
+    await withSessionLock(dataDir, currentSessionId, async () => {
+      const turn = await readTurn(dataDir, currentSessionId, currentTurnId);
       if (!turn || turn.status !== "open") return;
       await removePendingTurn(dataDir, turn.traceId);
       await writeTurn(
@@ -472,16 +490,15 @@ export async function handleCodexHook(
     return { status: "recorded", event };
   }
 
-  const response = stringField(input, "last_assistant_message") ?? "";
+  const response =
+    stringField(input, "last_assistant_message") ??
+    stringField(input, "last-assistant-message") ??
+    "";
   const endedAt = eventTimestamp(input, now);
-  const settleDelayMs =
-    dependencies.settleDelayMs ??
-    (dependencies.sendTrace ? 0 : STOP_SETTLE_DELAY_MS);
-  const readyAt = new Date(now().getTime() + settleDelayMs).toISOString();
   const credentials = await readCredentials(dataDir);
   let traceId: string | null = null;
-  await withSessionLock(dataDir, sessionId, async () => {
-    const turn = await readTurn(dataDir, sessionId, turnId);
+  await withSessionLock(dataDir, currentSessionId, async () => {
+    const turn = await readTurn(dataDir, currentSessionId, currentTurnId);
     if (!turn) return;
     const reconciledTurn = await reconcileTranscriptToolFailures(
       turn,
@@ -511,7 +528,6 @@ export async function handleCodexHook(
     if (credentials) {
       await writeTurn(dataDir, closedTurn);
       await queueCompletedTurn(dataDir, completed, credentials, {
-        readyAt,
         sourceRevision: codingAgentTurnRevision(closedTurn),
       });
     }

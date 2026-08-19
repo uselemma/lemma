@@ -25,20 +25,25 @@ node plugins/lemma-codex/scripts/setup.mjs --api-url https://dev.api.uselemma.ai
 ```
 
 Setup adds this checkout as the `lemma-local` Codex marketplace, installs the
-plugin from `./plugins/lemma-codex`, starts a browser login, and stores the
-resulting project-scoped ingest credential. The approval page chooses the
-Lemma project. No general Lemma API key is issued.
+plugin from `./plugins/lemma-codex`, starts a browser login, stores the
+resulting project-scoped ingest credential, and configures Codex's
+`agent-turn-complete` notifier. The approval page chooses the Lemma project.
+No general Lemma API key is issued. If `notify` is already configured, Lemma
+forwards every notification to the existing command.
 
 Codex treats hook commands as executable code. On first use, review and trust
-the four Lemma hooks in `/hooks`. This local trust step is separate from any
+the three Lemma hooks in `/hooks`. This local trust step is separate from any
 future public plugin-catalog review.
 
 ## Delivery behavior
 
 - `UserPromptSubmit` opens a serializable turn.
 - `PreToolUse` and `PostToolUse` append full tool context.
-- `Stop` completes and queues the turn before attempting network delivery.
-- A failed delivery stays on disk and retries on the next prompt or Stop.
+- Codex's `agent-turn-complete` notification closes and queues the turn only
+  after every `Stop` hook has settled without requesting continuation.
+- Transcript repair and network delivery run outside hook timeouts.
+- A failed delivery stays on disk and retries on the next prompt or completed
+  turn.
 - Duplicate delivery is safe because trace and span IDs remain stable.
 - Explicit subagent events are ignored in v1.
 
@@ -54,5 +59,6 @@ pnpm --filter @uselemma/codex-plugin test
 pnpm --filter @uselemma/codex-plugin build
 ```
 
-The generated `runtime/hook.mjs` and `scripts/setup.mjs` are committed because
-Codex copies only the plugin directory during local installation.
+The generated `runtime/hook.mjs`, `runtime/notify.mjs`, and
+`scripts/setup.mjs` are committed because Codex copies only the plugin
+directory during local installation.

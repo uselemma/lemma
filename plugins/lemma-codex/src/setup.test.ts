@@ -1,14 +1,20 @@
-import { stat } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { browserCommand, installLocalPlugin, runSetup } from "./setup.js";
+import {
+  browserCommand,
+  configureCodexNotify,
+  installLocalPlugin,
+  runSetup,
+} from "./setup.js";
 import {
   credentialsPath,
   readCredentials,
+  readNotifyForwarder,
   resolveDataDir,
   writeDataDirLocation,
 } from "./storage.js";
@@ -53,6 +59,7 @@ describe("Lemma Codex setup", () => {
     const install = vi.fn(async () => undefined);
     const open = vi.fn(async () => undefined);
     const persistDataDirLocation = vi.fn(async () => undefined);
+    const configureNotify = vi.fn(async () => undefined);
     const output: string[] = [];
 
     const credentials = await runSetup(
@@ -66,6 +73,7 @@ describe("Lemma Codex setup", () => {
         installLocalPlugin: install,
         launchBrowser: open,
         persistDataDirLocation,
+        configureNotify,
         sleep: async () => undefined,
         output: (message) => output.push(message),
       },
@@ -73,6 +81,11 @@ describe("Lemma Codex setup", () => {
 
     expect(install).toHaveBeenCalledWith("/checkout/lemma");
     expect(persistDataDirLocation).toHaveBeenCalledWith(dataDir);
+    expect(configureNotify).toHaveBeenCalledWith({
+      dataDir,
+      notifyRuntimePath: expect.stringMatching(/runtime[/\\]notify\.mjs$/),
+      codexHome: undefined,
+    });
     expect(open).toHaveBeenCalledWith(
       "https://dev.platform.uselemma.ai/connect/coding-harness?user_code=ABCDE-FGHJK",
     );
@@ -94,6 +107,51 @@ describe("Lemma Codex setup", () => {
     if (process.platform !== "win32") {
       expect((await stat(credentialsPath(dataDir))).mode & 0o777).toBe(0o600);
     }
+  });
+
+  it("installs the authoritative turn-complete notifier and forwards an existing notifier", async () => {
+    const root = await mkdtemp(join(tmpdir(), "lemma-codex-notify-test-"));
+    temporaryDirectories.push(root);
+    const codexHome = join(root, "codex-home");
+    const dataDir = join(root, "state");
+    const runtimePath = join(root, "plugin", "runtime", "notify.mjs");
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(
+      join(codexHome, "config.toml"),
+      'notify = [\n  "existing-notifier",\n  "Codex",\n]\n\n[features]\nplugins = true\n',
+    );
+
+    await configureCodexNotify({ dataDir, notifyRuntimePath: runtimePath, codexHome });
+
+    const config = await readFile(join(codexHome, "config.toml"), "utf8");
+    expect(config).toContain(JSON.stringify(process.execPath));
+    expect(config).toContain(JSON.stringify(resolve(runtimePath)));
+    expect(config).toContain("[features]\nplugins = true");
+    await expect(readNotifyForwarder(dataDir)).resolves.toEqual({
+      version: 1,
+      command: ["existing-notifier", "Codex"],
+    });
+  });
+
+  it("keeps the original notifier forwarding state when setup runs again", async () => {
+    const root = await mkdtemp(join(tmpdir(), "lemma-codex-notify-test-"));
+    temporaryDirectories.push(root);
+    const codexHome = join(root, "codex-home");
+    const dataDir = join(root, "state");
+    const runtimePath = join(root, "plugin", "runtime", "notify.mjs");
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(
+      join(codexHome, "config.toml"),
+      'notify = ["existing-notifier"]\n',
+    );
+
+    await configureCodexNotify({ dataDir, notifyRuntimePath: runtimePath, codexHome });
+    await configureCodexNotify({ dataDir, notifyRuntimePath: runtimePath, codexHome });
+
+    await expect(readNotifyForwarder(dataDir)).resolves.toEqual({
+      version: 1,
+      command: ["existing-notifier"],
+    });
   });
 
   it.each([

@@ -18,14 +18,17 @@ describe("Codex plugin layout", () => {
     expect(Object.keys(hooks).sort()).toEqual([
       "PostToolUse",
       "PreToolUse",
-      "Stop",
       "UserPromptSubmit",
     ]);
+    expect(hooks).not.toHaveProperty("Stop");
     expect(hooks).not.toHaveProperty("SessionEnd");
     expect(JSON.stringify(config)).toContain("${PLUGIN_ROOT}/runtime/hook.mjs");
     await expect(
       readFile(resolve(pluginRoot, "runtime", "flush.mjs"), "utf8"),
     ).resolves.toContain("flushPendingTurns");
+    await expect(
+      readFile(resolve(pluginRoot, "runtime", "notify.mjs"), "utf8"),
+    ).resolves.toContain("agent-turn-complete");
   });
 
   it("has no MCP dependency and installs only from the checkout-local marketplace", async () => {

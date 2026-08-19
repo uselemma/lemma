@@ -27,6 +27,11 @@ export type LemmaCodexCredentials = {
   accessToken: string;
 };
 
+export type LemmaCodexNotifyForwarder = {
+  version: 1;
+  command: string[] | null;
+};
+
 type PendingCodingAgentTurn = {
   version: 1;
   apiUrl: string;
@@ -208,6 +213,10 @@ export function credentialsPath(dataDir: string): string {
   return join(dataDir, "credentials.json");
 }
 
+export function notifyForwarderPath(dataDir: string): string {
+  return join(dataDir, "notify-forwarder.json");
+}
+
 function turnPath(dataDir: string, sessionId: string, turnId: string): string {
   return join(dataDir, "turns", `${safeId(`${sessionId}\0${turnId}`)}.json`);
 }
@@ -231,6 +240,35 @@ export async function writeCredentials(
   credentials: LemmaCodexCredentials,
 ): Promise<void> {
   await writeSecureJson(credentialsPath(dataDir), credentials);
+}
+
+export async function readNotifyForwarder(
+  dataDir: string,
+): Promise<LemmaCodexNotifyForwarder | null> {
+  const value = await readJson(notifyForwarderPath(dataDir));
+  if (value === null) return null;
+  if (
+    !isRecord(value) ||
+    value.version !== 1 ||
+    !(
+      value.command === null ||
+      (Array.isArray(value.command) &&
+        value.command.every((entry) => typeof entry === "string"))
+    )
+  ) {
+    throw new Error("Lemma Codex notify forwarding state is invalid");
+  }
+  return {
+    version: 1,
+    command: value.command,
+  };
+}
+
+export async function writeNotifyForwarder(
+  dataDir: string,
+  forwarder: LemmaCodexNotifyForwarder,
+): Promise<void> {
+  await writeSecureJson(notifyForwarderPath(dataDir), forwarder);
 }
 
 export async function writeDataDirLocation(

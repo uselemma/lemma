@@ -11,6 +11,7 @@
   "devDependencies": {
     "@types/node": "^22.18.8",
     "esbuild": "^0.25.11",
+    "smol-toml": "^1.8.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   }

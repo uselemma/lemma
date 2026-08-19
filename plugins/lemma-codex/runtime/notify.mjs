@@ -1,5 +1,12 @@
-// src/flush-entry.ts
+// src/notify-entry.ts
+import { spawn } from "node:child_process";
+import { dirname as dirname2, resolve } from "node:path";
 import { stderr } from "node:process";
+import { fileURLToPath } from "node:url";
+
+// src/hook-handler.ts
+import { createReadStream } from "node:fs";
+import { createInterface } from "node:readline";
 
 // ../../packages/ts/tracing/src/debug-delivery.ts
 var PRODUCTION_BASE_URL = "https://api.uselemma.ai";
@@ -63,7 +70,7 @@ function pickResponseHeaders(headers) {
   return picked;
 }
 function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve2) => setTimeout(resolve2, ms));
 }
 
 // ../../packages/ts/tracing/src/debug-mode.ts
@@ -1383,12 +1390,98 @@ var Lemma = class {
 
 // ../../packages/ts/tracing/src/coding-agent.ts
 var MISSING_TOOL_RESULT_ERROR = "Coding agent turn completed without a tool result";
+function requireOpen(turn) {
+  if (turn.status === "completed") {
+    throw new Error(
+      `Coding agent turn ${turn.sessionId}/${turn.turnId} already completed`
+    );
+  }
+  return turn;
+}
 function harnessAttributes(turn) {
   return {
     "lemma.harness.id": turn.harness,
     "lemma.harness.session_id": turn.sessionId,
     "lemma.harness.turn_id": turn.turnId,
     "lemma.sdk.integration": "coding-agent"
+  };
+}
+function startCodingAgentTurn(options) {
+  return {
+    version: 1,
+    status: "open",
+    harness: options.harness,
+    sessionId: options.sessionId,
+    turnId: options.turnId,
+    traceId: options.traceId ?? crypto.randomUUID(),
+    generationId: options.generationId ?? crypto.randomUUID(),
+    prompt: options.prompt,
+    startedAt: options.startedAt,
+    model: options.model,
+    provider: options.provider,
+    metadata: options.metadata,
+    tools: []
+  };
+}
+function recordCodingAgentToolStart(turn, event) {
+  const open = requireOpen(turn);
+  if (open.tools.some((tool) => tool.toolUseId === event.toolUseId)) {
+    return open;
+  }
+  return {
+    ...open,
+    tools: [
+      ...open.tools,
+      {
+        toolUseId: event.toolUseId,
+        toolName: event.toolName,
+        input: event.input,
+        startedAt: event.startedAt
+      }
+    ]
+  };
+}
+function recordCodingAgentToolResult(turn, event) {
+  const open = requireOpen(turn);
+  const existingIndex = open.tools.findIndex(
+    (tool) => tool.toolUseId === event.toolUseId
+  );
+  const completed = {
+    toolUseId: event.toolUseId,
+    toolName: event.toolName,
+    input: event.input ?? (existingIndex >= 0 ? open.tools[existingIndex].input : void 0),
+    output: event.output,
+    error: failureMessage(event.error) ?? void 0,
+    startedAt: existingIndex >= 0 ? open.tools[existingIndex].startedAt : event.endedAt,
+    endedAt: event.endedAt,
+    startTimeMissing: existingIndex >= 0 ? open.tools[existingIndex].startTimeMissing : true
+  };
+  if (existingIndex < 0) {
+    return { ...open, tools: [...open.tools, completed] };
+  }
+  const tools = [...open.tools];
+  tools[existingIndex] = completed;
+  return { ...open, tools };
+}
+function completeCodingAgentTurn(turn, event) {
+  if (turn.status === "completed") return turn;
+  const tools = turn.tools.map((tool) => {
+    const error = failureMessage(tool.error) ?? void 0;
+    return tool.endedAt ? { ...tool, error } : {
+      ...tool,
+      error: error ?? MISSING_TOOL_RESULT_ERROR,
+      endedAt: event.endedAt,
+      resultMissing: true
+    };
+  });
+  return {
+    ...turn,
+    tools,
+    status: "completed",
+    response: event.response,
+    endedAt: event.endedAt,
+    model: event.model ?? turn.model,
+    provider: event.provider ?? turn.provider
   };
 }
 function codingAgentTurnTrace(turn) {
@@ -1527,6 +1620,20 @@ async function ensurePrivateDirectory(path) {
   await mkdir(path, { recursive: true, mode: 448 });
   if (process.platform !== "win32") await chmod(path, 448);
 }
+async function writeSecureJson(path, value) {
+  const parent = dirname(path);
+  await ensurePrivateDirectory(parent);
+  const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(value)}
+`, {
+    encoding: "utf8",
+    mode: 384,
+    flag: "wx"
+  });
+  if (process.platform !== "win32") await chmod(temporaryPath, 384);
+  await rename(temporaryPath, path);
+  if (process.platform !== "win32") await chmod(path, 384);
+}
 async function readJson(path) {
   try {
     return JSON.parse(await readFile(path, "utf8"));
@@ -1553,8 +1660,14 @@ function isPendingCodingAgentTurn(value) {
 function credentialsPath(dataDir) {
   return join(dataDir, "credentials.json");
 }
-function turnPath(dataDir, sessionId, turnId) {
-  return join(dataDir, "turns", `${safeId(`${sessionId}\0${turnId}`)}.json`);
+function notifyForwarderPath(dataDir) {
+  return join(dataDir, "notify-forwarder.json");
+}
+function turnPath(dataDir, sessionId2, turnId2) {
+  return join(dataDir, "turns", `${safeId(`${sessionId2}\0${turnId2}`)}.json`);
+}
+function pendingPath(dataDir, traceId) {
+  return join(dataDir, "pending", `${safeId(traceId)}.json`);
 }
 async function readCredentials(dataDir) {
   const value = await readJson(credentialsPath(dataDir));
@@ -1563,17 +1676,66 @@ async function readCredentials(dataDir) {
     throw new Error("Lemma Codex credentials are invalid");
   return value;
 }
-async function readTurn(dataDir, sessionId, turnId) {
-  const value = await readJson(turnPath(dataDir, sessionId, turnId));
+async function readNotifyForwarder(dataDir) {
+  const value = await readJson(notifyForwarderPath(dataDir));
+  if (value === null) return null;
+  if (!isRecord(value) || value.version !== 1 || !(value.command === null || Array.isArray(value.command) && value.command.every((entry) => typeof entry === "string"))) {
+    throw new Error("Lemma Codex notify forwarding state is invalid");
+  }
+  return {
+    version: 1,
+    command: value.command
+  };
+}
+async function readTurn(dataDir, sessionId2, turnId2) {
+  const value = await readJson(turnPath(dataDir, sessionId2, turnId2));
   if (value === null) return null;
   if (!isCodingAgentTurn(value))
     throw new Error("Lemma Codex turn state is invalid");
   return value;
 }
-async function removeTurn(dataDir, sessionId, turnId) {
-  await unlink(turnPath(dataDir, sessionId, turnId)).catch((error) => {
+async function writeTurn(dataDir, turn) {
+  await writeSecureJson(turnPath(dataDir, turn.sessionId, turn.turnId), turn);
+}
+async function queueCompletedTurn(dataDir, turn, destination, options = {}) {
+  await writeSecureJson(pendingPath(dataDir, turn.traceId), {
+    version: 1,
+    apiUrl: destination.apiUrl,
+    projectId: destination.projectId,
+    turn,
+    deliveryId: randomUUID(),
+    readyAt: options.readyAt,
+    sourceRevision: options.sourceRevision
+  });
+}
+async function removePendingTurn(dataDir, traceId) {
+  await removePending(pendingPath(dataDir, traceId));
+}
+async function removeTurn(dataDir, sessionId2, turnId2) {
+  await unlink(turnPath(dataDir, sessionId2, turnId2)).catch((error) => {
     if (error.code !== "ENOENT") throw error;
   });
+}
+async function removeAbandonedTurns(dataDir, options) {
+  const directory = join(dataDir, "turns");
+  const entries = await readdir(directory).catch((error) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+  let removed = 0;
+  for (const entry of entries.filter((name) => name.endsWith(".json"))) {
+    const path = join(directory, entry);
+    const value = await readJson(path);
+    if (!isCodingAgentTurn(value) || value.status !== "open") continue;
+    const supersededInSession = value.sessionId === options.sessionId && value.turnId !== options.currentTurnId;
+    const isExpired = Date.parse(value.startedAt) < options.olderThan.getTime();
+    if (!supersededInSession && !isExpired) continue;
+    await unlink(path).catch((error) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+    removed += 1;
+  }
+  return removed;
 }
 async function listPendingTurns(dataDir) {
   const directory = join(dataDir, "pending");
@@ -1614,10 +1776,10 @@ async function removePending(path) {
   });
 }
 function sleep2(milliseconds) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+  return new Promise((resolve2) => setTimeout(resolve2, milliseconds));
 }
-async function withSessionLock(dataDir, sessionId, callback) {
-  const lockDirectory = join(dataDir, "locks", `${safeId(sessionId)}.lock`);
+async function withSessionLock(dataDir, sessionId2, callback) {
+  const lockDirectory = join(dataDir, "locks", `${safeId(sessionId2)}.lock`);
   await ensurePrivateDirectory(dirname(lockDirectory));
   const deadline = Date.now() + 2e3;
   while (true) {
@@ -1646,6 +1808,142 @@ async function withSessionLock(dataDir, sessionId, callback) {
 
 // src/hook-handler.ts
 var OPEN_TURN_MAX_AGE_MS = 24 * 60 * 60 * 1e3;
+function stringField(input, name) {
+  const value = input[name];
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+function eventName(input) {
+  if (input.type === "agent-turn-complete") return "AgentTurnComplete";
+  switch (input.hook_event_name) {
+    case "UserPromptSubmit":
+    case "PreToolUse":
+    case "PostToolUse":
+      return input.hook_event_name;
+    default:
+      return null;
+  }
+}
+function sessionId(input) {
+  return stringField(input, "session_id") ?? stringField(input, "thread-id");
+}
+function turnId(input) {
+  return stringField(input, "turn_id") ?? stringField(input, "turn-id");
+}
+function isMainAgent(input) {
+  return !(stringField(input, "agent_id") || stringField(input, "subagent_id") || stringField(input, "parent_session_id") || input.agent_type === "subagent");
+}
+function eventTimestamp(input, now) {
+  const supplied = stringField(input, "timestamp");
+  if (supplied && !Number.isNaN(Date.parse(supplied))) {
+    return new Date(supplied).toISOString();
+  }
+  return now().toISOString();
+}
+function turnMetadata(input) {
+  return {
+    ...stringField(input, "cwd") ? { "lemma.harness.cwd": stringField(input, "cwd") } : {},
+    ...stringField(input, "transcript_path") ? {
+      "lemma.harness.transcript_path": stringField(
+        input,
+        "transcript_path"
+      )
+    } : {}
+  };
+}
+function toolOutput(input) {
+  return input.tool_response ?? input.tool_output ?? input.response;
+}
+function exitCode(value) {
+  if (typeof value === "string") {
+    const match = value.match(/(?:process exited with code|exit code:)\s*(-?\d+)/i);
+    return match ? Number(match[1]) : void 0;
+  }
+  if (Array.isArray(value)) {
+    for (const nested of value) {
+      const found = exitCode(nested);
+      if (found !== void 0) return found;
+    }
+    return void 0;
+  }
+  if (!isRecord2(value)) return void 0;
+  const direct = value.exit_code ?? value.exitCode;
+  if (typeof direct === "number") return direct;
+  for (const nested of Object.values(value)) {
+    const found = exitCode(nested);
+    if (found !== void 0) return found;
+  }
+  return void 0;
+}
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function toolError(input) {
+  if (input.error !== void 0) return input.error;
+  const output = toolOutput(input);
+  const code = exitCode(output);
+  if (code !== void 0 && code !== 0) {
+    return `Process exited with code ${code}`;
+  }
+  if (typeof output === "object" && output !== null) {
+    if ("error" in output) return output.error;
+    if ("isError" in output && output.isError === true) {
+      return output;
+    }
+  }
+  return void 0;
+}
+function transcriptPath(input, turn) {
+  const current = stringField(input, "transcript_path");
+  if (current) return current;
+  const stored = turn.metadata?.["lemma.harness.transcript_path"];
+  return typeof stored === "string" ? stored : void 0;
+}
+async function reconcileTranscriptToolFailures(turn, input, fallbackEndedAt, warn) {
+  const path = transcriptPath(input, turn);
+  if (!path) return turn;
+  const toolIds = new Set(turn.tools.map((tool) => tool.toolUseId));
+  const failures = /* @__PURE__ */ new Map();
+  try {
+    const lines = createInterface({
+      input: createReadStream(path, { encoding: "utf8" }),
+      crlfDelay: Infinity
+    });
+    for await (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const entry = JSON.parse(line);
+        if (!isRecord2(entry) || entry.type !== "response_item") continue;
+        const payload = entry.payload;
+        if (!isRecord2(payload) || payload.type !== "function_call_output" || typeof payload.call_id !== "string" || !toolIds.has(payload.call_id)) {
+          continue;
+        }
+        const code = exitCode(payload.output);
+        if (code !== void 0 && code !== 0) {
+          failures.set(payload.call_id, { code, output: payload.output });
+        }
+      } catch {
+      }
+    }
+  } catch (error) {
+    if (error.code === "ENOENT") return turn;
+    warn?.(
+      `Lemma Codex could not inspect the transcript for tool exit codes: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return turn;
+  }
+  return turn.tools.reduce((current, tool) => {
+    const failure = failures.get(tool.toolUseId);
+    if (!failure) return current;
+    return recordCodingAgentToolResult(current, {
+      toolUseId: tool.toolUseId,
+      toolName: tool.toolName,
+      input: tool.input,
+      output: tool.output ?? failure.output,
+      error: `Process exited with code ${failure.code}`,
+      endedAt: tool.endedAt ?? fallbackEndedAt
+    });
+  }, turn);
+}
 async function defaultSendTrace(input) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 1e4);
@@ -1762,17 +2060,210 @@ async function flushPendingTurns(dependencies = {}) {
     return sent;
   });
 }
+async function flushWithoutBlockingEvent(dependencies) {
+  if (!dependencies.sendTrace) return;
+  try {
+    await flushPendingTurns(dependencies);
+  } catch (error) {
+    dependencies.warn?.(
+      `Lemma Codex retained a trace for retry: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+async function handleCodexHook(input, dependencies = {}) {
+  const event = eventName(input);
+  if (!event || !isMainAgent(input)) return { status: "ignored" };
+  const currentSessionId = sessionId(input);
+  const currentTurnId = turnId(input);
+  if (!currentSessionId || !currentTurnId) return { status: "ignored" };
+  const dataDir = resolveDataDir({ dataDir: dependencies.dataDir });
+  const now = dependencies.now ?? (() => /* @__PURE__ */ new Date());
+  if (event === "UserPromptSubmit") {
+    const prompt = stringField(input, "prompt");
+    if (!prompt) return { status: "ignored" };
+    const startedAt = eventTimestamp(input, now);
+    await withSessionLock(dataDir, currentSessionId, async () => {
+      await removeAbandonedTurns(dataDir, {
+        sessionId: currentSessionId,
+        currentTurnId,
+        olderThan: new Date(
+          new Date(startedAt).getTime() - OPEN_TURN_MAX_AGE_MS
+        )
+      });
+      const existing = await readTurn(
+        dataDir,
+        currentSessionId,
+        currentTurnId
+      );
+      if (existing?.status === "open") {
+        await removePendingTurn(dataDir, existing.traceId);
+        await writeTurn(dataDir, {
+          ...existing,
+          prompt: existing.prompt === prompt ? existing.prompt : `${existing.prompt}
 
-// src/flush-entry.ts
-try {
-  await flushPendingTurns({
-    waitUntilReady: true,
+${prompt}`,
+          model: stringField(input, "model") ?? existing.model,
+          metadata: { ...existing.metadata ?? {}, ...turnMetadata(input) }
+        });
+        return;
+      }
+      await writeTurn(
+        dataDir,
+        startCodingAgentTurn({
+          harness: "codex",
+          sessionId: currentSessionId,
+          turnId: currentTurnId,
+          prompt,
+          startedAt,
+          model: stringField(input, "model"),
+          provider: "openai",
+          metadata: turnMetadata(input)
+        })
+      );
+    });
+    await flushWithoutBlockingEvent(dependencies);
+    return { status: "recorded", event };
+  }
+  if (event === "PreToolUse") {
+    const toolUseId = stringField(input, "tool_use_id");
+    const toolName = stringField(input, "tool_name");
+    if (!toolUseId || !toolName) return { status: "ignored" };
+    await withSessionLock(dataDir, currentSessionId, async () => {
+      const turn = await readTurn(dataDir, currentSessionId, currentTurnId);
+      if (!turn || turn.status !== "open") return;
+      await removePendingTurn(dataDir, turn.traceId);
+      await writeTurn(
+        dataDir,
+        recordCodingAgentToolStart(turn, {
+          toolUseId,
+          toolName,
+          input: input.tool_input,
+          startedAt: eventTimestamp(input, now)
+        })
+      );
+    });
+    return { status: "recorded", event };
+  }
+  if (event === "PostToolUse") {
+    const toolUseId = stringField(input, "tool_use_id");
+    const toolName = stringField(input, "tool_name");
+    if (!toolUseId || !toolName) return { status: "ignored" };
+    await withSessionLock(dataDir, currentSessionId, async () => {
+      const turn = await readTurn(dataDir, currentSessionId, currentTurnId);
+      if (!turn || turn.status !== "open") return;
+      await removePendingTurn(dataDir, turn.traceId);
+      await writeTurn(
+        dataDir,
+        recordCodingAgentToolResult(turn, {
+          toolUseId,
+          toolName,
+          input: input.tool_input,
+          output: toolOutput(input),
+          error: toolError(input),
+          endedAt: eventTimestamp(input, now)
+        })
+      );
+    });
+    return { status: "recorded", event };
+  }
+  const response = stringField(input, "last_assistant_message") ?? stringField(input, "last-assistant-message") ?? "";
+  const endedAt = eventTimestamp(input, now);
+  const credentials = await readCredentials(dataDir);
+  let traceId = null;
+  await withSessionLock(dataDir, currentSessionId, async () => {
+    const turn = await readTurn(dataDir, currentSessionId, currentTurnId);
+    if (!turn) return;
+    const reconciledTurn = await reconcileTranscriptToolFailures(
+      turn,
+      input,
+      endedAt,
+      dependencies.warn
+    );
+    const closedTurn = reconciledTurn.tools.filter((tool) => !tool.endedAt).reduce(
+      (current, tool) => recordCodingAgentToolResult(current, {
+        toolUseId: tool.toolUseId,
+        toolName: tool.toolName,
+        input: tool.input,
+        error: "Codex ended the turn without a PostToolUse result",
+        endedAt
+      }),
+      reconciledTurn
+    );
+    const completed = completeCodingAgentTurn(closedTurn, {
+      response,
+      endedAt,
+      model: stringField(input, "model"),
+      provider: "openai"
+    });
+    if (credentials) {
+      await writeTurn(dataDir, closedTurn);
+      await queueCompletedTurn(dataDir, completed, credentials, {
+        sourceRevision: codingAgentTurnRevision(closedTurn)
+      });
+    }
+    traceId = credentials ? completed.traceId : null;
+  });
+  if (!credentials) {
+    dependencies.warn?.(
+      "Lemma Codex did not queue the completed turn because setup is incomplete"
+    );
+    return { status: "ignored" };
+  }
+  await flushWithoutBlockingEvent(dependencies);
+  return traceId ? { status: "queued", traceId } : { status: "ignored" };
+}
+
+// src/notify-entry.ts
+function spawnDetached(command, args, label) {
+  try {
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: "ignore",
+      env: process.env
+    });
+    child.once("error", (error) => {
+      stderr.write(`Lemma Codex could not start ${label}: ${error.message}
+`);
+    });
+    child.unref();
+  } catch (error) {
+    stderr.write(
+      `Lemma Codex could not start ${label}: ${error instanceof Error ? error.message : String(error)}
+`
+    );
+  }
+}
+function scheduleTraceDelivery() {
+  const flushEntry = resolve(
+    dirname2(fileURLToPath(import.meta.url)),
+    "flush.mjs"
+  );
+  spawnDetached(process.execPath, [flushEntry], "trace delivery");
+}
+async function main() {
+  const raw = process.argv.at(-1);
+  if (!raw || raw === fileURLToPath(import.meta.url)) return;
+  const input = JSON.parse(raw);
+  const dataDir = resolveDataDir();
+  const forwarder = await readNotifyForwarder(dataDir);
+  if (forwarder?.command?.length) {
+    const [command, ...args] = forwarder.command;
+    spawnDetached(command, [...args, raw], "the existing Codex notifier");
+  }
+  const result = await handleCodexHook(input, {
+    dataDir,
     warn: (message) => stderr.write(`${message}
 `)
   });
+  if (result.status === "queued") scheduleTraceDelivery();
+}
+try {
+  delete process.env.LEMMA_DEBUG;
+  delete process.env.LEMMA_DEBUG_VERIFY;
+  await main();
 } catch (error) {
   stderr.write(
-    `Lemma Codex background delivery failed: ${error instanceof Error ? error.message : String(error)}
+    `Lemma Codex completion notification failed open: ${error instanceof Error ? error.message : String(error)}
 `
   );
 }
