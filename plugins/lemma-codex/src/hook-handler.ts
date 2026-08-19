@@ -506,29 +506,16 @@ export async function handleCodexHook(
       endedAt,
       dependencies.warn,
     );
-    const closedTurn = reconciledTurn.tools
-      .filter((tool) => !tool.endedAt)
-      .reduce(
-        (current, tool) =>
-          recordCodingAgentToolResult(current, {
-            toolUseId: tool.toolUseId,
-            toolName: tool.toolName,
-            input: tool.input,
-            error: "Codex ended the turn without a PostToolUse result",
-            endedAt,
-          }),
-        reconciledTurn,
-      );
-    const completed = completeCodingAgentTurn(closedTurn, {
+    const completed = completeCodingAgentTurn(reconciledTurn, {
       response,
       endedAt,
       model: stringField(input, "model"),
       provider: "openai",
     });
     if (credentials) {
-      await writeTurn(dataDir, closedTurn);
+      await writeTurn(dataDir, reconciledTurn);
       await queueCompletedTurn(dataDir, completed, credentials, {
-        sourceRevision: codingAgentTurnRevision(closedTurn),
+        sourceRevision: codingAgentTurnRevision(reconciledTurn),
       });
     }
     traceId = credentials ? completed.traceId : null;

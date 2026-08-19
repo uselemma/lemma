@@ -1389,7 +1389,7 @@ var Lemma = class {
 };
 
 // ../../packages/ts/tracing/src/coding-agent.ts
-var MISSING_TOOL_RESULT_ERROR = "Coding agent turn completed without a tool result";
+import { createHash } from "node:crypto";
 function requireOpen(turn) {
   if (turn.status === "completed") {
     throw new Error(
@@ -1406,6 +1406,14 @@ function harnessAttributes(turn) {
     "lemma.sdk.integration": "coding-agent"
   };
 }
+function deterministicUuid(value) {
+  const hash = createHash("sha256").update(value).digest("hex");
+  const variant = (8 + Number.parseInt(hash[16], 16) % 4).toString(16);
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-${variant}${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+}
+function turnIdentity(options) {
+  return `${options.harness}\0${options.sessionId}\0${options.turnId}`;
+}
 function startCodingAgentTurn(options) {
   return {
     version: 1,
@@ -1413,8 +1421,10 @@ function startCodingAgentTurn(options) {
     harness: options.harness,
     sessionId: options.sessionId,
     turnId: options.turnId,
-    traceId: options.traceId ?? crypto.randomUUID(),
-    generationId: options.generationId ?? crypto.randomUUID(),
+    traceId: options.traceId ?? deterministicUuid(`lemma-coding-agent-trace\0${turnIdentity(options)}`),
+    generationId: options.generationId ?? deterministicUuid(
+      `lemma-coding-agent-generation\0${turnIdentity(options)}`
+    ),
     prompt: options.prompt,
     startedAt: options.startedAt,
     model: options.model,
@@ -1425,8 +1435,21 @@ function startCodingAgentTurn(options) {
 }
 function recordCodingAgentToolStart(turn, event) {
   const open = requireOpen(turn);
-  if (open.tools.some((tool) => tool.toolUseId === event.toolUseId)) {
-    return open;
+  const existingIndex = open.tools.findIndex(
+    (tool) => tool.toolUseId === event.toolUseId
+  );
+  if (existingIndex >= 0) {
+    const existing = open.tools[existingIndex];
+    if (!existing.startTimeMissing) return open;
+    const tools = [...open.tools];
+    tools[existingIndex] = {
+      ...existing,
+      toolName: event.toolName,
+      input: event.input ?? existing.input,
+      startedAt: event.startedAt,
+      startTimeMissing: void 0
+    };
+    return { ...open, tools };
   }
   return {
     ...open,
@@ -1465,11 +1488,16 @@ function recordCodingAgentToolResult(turn, event) {
 }
 function completeCodingAgentTurn(turn, event) {
   if (turn.status === "completed") return turn;
+  if (event.generationStartedAt === void 0 !== (event.generationEndedAt === void 0)) {
+    throw new Error(
+      "Coding agent generation timing requires both startedAt and endedAt"
+    );
+  }
   const tools = turn.tools.map((tool) => {
     const error = failureMessage(tool.error) ?? void 0;
     return tool.endedAt ? { ...tool, error } : {
       ...tool,
-      error: error ?? MISSING_TOOL_RESULT_ERROR,
+      error,
       endedAt: event.endedAt,
       resultMissing: true
     };
@@ -1481,7 +1509,9 @@ function completeCodingAgentTurn(turn, event) {
     response: event.response,
     endedAt: event.endedAt,
     model: event.model ?? turn.model,
-    provider: event.provider ?? turn.provider
+    provider: event.provider ?? turn.provider,
+    generationStartedAt: event.generationStartedAt,
+    generationEndedAt: event.generationEndedAt
   };
 }
 function codingAgentTurnTrace(turn) {
@@ -1501,7 +1531,7 @@ function codingAgentTurnTrace(turn) {
   for (const tool of turn.tools) {
     const missingStart = tool.startTimeMissing === true || tool.startedAt === void 0;
     const missingResult = tool.resultMissing === true || tool.endedAt === void 0;
-    const error = missingResult ? tool.error ?? MISSING_TOOL_RESULT_ERROR : tool.error;
+    const error = tool.error;
     context.recordTool({
       id: tool.toolUseId,
       name: tool.toolName,
@@ -1509,7 +1539,7 @@ function codingAgentTurnTrace(turn) {
       input: tool.input,
       output: tool.output,
       error,
-      status: error == null ? "OK" : "ERROR",
+      status: error == null ? missingResult ? void 0 : "OK" : "ERROR",
       startedAt: tool.startedAt ?? tool.endedAt ?? turn.endedAt,
       endedAt: tool.endedAt ?? turn.endedAt,
       attributes,
@@ -1520,19 +1550,21 @@ function codingAgentTurnTrace(turn) {
       }
     });
   }
-  context.recordGeneration({
-    id: turn.generationId,
-    name: `${turn.harness} response`,
-    input: turn.prompt,
-    output: turn.response,
-    model: turn.model,
-    llmProvider: turn.provider,
-    llmInputMessages: [{ role: "user", content: turn.prompt }],
-    llmOutputMessages: [{ role: "assistant", content: turn.response }],
-    startedAt: turn.startedAt,
-    endedAt: turn.endedAt,
-    attributes
-  });
+  if (turn.generationStartedAt && turn.generationEndedAt) {
+    context.recordGeneration({
+      id: turn.generationId,
+      name: `${turn.harness} response`,
+      input: turn.prompt,
+      output: turn.response,
+      model: turn.model,
+      llmProvider: turn.provider,
+      llmInputMessages: [{ role: "user", content: turn.prompt }],
+      llmOutputMessages: [{ role: "assistant", content: turn.response }],
+      startedAt: turn.generationStartedAt,
+      endedAt: turn.generationEndedAt,
+      attributes
+    });
+  }
   return {
     context,
     startedAt: turn.startedAt,
@@ -1541,7 +1573,7 @@ function codingAgentTurnTrace(turn) {
 }
 
 // src/storage.ts
-import { createHash, randomUUID } from "node:crypto";
+import { createHash as createHash2, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
   chmod,
@@ -1557,7 +1589,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join, posix, win32 } from "node:path";
 function safeId(value) {
-  return createHash("sha256").update(value).digest("hex");
+  return createHash2("sha256").update(value).digest("hex");
 }
 function pathImplementation(options) {
   return (options.platform ?? process.platform) === "win32" ? win32 : posix;
@@ -1652,7 +1684,7 @@ function isCodingAgentTurn(value) {
   return isRecord(value) && value.version === 1 && (value.status === "open" || value.status === "completed") && typeof value.harness === "string" && typeof value.sessionId === "string" && typeof value.turnId === "string" && typeof value.traceId === "string" && typeof value.generationId === "string" && typeof value.prompt === "string" && typeof value.startedAt === "string" && Array.isArray(value.tools) && (value.status === "open" || typeof value.response === "string" && typeof value.endedAt === "string");
 }
 function codingAgentTurnRevision(turn) {
-  return createHash("sha256").update(JSON.stringify(turn)).digest("hex");
+  return createHash2("sha256").update(JSON.stringify(turn)).digest("hex");
 }
 function isPendingCodingAgentTurn(value) {
   return isRecord(value) && value.version === 1 && typeof value.apiUrl === "string" && typeof value.projectId === "string" && (value.deliveryId === void 0 || typeof value.deliveryId === "string") && (value.readyAt === void 0 || typeof value.readyAt === "string") && (value.sourceRevision === void 0 || typeof value.sourceRevision === "string") && isCodingAgentTurn(value.turn) && value.turn.status === "completed";
@@ -2179,26 +2211,16 @@ ${prompt}`,
       endedAt,
       dependencies.warn
     );
-    const closedTurn = reconciledTurn.tools.filter((tool) => !tool.endedAt).reduce(
-      (current, tool) => recordCodingAgentToolResult(current, {
-        toolUseId: tool.toolUseId,
-        toolName: tool.toolName,
-        input: tool.input,
-        error: "Codex ended the turn without a PostToolUse result",
-        endedAt
-      }),
-      reconciledTurn
-    );
-    const completed = completeCodingAgentTurn(closedTurn, {
+    const completed = completeCodingAgentTurn(reconciledTurn, {
       response,
       endedAt,
       model: stringField(input, "model"),
       provider: "openai"
     });
     if (credentials) {
-      await writeTurn(dataDir, closedTurn);
+      await writeTurn(dataDir, reconciledTurn);
       await queueCompletedTurn(dataDir, completed, credentials, {
-        sourceRevision: codingAgentTurnRevision(closedTurn)
+        sourceRevision: codingAgentTurnRevision(reconciledTurn)
       });
     }
     traceId = credentials ? completed.traceId : null;

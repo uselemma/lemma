@@ -497,7 +497,7 @@ describe("Codex hook turn assembly", () => {
     ).resolves.toBeNull();
   });
 
-  it("marks tools without a PostToolUse result as failed", async () => {
+  it("marks tools without a PostToolUse result as missing telemetry", async () => {
     const dataDir = await temporaryDataDir();
     const sent: CompletedCodingAgentTurn[] = [];
     await handleCodexHook(
@@ -534,9 +534,10 @@ describe("Codex hook turn assembly", () => {
     );
 
     expect(sent[0].tools[0]).toMatchObject({
-      error: "Codex ended the turn without a PostToolUse result",
       endedAt: "2026-08-19T10:00:02.000Z",
+      resultMissing: true,
     });
+    expect(sent[0].tools[0].error).toBeUndefined();
   });
 
   it("removes a superseded open turn on the next prompt", async () => {

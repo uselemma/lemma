@@ -1382,7 +1382,6 @@ var Lemma = class {
 };
 
 // ../../packages/ts/tracing/src/coding-agent.ts
-var MISSING_TOOL_RESULT_ERROR = "Coding agent turn completed without a tool result";
 function harnessAttributes(turn) {
   return {
     "lemma.harness.id": turn.harness,
@@ -1408,7 +1407,7 @@ function codingAgentTurnTrace(turn) {
   for (const tool of turn.tools) {
     const missingStart = tool.startTimeMissing === true || tool.startedAt === void 0;
     const missingResult = tool.resultMissing === true || tool.endedAt === void 0;
-    const error = missingResult ? tool.error ?? MISSING_TOOL_RESULT_ERROR : tool.error;
+    const error = tool.error;
     context.recordTool({
       id: tool.toolUseId,
       name: tool.toolName,
@@ -1416,7 +1415,7 @@ function codingAgentTurnTrace(turn) {
       input: tool.input,
       output: tool.output,
       error,
-      status: error == null ? "OK" : "ERROR",
+      status: error == null ? missingResult ? void 0 : "OK" : "ERROR",
       startedAt: tool.startedAt ?? tool.endedAt ?? turn.endedAt,
       endedAt: tool.endedAt ?? turn.endedAt,
       attributes,
@@ -1427,19 +1426,21 @@ function codingAgentTurnTrace(turn) {
       }
     });
   }
-  context.recordGeneration({
-    id: turn.generationId,
-    name: `${turn.harness} response`,
-    input: turn.prompt,
-    output: turn.response,
-    model: turn.model,
-    llmProvider: turn.provider,
-    llmInputMessages: [{ role: "user", content: turn.prompt }],
-    llmOutputMessages: [{ role: "assistant", content: turn.response }],
-    startedAt: turn.startedAt,
-    endedAt: turn.endedAt,
-    attributes
-  });
+  if (turn.generationStartedAt && turn.generationEndedAt) {
+    context.recordGeneration({
+      id: turn.generationId,
+      name: `${turn.harness} response`,
+      input: turn.prompt,
+      output: turn.response,
+      model: turn.model,
+      llmProvider: turn.provider,
+      llmInputMessages: [{ role: "user", content: turn.prompt }],
+      llmOutputMessages: [{ role: "assistant", content: turn.response }],
+      startedAt: turn.generationStartedAt,
+      endedAt: turn.generationEndedAt,
+      attributes
+    });
+  }
   return {
     context,
     startedAt: turn.startedAt,
