@@ -202,10 +202,11 @@ describe("coding-agent turn assembly", () => {
         toolName: "read_file",
         input: { path: "README.md" },
         error: "permission denied",
+        startedAt: "2026-08-19T10:00:01.000Z",
         endedAt: "2026-08-19T10:00:01.000Z",
+        startTimeMissing: true,
       }),
     ]);
-    expect(open.tools[0].startedAt).toBeUndefined();
   });
 
   it("closes tools with missing results as errors when the turn completes", async () => {
@@ -246,11 +247,16 @@ describe("coding-agent turn assembly", () => {
     expect(completed.tools[0]).toMatchObject({
       error: "Coding agent turn completed without a tool result",
       endedAt: "2026-08-19T10:00:02.000Z",
+      resultMissing: true,
     });
     expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).toMatchObject({
       status: "ERROR",
       error: "Coding agent turn completed without a tool result",
       ended_at: "2026-08-19T10:00:02.000Z",
+      metadata: {
+        tool_use_id: "tool-1",
+        result_missing: true,
+      },
     });
   });
 
@@ -292,12 +298,35 @@ describe("coding-agent turn assembly", () => {
 
     expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).toMatchObject({
       status: "OK",
-      started_at: "2026-08-19T10:00:00.000Z",
+      started_at: "2026-08-19T10:00:01.000Z",
       ended_at: "2026-08-19T10:00:01.000Z",
       metadata: {
         tool_use_id: "tool-1",
         start_time_missing: true,
       },
+    });
+  });
+
+  it("normalizes Error objects before turns are persisted", () => {
+    const open = recordCodingAgentToolResult(
+      startCodingAgentTurn({
+        harness: "codex",
+        sessionId: "session-1",
+        turnId: "turn-1",
+        prompt: "read a file",
+        startedAt: "2026-08-19T10:00:00.000Z",
+      }),
+      {
+        toolUseId: "tool-1",
+        toolName: "read_file",
+        error: new TypeError("permission denied"),
+        endedAt: "2026-08-19T10:00:01.000Z",
+      },
+    );
+
+    expect(open.tools[0].error).toBe("TypeError: permission denied");
+    expect(JSON.parse(JSON.stringify(open))).toMatchObject({
+      tools: [{ error: "TypeError: permission denied" }],
     });
   });
 });

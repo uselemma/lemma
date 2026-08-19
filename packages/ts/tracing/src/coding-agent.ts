@@ -1,4 +1,5 @@
 import { TraceContext } from "./client";
+import { failureMessage } from "./error-message";
 
 export type CodingAgentHarnessId =
   | "claude-code"
@@ -16,6 +17,8 @@ export type CodingAgentToolCall = {
   error?: unknown;
   startedAt?: string;
   endedAt?: string;
+  startTimeMissing?: boolean;
+  resultMissing?: boolean;
 };
 
 const MISSING_TOOL_RESULT_ERROR =
@@ -165,10 +168,14 @@ export function recordCodingAgentToolResult(
       event.input ??
       (existingIndex >= 0 ? open.tools[existingIndex].input : undefined),
     output: event.output,
-    error: event.error,
+    error: failureMessage(event.error) ?? undefined,
     startedAt:
-      existingIndex >= 0 ? open.tools[existingIndex].startedAt : undefined,
+      existingIndex >= 0 ? open.tools[existingIndex].startedAt : event.endedAt,
     endedAt: event.endedAt,
+    startTimeMissing:
+      existingIndex >= 0
+        ? open.tools[existingIndex].startTimeMissing
+        : true,
   };
   if (existingIndex < 0) {
     return { ...open, tools: [...open.tools, completed] };
@@ -183,15 +190,17 @@ export function completeCodingAgentTurn(
   event: CompleteCodingAgentTurnOptions,
 ): CompletedCodingAgentTurn {
   if (turn.status === "completed") return turn;
-  const tools = turn.tools.map((tool) =>
-    tool.endedAt
-      ? tool
+  const tools = turn.tools.map((tool) => {
+    const error = failureMessage(tool.error) ?? undefined;
+    return tool.endedAt
+      ? { ...tool, error }
       : {
           ...tool,
-          error: tool.error ?? MISSING_TOOL_RESULT_ERROR,
+          error: error ?? MISSING_TOOL_RESULT_ERROR,
           endedAt: event.endedAt,
-        },
-  );
+          resultMissing: true,
+        };
+  });
   return {
     ...turn,
     tools,
@@ -221,8 +230,10 @@ export function codingAgentTurnTrace(
   });
 
   for (const tool of turn.tools) {
-    const missingStart = tool.startedAt === undefined;
-    const missingResult = tool.endedAt === undefined;
+    const missingStart =
+      tool.startTimeMissing === true || tool.startedAt === undefined;
+    const missingResult =
+      tool.resultMissing === true || tool.endedAt === undefined;
     const error = missingResult
       ? (tool.error ?? MISSING_TOOL_RESULT_ERROR)
       : tool.error;
@@ -234,7 +245,7 @@ export function codingAgentTurnTrace(
       output: tool.output,
       error,
       status: error == null ? "OK" : "ERROR",
-      startedAt: tool.startedAt ?? turn.startedAt,
+      startedAt: tool.startedAt ?? tool.endedAt ?? turn.endedAt,
       endedAt: tool.endedAt ?? turn.endedAt,
       attributes,
       metadata: {
