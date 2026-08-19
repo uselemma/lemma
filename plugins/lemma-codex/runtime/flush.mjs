@@ -550,8 +550,8 @@ function spanAttributes(options) {
   return Object.keys(attributes).length > 0 ? attributes : void 0;
 }
 function normalizeSpan(options, fallbackType) {
-  const startedAt = options.startedAt ?? /* @__PURE__ */ new Date();
-  const endedAt = options.endedAt ?? /* @__PURE__ */ new Date();
+  const startedAt = options.startedAt === void 0 ? /* @__PURE__ */ new Date() : options.startedAt;
+  const endedAt = options.endedAt === void 0 ? /* @__PURE__ */ new Date() : options.endedAt;
   const error = failureMessage(options.error);
   const usage = toWireTokenUsage(resolveUsage(options));
   return {
@@ -563,8 +563,8 @@ function normalizeSpan(options, fallbackType) {
     output: options.output,
     metadata: options.metadata,
     attributes: spanAttributes(options),
-    started_at: iso(startedAt) ?? (/* @__PURE__ */ new Date()).toISOString(),
-    ended_at: iso(endedAt) ?? (/* @__PURE__ */ new Date()).toISOString(),
+    ...startedAt === null ? {} : { started_at: iso(startedAt) },
+    ...endedAt === null ? {} : { ended_at: iso(endedAt) },
     duration_ms: options.durationMs,
     status: options.status ?? (error ? "ERROR" : void 0),
     error,
@@ -1416,8 +1416,8 @@ function codingAgentTurnTrace(turn) {
       output: tool.output,
       error,
       status: error == null ? missingResult ? void 0 : "OK" : "ERROR",
-      startedAt: tool.startedAt ?? tool.endedAt ?? turn.endedAt,
-      endedAt: tool.endedAt ?? turn.endedAt,
+      startedAt: tool.startedAt ?? null,
+      endedAt: tool.endedAt ?? null,
       attributes,
       metadata: {
         tool_use_id: tool.toolUseId,
@@ -1426,21 +1426,21 @@ function codingAgentTurnTrace(turn) {
       }
     });
   }
-  if (turn.generationStartedAt && turn.generationEndedAt) {
-    context.recordGeneration({
-      id: turn.generationId,
-      name: `${turn.harness} response`,
-      input: turn.prompt,
-      output: turn.response,
-      model: turn.model,
-      llmProvider: turn.provider,
-      llmInputMessages: [{ role: "user", content: turn.prompt }],
-      llmOutputMessages: [{ role: "assistant", content: turn.response }],
-      startedAt: turn.generationStartedAt,
-      endedAt: turn.generationEndedAt,
-      attributes
-    });
-  }
+  const generationTimingMissing = turn.generationStartedAt === void 0;
+  context.recordGeneration({
+    id: turn.generationId,
+    name: `${turn.harness} response`,
+    input: turn.prompt,
+    output: turn.response,
+    model: turn.model,
+    llmProvider: turn.provider,
+    llmInputMessages: [{ role: "user", content: turn.prompt }],
+    llmOutputMessages: [{ role: "assistant", content: turn.response }],
+    startedAt: turn.generationStartedAt ?? null,
+    endedAt: turn.generationEndedAt ?? null,
+    attributes,
+    metadata: generationTimingMissing ? { timing_missing: true } : void 0
+  });
   return {
     context,
     startedAt: turn.startedAt,

@@ -670,9 +670,9 @@ describe("Codex hook turn assembly", () => {
     );
 
     expect(sent[0].tools[0]).toMatchObject({
-      endedAt: "2026-08-19T10:00:02.000Z",
       resultMissing: true,
     });
+    expect(sent[0].tools[0].endedAt).toBeUndefined();
     expect(sent[0].tools[0].error).toBeUndefined();
   });
 

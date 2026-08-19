@@ -557,8 +557,8 @@ function spanAttributes(options) {
   return Object.keys(attributes).length > 0 ? attributes : void 0;
 }
 function normalizeSpan(options, fallbackType) {
-  const startedAt = options.startedAt ?? /* @__PURE__ */ new Date();
-  const endedAt = options.endedAt ?? /* @__PURE__ */ new Date();
+  const startedAt = options.startedAt === void 0 ? /* @__PURE__ */ new Date() : options.startedAt;
+  const endedAt = options.endedAt === void 0 ? /* @__PURE__ */ new Date() : options.endedAt;
   const error = failureMessage(options.error);
   const usage = toWireTokenUsage(resolveUsage(options));
   return {
@@ -570,8 +570,8 @@ function normalizeSpan(options, fallbackType) {
     output: options.output,
     metadata: options.metadata,
     attributes: spanAttributes(options),
-    started_at: iso(startedAt) ?? (/* @__PURE__ */ new Date()).toISOString(),
-    ended_at: iso(endedAt) ?? (/* @__PURE__ */ new Date()).toISOString(),
+    ...startedAt === null ? {} : { started_at: iso(startedAt) },
+    ...endedAt === null ? {} : { ended_at: iso(endedAt) },
     duration_ms: options.durationMs,
     status: options.status ?? (error ? "ERROR" : void 0),
     error,
@@ -1445,7 +1445,7 @@ function recordCodingAgentToolStart(turn, event) {
     tools[existingIndex] = {
       ...existing,
       toolName: event.toolName,
-      input: event.input ?? existing.input,
+      input: event.input === void 0 ? existing.input : event.input,
       startedAt: event.startedAt,
       startTimeMissing: void 0
     };
@@ -1472,10 +1472,10 @@ function recordCodingAgentToolResult(turn, event) {
   const completed = {
     toolUseId: event.toolUseId,
     toolName: event.toolName,
-    input: event.input ?? (existingIndex >= 0 ? open.tools[existingIndex].input : void 0),
+    input: event.input === void 0 && existingIndex >= 0 ? open.tools[existingIndex].input : event.input,
     output: event.output,
     error: failureMessage(event.error) ?? void 0,
-    startedAt: existingIndex >= 0 ? open.tools[existingIndex].startedAt : event.endedAt,
+    startedAt: existingIndex >= 0 ? open.tools[existingIndex].startedAt : void 0,
     endedAt: event.endedAt,
     startTimeMissing: existingIndex >= 0 ? open.tools[existingIndex].startTimeMissing : true
   };
@@ -1495,12 +1495,7 @@ function completeCodingAgentTurn(turn, event) {
   }
   const tools = turn.tools.map((tool) => {
     const error = failureMessage(tool.error) ?? void 0;
-    return tool.endedAt ? { ...tool, error } : {
-      ...tool,
-      error,
-      endedAt: event.endedAt,
-      resultMissing: true
-    };
+    return tool.endedAt ? { ...tool, error } : { ...tool, error, resultMissing: true };
   });
   return {
     ...turn,
@@ -1540,8 +1535,8 @@ function codingAgentTurnTrace(turn) {
       output: tool.output,
       error,
       status: error == null ? missingResult ? void 0 : "OK" : "ERROR",
-      startedAt: tool.startedAt ?? tool.endedAt ?? turn.endedAt,
-      endedAt: tool.endedAt ?? turn.endedAt,
+      startedAt: tool.startedAt ?? null,
+      endedAt: tool.endedAt ?? null,
       attributes,
       metadata: {
         tool_use_id: tool.toolUseId,
@@ -1550,21 +1545,21 @@ function codingAgentTurnTrace(turn) {
       }
     });
   }
-  if (turn.generationStartedAt && turn.generationEndedAt) {
-    context.recordGeneration({
-      id: turn.generationId,
-      name: `${turn.harness} response`,
-      input: turn.prompt,
-      output: turn.response,
-      model: turn.model,
-      llmProvider: turn.provider,
-      llmInputMessages: [{ role: "user", content: turn.prompt }],
-      llmOutputMessages: [{ role: "assistant", content: turn.response }],
-      startedAt: turn.generationStartedAt,
-      endedAt: turn.generationEndedAt,
-      attributes
-    });
-  }
+  const generationTimingMissing = turn.generationStartedAt === void 0;
+  context.recordGeneration({
+    id: turn.generationId,
+    name: `${turn.harness} response`,
+    input: turn.prompt,
+    output: turn.response,
+    model: turn.model,
+    llmProvider: turn.provider,
+    llmInputMessages: [{ role: "user", content: turn.prompt }],
+    llmOutputMessages: [{ role: "assistant", content: turn.response }],
+    startedAt: turn.generationStartedAt ?? null,
+    endedAt: turn.generationEndedAt ?? null,
+    attributes,
+    metadata: generationTimingMissing ? { timing_missing: true } : void 0
+  });
   return {
     context,
     startedAt: turn.startedAt,
