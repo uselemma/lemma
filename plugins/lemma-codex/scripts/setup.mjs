@@ -274,7 +274,7 @@ async function installLocalPlugin(marketplaceRoot, runCommand = commandOutput) {
           `Could not inspect installed Codex plugins: ${plugins.output}`
         );
       }
-      if (installedPluginMarketplaceSource(plugins.output)) {
+      if (hasInstalledLemmaPlugin(plugins.output)) {
         const removePlugin = await runCommand("codex", [
           "plugin",
           "remove",
