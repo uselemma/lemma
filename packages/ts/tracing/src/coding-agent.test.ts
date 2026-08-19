@@ -227,7 +227,6 @@ describe("coding-agent turn assembly", () => {
         toolName: "read_file",
         input: { path: "README.md" },
         error: "permission denied",
-        startedAt: "2026-08-19T10:00:01.000Z",
         endedAt: "2026-08-19T10:00:01.000Z",
         startTimeMissing: true,
       }),
@@ -306,23 +305,24 @@ describe("coding-agent turn assembly", () => {
     });
 
     expect(completed.tools[0]).toMatchObject({
-      endedAt: "2026-08-19T10:00:02.000Z",
       resultMissing: true,
     });
     expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).toMatchObject({
-      ended_at: "2026-08-19T10:00:02.000Z",
       metadata: {
         tool_use_id: "tool-1",
         result_missing: true,
       },
     });
     expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).not.toHaveProperty(
+      "ended_at",
+    );
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).not.toHaveProperty(
       "status",
     );
     expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0].error).toBeNull();
   });
 
-  it("omits a generation when exact model-call timing is unavailable", async () => {
+  it("emits the assistant generation without inventing unavailable timing", async () => {
     const completed = completeCodingAgentTurn(
       startCodingAgentTurn({
         harness: "codex",
@@ -351,7 +351,22 @@ describe("coding-agent turn assembly", () => {
       endedAt: new Date(assembled.endedAt),
     });
 
-    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans).toEqual([]);
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans).toEqual([
+      expect.objectContaining({
+        id: completed.generationId,
+        type: "generation",
+        model: "gpt-5",
+        input: "hello",
+        output: "done",
+        metadata: { timing_missing: true },
+      }),
+    ]);
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).not.toHaveProperty(
+      "started_at",
+    );
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).not.toHaveProperty(
+      "ended_at",
+    );
   });
 
   it("treats a null tool error as success and marks missing starts", async () => {
@@ -392,13 +407,36 @@ describe("coding-agent turn assembly", () => {
 
     expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).toMatchObject({
       status: "OK",
-      started_at: "2026-08-19T10:00:01.000Z",
       ended_at: "2026-08-19T10:00:01.000Z",
       metadata: {
         tool_use_id: "tool-1",
         start_time_missing: true,
       },
     });
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).not.toHaveProperty(
+      "started_at",
+    );
+  });
+
+  it("preserves an explicit null tool input", () => {
+    const open = recordCodingAgentToolResult(
+      startCodingAgentTurn({
+        harness: "codex",
+        sessionId: "session-1",
+        turnId: "turn-1",
+        prompt: "run a no-argument tool",
+        startedAt: "2026-08-19T10:00:00.000Z",
+      }),
+      {
+        toolUseId: "tool-1",
+        toolName: "refresh",
+        input: null,
+        output: "done",
+        endedAt: "2026-08-19T10:00:01.000Z",
+      },
+    );
+
+    expect(open.tools[0].input).toBeNull();
   });
 
   it("normalizes Error objects before turns are persisted", () => {

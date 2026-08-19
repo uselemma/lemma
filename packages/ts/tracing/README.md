@@ -230,9 +230,11 @@ replaying the same lifecycle stream produces the same payload identity.
 Pass `generationStartedAt` and `generationEndedAt` to
 `completeCodingAgentTurn` only when the harness exposes exact model-call
 bounds. Without both values, the root still records the final response and the
-assembler omits the generation span instead of counting tool time as model
-latency. Missing tool results are marked with `result_missing` metadata; they
-are not treated as execution errors unless the harness reports an error.
+assembler emits the typed generation with `timing_missing` metadata and omits
+its timestamps instead of counting the whole turn as model latency. Missing
+tool starts and results likewise omit unavailable timestamps and carry
+`start_time_missing` or `result_missing` metadata; missing results are not
+treated as execution errors unless the harness reports an error.
 
 ## Vercel AI SDK
 

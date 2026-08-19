@@ -166,7 +166,7 @@ export function recordCodingAgentToolStart(
     tools[existingIndex] = {
       ...existing,
       toolName: event.toolName,
-      input: event.input ?? existing.input,
+      input: event.input === undefined ? existing.input : event.input,
       startedAt: event.startedAt,
       startTimeMissing: undefined,
     };
@@ -198,12 +198,13 @@ export function recordCodingAgentToolResult(
     toolUseId: event.toolUseId,
     toolName: event.toolName,
     input:
-      event.input ??
-      (existingIndex >= 0 ? open.tools[existingIndex].input : undefined),
+      event.input === undefined && existingIndex >= 0
+        ? open.tools[existingIndex].input
+        : event.input,
     output: event.output,
     error: failureMessage(event.error) ?? undefined,
     startedAt:
-      existingIndex >= 0 ? open.tools[existingIndex].startedAt : event.endedAt,
+      existingIndex >= 0 ? open.tools[existingIndex].startedAt : undefined,
     endedAt: event.endedAt,
     startTimeMissing:
       existingIndex >= 0 ? open.tools[existingIndex].startTimeMissing : true,
@@ -233,12 +234,7 @@ export function completeCodingAgentTurn(
     const error = failureMessage(tool.error) ?? undefined;
     return tool.endedAt
       ? { ...tool, error }
-      : {
-          ...tool,
-          error,
-          endedAt: event.endedAt,
-          resultMissing: true,
-        };
+      : { ...tool, error, resultMissing: true };
   });
   return {
     ...turn,
@@ -284,8 +280,8 @@ export function codingAgentTurnTrace(
       output: tool.output,
       error,
       status: error == null ? (missingResult ? undefined : "OK") : "ERROR",
-      startedAt: tool.startedAt ?? tool.endedAt ?? turn.endedAt,
-      endedAt: tool.endedAt ?? turn.endedAt,
+      startedAt: tool.startedAt ?? null,
+      endedAt: tool.endedAt ?? null,
       attributes,
       metadata: {
         tool_use_id: tool.toolUseId,
@@ -295,21 +291,21 @@ export function codingAgentTurnTrace(
     });
   }
 
-  if (turn.generationStartedAt && turn.generationEndedAt) {
-    context.recordGeneration({
-      id: turn.generationId,
-      name: `${turn.harness} response`,
-      input: turn.prompt,
-      output: turn.response,
-      model: turn.model,
-      llmProvider: turn.provider,
-      llmInputMessages: [{ role: "user", content: turn.prompt }],
-      llmOutputMessages: [{ role: "assistant", content: turn.response }],
-      startedAt: turn.generationStartedAt,
-      endedAt: turn.generationEndedAt,
-      attributes,
-    });
-  }
+  const generationTimingMissing = turn.generationStartedAt === undefined;
+  context.recordGeneration({
+    id: turn.generationId,
+    name: `${turn.harness} response`,
+    input: turn.prompt,
+    output: turn.response,
+    model: turn.model,
+    llmProvider: turn.provider,
+    llmInputMessages: [{ role: "user", content: turn.prompt }],
+    llmOutputMessages: [{ role: "assistant", content: turn.response }],
+    startedAt: turn.generationStartedAt ?? null,
+    endedAt: turn.generationEndedAt ?? null,
+    attributes,
+    metadata: generationTimingMissing ? { timing_missing: true } : undefined,
+  });
 
   return {
     context,
