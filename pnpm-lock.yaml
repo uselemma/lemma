@@ -39,6 +39,21 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@22.19.11)
 
+  plugins/lemma-claude-code:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.18.8
+        version: 22.19.11
+      esbuild:
+        specifier: ^0.25.11
+        version: 0.25.12
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@22.19.11)
+
   plugins/lemma-codex:
     devDependencies:
       '@types/node':
