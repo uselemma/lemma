@@ -21,6 +21,7 @@
 | [TypeScript SDK](packages/ts/tracing) | Instrument Node and TypeScript applications. |
 | [Python SDK](packages/py/tracing) | Instrument Python applications. |
 | [Lemma tracing skill](skills/lemma-tracing) | Let a coding agent add tracing for you. |
+| [Lemma diagnostics skill](skills/lemma-diagnostics) | Let a coding agent audit traces already in Lemma. |
 
 ## Install
 
@@ -66,6 +67,7 @@ For manual instrumentation, start with the [tracing overview](https://docs.usele
 | [`packages/ts/tracing`](packages/ts/tracing) | TypeScript SDK package: `@uselemma/tracing`. |
 | [`packages/py/tracing`](packages/py/tracing) | Python SDK package: `uselemma-tracing`. |
 | [`skills/lemma-tracing`](skills/lemma-tracing) | Lemma tracing skill for coding agents. |
+| [`skills/lemma-diagnostics`](skills/lemma-diagnostics) | Lemma diagnostics skill for coding agents. |
 
 ## Development
 
