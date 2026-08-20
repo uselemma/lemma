@@ -110,7 +110,9 @@ export type SpanOptions = {
   output?: unknown;
   metadata?: Record<string, unknown>;
   attributes?: Record<string, unknown>;
-  startedAt?: Date | string;
+  /** `null` preserves an explicitly unknown historical start time. */
+  startedAt?: Date | string | null;
+  /** `null` preserves an explicitly unknown historical end time. */
   endedAt?: Date | string | null;
   durationMs?: number;
   status?: "OK" | "ERROR";
@@ -188,6 +190,7 @@ type SdkTraceSpanPayload = {
 /** Lemma SDK provenance — lets Analytics attribute coverage gaps. */
 export type SdkIntegration =
   | "manual"
+  | "coding-agent"
   | "vercel-ai"
   | "langchain"
   | "openai-agents"
@@ -457,8 +460,9 @@ function normalizeSpan(
   options: NormalizedSpanOptions,
   fallbackType: SpanType,
 ): SdkTraceSpanPayload {
-  const startedAt = options.startedAt ?? new Date();
-  const endedAt = options.endedAt ?? new Date();
+  const startedAt =
+    options.startedAt === undefined ? new Date() : options.startedAt;
+  const endedAt = options.endedAt === undefined ? new Date() : options.endedAt;
   const error = failureMessage(options.error);
   const usage = toWireTokenUsage(resolveUsage(options));
   return {
@@ -470,8 +474,8 @@ function normalizeSpan(
     output: options.output,
     metadata: options.metadata,
     attributes: spanAttributes(options),
-    started_at: iso(startedAt) ?? new Date().toISOString(),
-    ended_at: iso(endedAt) ?? new Date().toISOString(),
+    ...(startedAt === null ? {} : { started_at: iso(startedAt)! }),
+    ...(endedAt === null ? {} : { ended_at: iso(endedAt)! }),
     duration_ms: options.durationMs,
     status: options.status ?? (error ? "ERROR" : undefined),
     error,
