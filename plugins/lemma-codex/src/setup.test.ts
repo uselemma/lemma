@@ -1,0 +1,475 @@
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import {
+  browserCommand,
+  configureCodexNotify,
+  installLocalPlugin,
+  runSetup,
+} from "./setup.js";
+import {
+  credentialsPath,
+  readCredentials,
+  readNotifyForwarder,
+  resolveDataDir,
+  writeDataDirLocation,
+  writeNotifyForwarder,
+} from "./storage.js";
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((path) => rm(path, { recursive: true, force: true })),
+  );
+});
+
+describe("Lemma Codex setup", () => {
+  it("installs locally, opens browser login, and stores only the scoped credential", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "lemma-codex-setup-test-"));
+    temporaryDirectories.push(dataDir);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            device_code: "device-secret",
+            user_code: "ABCDE-FGHJK",
+            verification_uri_complete:
+              "https://dev.platform.uselemma.ai/connect/coding-harness?user_code=ABCDE-FGHJK",
+            expires_in: 600,
+            interval: 5,
+          },
+          { status: 201 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          status: "approved",
+          access_token: "lemma_ci_scoped-secret",
+          credential_id: "credential-1",
+          project_id: "10000000-0000-0000-0000-000000000001",
+        }),
+      );
+    const installedPluginRoot = join(dataDir, "codex-cache", "lemma-codex");
+    const install = vi.fn(async () => installedPluginRoot);
+    const open = vi.fn(async () => undefined);
+    const persistDataDirLocation = vi.fn(async () => undefined);
+    const configureNotify = vi.fn(async () => undefined);
+    const output: string[] = [];
+
+    const credentials = await runSetup(
+      {
+        apiUrl: "https://dev.api.uselemma.ai",
+        dataDir,
+        marketplaceRoot: "/checkout/lemma",
+      },
+      {
+        fetch: fetchMock,
+        installLocalPlugin: install,
+        launchBrowser: open,
+        persistDataDirLocation,
+        configureNotify,
+        sleep: async () => undefined,
+        output: (message) => output.push(message),
+      },
+    );
+
+    expect(install).toHaveBeenCalledWith("/checkout/lemma");
+    expect(persistDataDirLocation).toHaveBeenCalledWith(dataDir);
+    expect(configureNotify).toHaveBeenCalledWith({
+      dataDir,
+      notifyRuntimePath: join(installedPluginRoot, "runtime", "notify.mjs"),
+      previousDataDir: expect.any(String),
+      codexHome: undefined,
+    });
+    expect(configureNotify.mock.invocationCallOrder[0]).toBeLessThan(
+      persistDataDirLocation.mock.invocationCallOrder[0],
+    );
+    expect(open).toHaveBeenCalledWith(
+      "https://dev.platform.uselemma.ai/connect/coding-harness?user_code=ABCDE-FGHJK",
+    );
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://dev.api.uselemma.ai/coding-harness/device-authorizations",
+    );
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "https://dev.api.uselemma.ai/coding-harness/device-authorizations/token",
+    );
+    expect(credentials).toEqual({
+      version: 1,
+      apiUrl: "https://dev.api.uselemma.ai",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      credentialId: "credential-1",
+      accessToken: "lemma_ci_scoped-secret",
+    });
+    await expect(readCredentials(dataDir)).resolves.toEqual(credentials);
+    expect(output.join("\n")).not.toContain("lemma_ci_scoped-secret");
+    if (process.platform !== "win32") {
+      expect((await stat(credentialsPath(dataDir))).mode & 0o777).toBe(0o600);
+    }
+  });
+
+  it("installs the authoritative turn-complete notifier and forwards an existing notifier", async () => {
+    const root = await mkdtemp(join(tmpdir(), "lemma-codex-notify-test-"));
+    temporaryDirectories.push(root);
+    const codexHome = join(root, "codex-home");
+    const dataDir = join(root, "state");
+    const runtimePath = join(root, "plugin", "runtime", "notify.mjs");
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(
+      join(codexHome, "config.toml"),
+      'notify = [\n  "existing-notifier",\n  "Codex",\n]\n\n[features]\nplugins = true\n',
+    );
+
+    await configureCodexNotify({
+      dataDir,
+      notifyRuntimePath: runtimePath,
+      codexHome,
+    });
+
+    const config = await readFile(join(codexHome, "config.toml"), "utf8");
+    expect(config).toContain(JSON.stringify(process.execPath));
+    expect(config).toContain(JSON.stringify(resolve(runtimePath)));
+    expect(config).toContain("[features]\nplugins = true");
+    await expect(readNotifyForwarder(dataDir)).resolves.toEqual({
+      version: 1,
+      command: ["existing-notifier", "Codex"],
+    });
+  });
+
+  it("keeps the original notifier forwarding state when setup runs again", async () => {
+    const root = await mkdtemp(join(tmpdir(), "lemma-codex-notify-test-"));
+    temporaryDirectories.push(root);
+    const codexHome = join(root, "codex-home");
+    const dataDir = join(root, "state");
+    const runtimePath = join(root, "plugin", "runtime", "notify.mjs");
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(
+      join(codexHome, "config.toml"),
+      'notify = ["existing-notifier"]\n',
+    );
+
+    await configureCodexNotify({
+      dataDir,
+      notifyRuntimePath: runtimePath,
+      codexHome,
+    });
+    await configureCodexNotify({
+      dataDir,
+      notifyRuntimePath: runtimePath,
+      codexHome,
+    });
+
+    await expect(readNotifyForwarder(dataDir)).resolves.toEqual({
+      version: 1,
+      command: ["existing-notifier"],
+    });
+  });
+
+  it("migrates notifier forwarding state when the setup data directory changes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "lemma-codex-notify-test-"));
+    temporaryDirectories.push(root);
+    const codexHome = join(root, "codex-home");
+    const previousDataDir = join(root, "old-state");
+    const dataDir = join(root, "new-state");
+    const runtimePath = join(root, "plugin", "runtime", "notify.mjs");
+    await mkdir(codexHome, { recursive: true });
+    await writeFile(
+      join(codexHome, "config.toml"),
+      `notify = [${JSON.stringify(process.execPath)}, ${JSON.stringify(resolve(runtimePath))}]\n`,
+    );
+    await writeNotifyForwarder(previousDataDir, {
+      version: 1,
+      command: ["existing-notifier", "Codex"],
+    });
+
+    await configureCodexNotify({
+      dataDir,
+      previousDataDir,
+      notifyRuntimePath: runtimePath,
+      codexHome,
+    });
+
+    await expect(readNotifyForwarder(dataDir)).resolves.toEqual({
+      version: 1,
+      command: ["existing-notifier", "Codex"],
+    });
+  });
+
+  it.each([
+    [
+      "darwin",
+      {},
+      "/Users/ray",
+      "/Users/ray/Library/Application Support/Lemma/Codex",
+    ],
+    ["linux", { XDG_STATE_HOME: "/state" }, "/home/ray", "/state/lemma/codex"],
+    [
+      "win32",
+      { LOCALAPPDATA: "C:\\Users\\ray\\AppData\\Local" },
+      "C:\\Users\\ray",
+      "C:\\Users\\ray\\AppData\\Local\\Lemma\\Codex",
+    ],
+  ] as const)(
+    "resolves a private %s data location",
+    (platform, env, homeDir, expected) => {
+      expect(
+        resolveDataDir({
+          platform,
+          env: env as NodeJS.ProcessEnv,
+          homeDir,
+        }),
+      ).toBe(expected);
+    },
+  );
+
+  it("persists a custom data directory for later hook processes", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "lemma-codex-home-test-"));
+    temporaryDirectories.push(homeDir);
+    const customDataDir = join(homeDir, "custom-state");
+    const options = {
+      platform: process.platform,
+      env:
+        process.platform === "win32"
+          ? { LOCALAPPDATA: join(homeDir, "state") }
+          : { XDG_STATE_HOME: join(homeDir, "state") },
+      homeDir,
+    };
+
+    await writeDataDirLocation(customDataDir, options);
+
+    expect(resolveDataDir(options)).toBe(customDataDir);
+  });
+
+  it("normalizes relative data-directory overrides before persisting them", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "lemma-codex-home-test-"));
+    temporaryDirectories.push(homeDir);
+    const options = {
+      platform: process.platform,
+      env:
+        process.platform === "win32"
+          ? { LOCALAPPDATA: join(homeDir, "state") }
+          : { XDG_STATE_HOME: join(homeDir, "state") },
+      homeDir,
+    };
+
+    await writeDataDirLocation("relative-codex-state", options);
+
+    expect(resolveDataDir(options)).toBe(resolve("relative-codex-state"));
+    expect(
+      resolveDataDir({ ...options, dataDir: "another-relative-state" }),
+    ).toBe(resolve("another-relative-state"));
+  });
+
+  it("uses the native browser launcher on macOS, Linux, and Windows", () => {
+    const url = "https://platform.uselemma.ai/connect/coding-harness";
+    expect(browserCommand("darwin", url)).toEqual({
+      command: "open",
+      args: [url],
+    });
+    expect(browserCommand("linux", url)).toEqual({
+      command: "xdg-open",
+      args: [url],
+    });
+    expect(browserCommand("win32", url)).toEqual({
+      command: "cmd.exe",
+      args: ["/d", "/s", "/c", "start", "", url],
+    });
+  });
+
+  it("repoints a stale local marketplace before installing", async () => {
+    const result = (code: number, output: string, stderr = "") => ({
+      code,
+      output: `${output}${stderr}`,
+      stdout: output,
+    });
+    const runCommand = vi
+      .fn<
+        (
+          command: string,
+          args: string[],
+        ) => Promise<{
+          code: number;
+          output: string;
+          stdout: string;
+        }>
+      >()
+      .mockResolvedValueOnce(result(1, "marketplace name already exists"))
+      .mockResolvedValueOnce(
+        result(
+          0,
+          JSON.stringify({
+            marketplaces: [
+              {
+                name: "lemma-local",
+                marketplaceSource: {
+                  sourceType: "local",
+                  source: "/old/checkout",
+                },
+              },
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        result(
+          0,
+          JSON.stringify({
+            installed: [
+              {
+                pluginId: "lemma-codex@lemma-local",
+                marketplaceSource: {
+                  sourceType: "local",
+                  source: "/old/checkout",
+                },
+              },
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValue(
+        result(
+          0,
+          JSON.stringify({ installedPath: "/codex/cache/lemma-codex" }),
+        ),
+      );
+
+    await expect(installLocalPlugin("/new/checkout", runCommand)).resolves.toBe(
+      resolve("/codex/cache/lemma-codex"),
+    );
+
+    expect(runCommand.mock.calls.map(([, args]) => args)).toEqual([
+      ["plugin", "marketplace", "add", "/new/checkout", "--json"],
+      ["plugin", "marketplace", "list", "--json"],
+      ["plugin", "list", "--json"],
+      ["plugin", "remove", "lemma-codex@lemma-local", "--json"],
+      ["plugin", "marketplace", "remove", "lemma-local", "--json"],
+      ["plugin", "marketplace", "add", "/new/checkout", "--json"],
+      ["plugin", "list", "--json"],
+      ["plugin", "add", "lemma-codex@lemma-local", "--json"],
+    ]);
+  });
+
+  it("refreshes an already installed local plugin", async () => {
+    const result = (code: number, output: string, stderr = "") => ({
+      code,
+      output: `${output}${stderr}`,
+      stdout: output,
+    });
+    const runCommand = vi
+      .fn<
+        (
+          command: string,
+          args: string[],
+        ) => Promise<{
+          code: number;
+          output: string;
+          stdout: string;
+        }>
+      >()
+      .mockResolvedValueOnce(result(0, "{}"))
+      .mockResolvedValueOnce(
+        result(
+          0,
+          JSON.stringify({
+            installed: [
+              {
+                pluginId: "lemma-codex@lemma-local",
+                marketplaceSource: {
+                  sourceType: "local",
+                  source: "/checkout/lemma",
+                },
+              },
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValue(
+        result(
+          0,
+          JSON.stringify({ installedPath: "/codex/cache/lemma-codex" }),
+        ),
+      );
+
+    await expect(
+      installLocalPlugin("/checkout/lemma", runCommand),
+    ).resolves.toBe(resolve("/codex/cache/lemma-codex"));
+
+    expect(runCommand.mock.calls.map(([, args]) => args)).toEqual([
+      ["plugin", "marketplace", "add", "/checkout/lemma", "--json"],
+      ["plugin", "list", "--json"],
+      ["plugin", "remove", "lemma-codex@lemma-local", "--json"],
+      ["plugin", "add", "lemma-codex@lemma-local", "--json"],
+    ]);
+  });
+
+  it("parses Codex JSON from stdout when stderr contains a warning", async () => {
+    const result = (code: number, stdout: string, stderr = "") => ({
+      code,
+      stdout,
+      output: `${stdout}${stderr}`,
+    });
+    const runCommand = vi
+      .fn<
+        (
+          command: string,
+          args: string[],
+        ) => Promise<{
+          code: number;
+          output: string;
+          stdout: string;
+        }>
+      >()
+      .mockResolvedValueOnce(result(1, "", "already exists"))
+      .mockResolvedValueOnce(
+        result(
+          0,
+          JSON.stringify({
+            marketplaces: [
+              {
+                name: "lemma-local",
+                marketplaceSource: {
+                  sourceType: "local",
+                  source: "/checkout/lemma",
+                },
+              },
+            ],
+          }),
+          "warning: experimental command\n",
+        ),
+      )
+      .mockResolvedValueOnce(result(0, JSON.stringify({ installed: [] })))
+      .mockResolvedValue(
+        result(
+          0,
+          JSON.stringify({ installedPath: "/codex/cache/lemma-codex" }),
+        ),
+      );
+
+    await expect(
+      installLocalPlugin("/checkout/lemma", runCommand),
+    ).resolves.toBe(resolve("/codex/cache/lemma-codex"));
+
+    expect(runCommand.mock.calls.map(([, args]) => args)).toEqual([
+      ["plugin", "marketplace", "add", "/checkout/lemma", "--json"],
+      ["plugin", "marketplace", "list", "--json"],
+      ["plugin", "list", "--json"],
+      ["plugin", "add", "lemma-codex@lemma-local", "--json"],
+    ]);
+  });
+
+  it("rejects plaintext remote API endpoints", async () => {
+    await expect(
+      runSetup(
+        { apiUrl: "http://api.example.test", installPlugin: false },
+        { fetch: vi.fn<typeof fetch>() },
+      ),
+    ).rejects.toThrow("must use HTTPS");
+  });
+});

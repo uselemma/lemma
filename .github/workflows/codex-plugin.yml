@@ -1,0 +1,53 @@
+name: Codex plugin
+
+on:
+  pull_request:
+    paths:
+      - ".agents/plugins/marketplace.json"
+      - ".github/workflows/codex-plugin.yml"
+      - "packages/ts/tracing/**"
+      - "plugins/lemma-codex/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - ".agents/plugins/marketplace.json"
+      - ".github/workflows/codex-plugin.yml"
+      - "packages/ts/tracing/**"
+      - "plugins/lemma-codex/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm --filter @uselemma/codex-plugin type-check
+
+      - name: Test
+        run: pnpm --filter @uselemma/codex-plugin test
+
+      - name: Build distributable scripts
+        run: pnpm --filter @uselemma/codex-plugin build
+
+      - name: Verify committed bundles
+        run: git diff --exit-code -- plugins/lemma-codex/runtime/hook.mjs plugins/lemma-codex/runtime/flush.mjs plugins/lemma-codex/runtime/notify.mjs plugins/lemma-codex/scripts/setup.mjs
