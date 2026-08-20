@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "lemma-local",
+  "description": "Local Lemma coding-agent integrations",
+  "owner": {
+    "name": "Lemma",
+    "email": "support@uselemma.ai"
+  },
+  "plugins": [
+    {
+      "name": "lemma-claude-code",
+      "description": "Capture each completed Claude Code prompt as a Lemma trace.",
+      "author": {
+        "name": "Lemma"
+      },
+      "category": "development",
+      "source": "./plugins/lemma-claude-code",
+      "homepage": "https://uselemma.ai"
+    }
+  ]
+}
