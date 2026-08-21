@@ -91,6 +91,8 @@ A release is the stable identifier your deployment process assigns to the runnin
 export LEMMA_RELEASE="<stable-deployment-identifier>"
 ```
 
+Most CI systems expose the current commit SHA as an environment variable. Set `LEMMA_RELEASE` to that value during deployment to give each deployed code version a unique, stable identifier.
+
 ### Option 2: Pass it when creating the client
 
 <Tabs>
