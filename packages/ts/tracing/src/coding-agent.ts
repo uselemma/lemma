@@ -9,7 +9,8 @@ export type CodingAgentHarnessId =
   | "codex"
   | "pi"
   | "hermes"
-  | "openclaw";
+  | "openclaw"
+  | "opencode";
 
 export type CodingAgentToolCall = {
   toolUseId: string;

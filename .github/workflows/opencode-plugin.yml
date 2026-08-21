@@ -1,0 +1,75 @@
+name: OpenCode plugin
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/opencode-plugin.yml"
+      - "packages/ts/tracing/**"
+      - "plugins/lemma-opencode/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/opencode-plugin.yml"
+      - "packages/ts/tracing/**"
+      - "plugins/lemma-opencode/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build tracing dependency
+        run: pnpm --filter @uselemma/tracing build
+
+      - name: Type-check
+        run: pnpm --filter @uselemma/opencode type-check
+
+      - name: Build distributable scripts
+        run: pnpm --filter @uselemma/opencode build
+
+      - name: Test
+        run: pnpm --filter @uselemma/opencode test
+
+      - name: Verify committed bundles
+        run: git diff --exit-code -- plugins/lemma-opencode/runtime/lemma.mjs plugins/lemma-opencode/runtime/lemma.d.ts plugins/lemma-opencode/scripts/setup.mjs
+
+  clean-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build tracing dependency
+        run: pnpm --filter @uselemma/tracing build
+
+      - name: Verify packed OpenCode install
+        run: pnpm --filter @uselemma/opencode verify:local

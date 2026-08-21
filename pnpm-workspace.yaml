@@ -5,4 +5,5 @@ packages:
   - "plugins/lemma-cursor"
   - "plugins/lemma-hermes"
   - "plugins/lemma-openclaw"
+  - "plugins/lemma-opencode"
   - "plugins/lemma-pi"
