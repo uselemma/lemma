@@ -828,3 +828,67 @@ def test_ingest_stamps_client_release():
     context = TraceContext(id="trace-1", name="turn")
     lemma.ingest(context, started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
     assert calls[0]["trace"]["release"] == "1.8.3"
+
+
+class _AgentError(Exception):
+    pass
+
+
+def _failing_transport(bodies):
+    def transport(_url, _headers, body):
+        bodies.append(json.loads(body.decode()))
+        return 503, "nope"
+
+    return transport
+
+
+def test_trace_reraises_the_agent_error_when_delivery_fails():
+    bodies = []
+    lemma = Lemma(
+        api_key="key", project_id=PROJECT_ID, transport=_failing_transport(bodies)
+    )
+
+    def agent(_trace):
+        raise _AgentError("tool timed out")
+
+    with pytest.warns(RuntimeWarning, match="could not deliver the trace"):
+        with pytest.raises(_AgentError, match="tool timed out"):
+            lemma.trace("support-agent", agent)
+
+    # The failed trace was still attempted, and recorded the agent's error.
+    assert len(bodies) == 1
+    assert bodies[0]["trace"]["status"] == "ERROR"
+    assert bodies[0]["trace"]["error"] == "_AgentError: tool timed out"
+
+
+async def test_async_trace_reraises_the_agent_error_when_delivery_fails():
+    bodies = []
+    lemma = Lemma(
+        api_key="key", project_id=PROJECT_ID, transport=_failing_transport(bodies)
+    )
+
+    async def agent(_trace):
+        raise _AgentError("premature termination")
+
+    with pytest.warns(RuntimeWarning):
+        with pytest.raises(_AgentError, match="premature termination"):
+            await lemma.async_trace("support-agent", agent)
+
+    assert len(bodies) == 1
+    assert bodies[0]["trace"]["error"] == "_AgentError: premature termination"
+
+
+def test_trace_does_not_resend_a_successful_run_as_a_failed_one():
+    # A transport failure must not fabricate an error status on the trace.
+    bodies = []
+    lemma = Lemma(
+        api_key="key", project_id=PROJECT_ID, transport=_failing_transport(bodies)
+    )
+
+    with pytest.raises(RuntimeError, match="failed to ingest trace"):
+        lemma.trace("support-agent", lambda _trace: "ok")
+
+    assert len(bodies) == 1
+    assert bodies[0]["trace"].get("status") is None
+    assert bodies[0]["trace"].get("error") is None
+    assert bodies[0]["trace"]["output"] == "ok"
