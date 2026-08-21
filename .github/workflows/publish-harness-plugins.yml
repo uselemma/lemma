@@ -8,6 +8,7 @@ on:
       - "plugins/lemma-pi/package.json"
       - "plugins/lemma-hermes/package.json"
       - "plugins/lemma-openclaw/package.json"
+      - "plugins/lemma-opencode/package.json"
   workflow_dispatch:
 
 concurrency:
@@ -31,6 +32,8 @@ jobs:
             directory: plugins/lemma-hermes
           - package: "@uselemma/openclaw"
             directory: plugins/lemma-openclaw
+          - package: "@uselemma/opencode"
+            directory: plugins/lemma-opencode
     steps:
       - uses: actions/checkout@v4
 
