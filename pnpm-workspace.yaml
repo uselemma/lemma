@@ -2,3 +2,4 @@ packages:
   - "packages/ts/tracing"
   - "plugins/lemma-claude-code"
   - "plugins/lemma-codex"
+  - "plugins/lemma-cursor"
