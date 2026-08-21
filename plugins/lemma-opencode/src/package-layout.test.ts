@@ -30,4 +30,12 @@ describe("OpenCode package layout", () => {
       access(new URL("../README.md", import.meta.url)),
     ]);
   });
+
+  it("loads the self-contained ESM plugin bundle", async () => {
+    const plugin = (await import(
+      new URL("../runtime/lemma.mjs", import.meta.url).href
+    )) as { LemmaPlugin?: unknown };
+
+    expect(plugin.LemmaPlugin).toBeTypeOf("function");
+  });
 });

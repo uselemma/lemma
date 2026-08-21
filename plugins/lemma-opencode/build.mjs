@@ -16,7 +16,13 @@ await build({
   format: "esm",
   sourcemap: false,
   minify: false,
-  banner: { js: "// @uselemma/opencode managed plugin" },
+  banner: {
+    js: [
+      "// @uselemma/opencode managed plugin",
+      'import { createRequire as __lemmaCreateRequire } from "node:module";',
+      "const require = __lemmaCreateRequire(import.meta.url);",
+    ].join("\n"),
+  },
 });
 
 await writeFile(
