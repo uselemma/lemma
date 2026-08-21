@@ -1,0 +1,53 @@
+{
+  "name": "@uselemma/openclaw",
+  "version": "0.1.0",
+  "description": "Lemma SDK tracing for OpenClaw agent sessions",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "lemma-openclaw": "./scripts/setup.mjs"
+  },
+  "files": [
+    "dist/index.js",
+    "runtime/flush.mjs",
+    "scripts/setup.mjs",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "keywords": [
+    "openclaw",
+    "observability",
+    "tracing"
+  ],
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "install": {
+      "npmSpec": "@uselemma/openclaw",
+      "defaultChoice": "npm",
+      "minHostVersion": ">=2026.7.1"
+    },
+    "compat": {
+      "pluginApi": ">=2026.7.1"
+    },
+    "build": {
+      "openclawVersion": "2026.7.1-2"
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@uselemma/tracing": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.8",
+    "esbuild": "^0.25.11",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

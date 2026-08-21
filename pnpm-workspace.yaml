@@ -4,4 +4,5 @@ packages:
   - "plugins/lemma-codex"
   - "plugins/lemma-cursor"
   - "plugins/lemma-hermes"
+  - "plugins/lemma-openclaw"
   - "plugins/lemma-pi"
