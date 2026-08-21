@@ -57,6 +57,7 @@ Lemma includes first-party tracing helpers for common agent stacks:
 | LangGraph         | [docs](https://docs.uselemma.ai/integrations/langgraph)     |
 | Mastra            | [docs](https://docs.uselemma.ai/integrations/mastra)        |
 | Codex             | [local plugin](plugins/lemma-codex)                         |
+| Hermes Agent      | [Hermes plugin](plugins/lemma-hermes)                       |
 | Pi                | [Pi package](plugins/lemma-pi)                              |
 
 For manual instrumentation, start with the [tracing overview](https://docs.uselemma.ai/tracing/overview).
@@ -71,6 +72,7 @@ For manual instrumentation, start with the [tracing overview](https://docs.usele
 | [`skills/lemma-tracing`](skills/lemma-tracing) | Lemma tracing skill for coding agents.                                          |
 | [`skills/lemma-diagnostics`](skills/lemma-diagnostics) | Lemma diagnostics skill for coding agents. |
 | [`plugins/lemma-codex`](plugins/lemma-codex)   | Local Codex lifecycle-hook tracing plugin.                                      |
+| [`plugins/lemma-hermes`](plugins/lemma-hermes) | Hermes Agent plugin with native lifecycle capture and SDK delivery.             |
 | [`plugins/lemma-pi`](plugins/lemma-pi)         | Pi package with SDK telemetry and native lifecycle adapters.                    |
 
 ## Development

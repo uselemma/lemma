@@ -1,0 +1,12 @@
+name: lemma
+version: "0.1.0"
+description: "Project-scoped Lemma SDK tracing for Hermes Agent sessions."
+author: Lemma
+hooks:
+  - pre_llm_call
+  - pre_api_request
+  - post_api_request
+  - api_request_error
+  - pre_tool_call
+  - post_tool_call
+  - on_session_end

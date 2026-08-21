@@ -1,0 +1,36 @@
+{
+  "name": "@uselemma/hermes",
+  "version": "0.1.0",
+  "description": "Lemma SDK tracing for Hermes Agent sessions",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "lemma-hermes": "./scripts/setup.mjs"
+  },
+  "files": [
+    "hermes-plugin/lemma/__init__.py",
+    "hermes-plugin/lemma/plugin.yaml",
+    "hermes-plugin/lemma/runtime/flush.mjs",
+    "scripts/setup.mjs",
+    "README.md"
+  ],
+  "keywords": [
+    "hermes-agent",
+    "observability",
+    "tracing"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@uselemma/tracing": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.8",
+    "esbuild": "^0.25.11",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
