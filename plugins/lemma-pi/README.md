@@ -13,7 +13,7 @@ The setup command opens Lemma's scoped coding-harness authorization page, lets y
 
 ## Pi CLI sessions
 
-The installed extension records Pi's prompt, model, and tool lifecycle events and sends one complete trace when the agent turn ends. Current Pi CLI releases do not expose an `@earendil-works/pi-telemetry` context to extensions, so the package uses Pi's native extension events as a compatibility bridge for CLI sessions.
+The installed extension records Pi's prompt, model, and tool lifecycle events and sends one complete trace after the agent is fully settled, including automatic retries, compaction retries, and queued continuations. Current Pi CLI releases do not expose an `@earendil-works/pi-telemetry` context to extensions, so the package uses Pi's native extension events as a compatibility bridge for CLI sessions.
 
 ## Pi AgentHarness sessions
 

@@ -43,6 +43,30 @@ function readCredentialsSync(options = {}) {
   }
 }
 
+// src/delivery.ts
+var DELIVERY_TIMEOUT_MS = 1e4;
+function createDeliveryFetch(fetchImplementation = fetch, timeoutMilliseconds = DELIVERY_TIMEOUT_MS) {
+  return async (request, init) => {
+    const controller = new AbortController();
+    const signal = init?.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
+    let timeout;
+    const timedOut = new Promise((_, reject) => {
+      timeout = setTimeout(() => {
+        controller.abort();
+        reject(new Error("Lemma Pi trace delivery timed out"));
+      }, timeoutMilliseconds);
+    });
+    try {
+      return await Promise.race([
+        fetchImplementation(request, { ...init, signal }),
+        timedOut
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  };
+}
+
 // src/sanitize.ts
 var SENSITIVE_KEY = /(^|[-_.])(authorization|cookie|password|passwd|secret|token|api[-_]?key|access[-_]?token|refresh[-_]?token)($|[-_.])/i;
 function isRecord2(value) {
@@ -81,7 +105,8 @@ async function defaultSendTrace(turn, credentials) {
   await new Lemma({
     apiKey: credentials.accessToken,
     projectId: credentials.projectId,
-    baseUrl: credentials.apiUrl
+    baseUrl: credentials.apiUrl,
+    fetch: createDeliveryFetch()
   }).ingest(trace.context, {
     startedAt: new Date(trace.startedAt),
     endedAt: new Date(trace.endedAt)
