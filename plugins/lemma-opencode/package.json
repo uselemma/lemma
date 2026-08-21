@@ -1,0 +1,47 @@
+{
+  "name": "@uselemma/opencode",
+  "version": "0.1.0",
+  "description": "Lemma SDK tracing for OpenCode coding-agent sessions",
+  "license": "MIT",
+  "type": "module",
+  "main": "./runtime/lemma.mjs",
+  "types": "./runtime/lemma.d.ts",
+  "exports": {
+    ".": {
+      "types": "./runtime/lemma.d.ts",
+      "import": "./runtime/lemma.mjs",
+      "default": "./runtime/lemma.mjs"
+    }
+  },
+  "bin": {
+    "lemma-opencode": "./scripts/setup.mjs"
+  },
+  "files": [
+    "runtime/lemma.mjs",
+    "runtime/lemma.d.ts",
+    "scripts/setup.mjs",
+    "README.md"
+  ],
+  "keywords": [
+    "opencode",
+    "observability",
+    "tracing"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "verify:local": "pnpm run build && node verify-local.mjs"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "1.18.19",
+    "@uselemma/tracing": "workspace:^"
+  },
+  "devDependencies": {
+    "@opencode-ai/sdk": "1.18.19",
+    "@types/node": "^22.18.8",
+    "esbuild": "^0.25.11",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
