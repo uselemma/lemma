@@ -1,0 +1,55 @@
+{
+  "name": "@uselemma/pi",
+  "version": "0.1.0",
+  "description": "Lemma SDK tracing for Pi coding-agent sessions",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "lemma-pi": "./scripts/setup.mjs"
+  },
+  "files": [
+    "dist",
+    "extensions",
+    "scripts",
+    "README.md"
+  ],
+  "keywords": [
+    "pi-package",
+    "pi",
+    "observability",
+    "tracing"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions"
+    ]
+  },
+  "scripts": {
+    "build": "node build.mjs && tsc -p tsconfig.build.json",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@uselemma/tracing": "workspace:^"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "@earendil-works/pi-telemetry": "^0.84.2",
+    "@types/node": "^22.18.8",
+    "esbuild": "^0.25.11",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "@earendil-works/pi-telemetry": "^0.84.2"
+  }
+}
