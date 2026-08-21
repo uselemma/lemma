@@ -3,4 +3,5 @@ packages:
   - "plugins/lemma-claude-code"
   - "plugins/lemma-codex"
   - "plugins/lemma-cursor"
+  - "plugins/lemma-hermes"
   - "plugins/lemma-pi"

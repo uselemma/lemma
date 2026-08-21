@@ -1,0 +1,55 @@
+name: Hermes plugin
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/hermes-plugin.yml"
+      - "packages/ts/tracing/**"
+      - "plugins/lemma-hermes/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/hermes-plugin.yml"
+      - "packages/ts/tracing/**"
+      - "plugins/lemma-hermes/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm --filter @uselemma/hermes type-check
+
+      - name: Build distributable scripts
+        run: pnpm --filter @uselemma/hermes build
+
+      - name: Test
+        run: pnpm --filter @uselemma/hermes test
+
+      - name: Verify committed bundles
+        run: git diff --exit-code -- plugins/lemma-hermes/hermes-plugin/lemma/runtime/flush.mjs plugins/lemma-hermes/scripts/setup.mjs
