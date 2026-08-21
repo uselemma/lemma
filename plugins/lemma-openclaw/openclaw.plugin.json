@@ -1,0 +1,14 @@
+{
+  "id": "lemma",
+  "name": "Lemma",
+  "description": "Project-scoped Lemma SDK tracing for OpenClaw agent sessions.",
+  "activation": {
+    "onStartup": true,
+    "onCapabilities": ["hook"]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
