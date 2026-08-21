@@ -228,7 +228,7 @@ Return values are captured automatically. Use `trace.output()` only when the rec
   </Tab>
 </Tabs>
 
-If the callback throws, the SDK records the trace as failed, sends it to Lemma, and rethrows the original error.
+If the callback throws, the SDK records the trace as failed, sends it to Lemma, and rethrows the original error. The rethrow holds even when the send itself fails: a delivery problem is warned about, never raised in place of your error. If the callback succeeds and the send fails, the send throws so you can retry — the trace is not marked failed, and it is not re-sent as a failed run.
 
 ## Pass trace context to helpers
 

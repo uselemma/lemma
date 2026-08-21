@@ -704,6 +704,104 @@ describe("Lemma", () => {
     });
   });
 
+  it("rethrows the original error when the failed trace cannot be delivered", async () => {
+    const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const agentError = new Error("tool timed out");
+
+    try {
+      await expect(
+        lemma.trace("support-agent", async () => {
+          throw agentError;
+        }),
+      ).rejects.toBe(agentError);
+
+      // The failed trace was still attempted, and recorded the agent's error.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const body = jsonBody(fetchMock.mock.calls[0]);
+      expect(body.trace.status).toBe("ERROR");
+      expect(body.trace.error).toBe("tool timed out");
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("rethrows the original error when trace delivery rejects at the transport", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error("ECONNREFUSED");
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const agentError = new Error("premature termination");
+
+    try {
+      await expect(
+        lemma.trace("support-agent", async () => {
+          throw agentError;
+        }),
+      ).rejects.toBe(agentError);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("warns about undelivered traces only once per client", async () => {
+    const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    try {
+      for (let i = 0; i < 3; i += 1) {
+        await expect(
+          lemma.trace("support-agent", async () => {
+            throw new Error("tool timed out");
+          }),
+        ).rejects.toThrow("tool timed out");
+      }
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not resend a successful run as a failed one when ingest fails", async () => {
+    // A transport failure must not fabricate an error status on the trace.
+    const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await expect(
+      lemma.trace("support-agent", async () => "ok"),
+    ).rejects.toThrow("failed to ingest trace (503): nope");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.status).toBeUndefined();
+    expect(body.trace.error).toBeNull();
+    expect(body.trace.output).toBe("ok");
+  });
+
   it("surfaces ingest failures", async () => {
     const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
     const lemma = new Lemma({
