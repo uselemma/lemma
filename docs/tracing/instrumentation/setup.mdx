@@ -83,40 +83,34 @@ Open the [Lemma dashboard](https://platform.uselemma.ai) -> **Traces**. Your tra
 
 ## Optional: stamp a release
 
-Set `LEMMA_RELEASE` to the version of your application currently deployed. Lemma reads it when the client starts and attaches it to every trace sent by that client. Update the value with each deployment.
+A release is the stable identifier your deployment process assigns to the running app, such as an app version, commit SHA, or container tag. Change it with each deployment.
+
+### Option 1: Set an environment variable (recommended)
 
 ```bash
-export LEMMA_RELEASE="1.8.3"
+export LEMMA_RELEASE="<stable-deployment-identifier>"
 ```
 
-Use a stable identifier from your deployment process, such as an application version, Git commit SHA, or container tag. Lemma does not generate this value.
-
-If your application already receives the release identifier from another environment variable or configuration source, pass it through the client's `release` option instead:
+### Option 2: Pass it when creating the client
 
 <Tabs>
   <Tab title="TypeScript">
     ```typescript
-    import { Lemma } from "@uselemma/tracing";
-
     const lemma = new Lemma({
-      release: process.env.VERCEL_GIT_COMMIT_SHA,
+      release: "<stable-deployment-identifier>",
     });
     ```
   </Tab>
   <Tab title="Python">
     ```python
-    import os
-
-    from uselemma_tracing import Lemma
-
-    lemma = Lemma(release=os.environ.get("GIT_COMMIT_SHA"))
+    lemma = Lemma(release="<stable-deployment-identifier>")
     ```
   </Tab>
 </Tabs>
 
-Choose one method. An explicit `release` option overrides `LEMMA_RELEASE`.
+Choose one option. If you set both, the `release` option overrides `LEMMA_RELEASE`.
 
-Adapters (`vercelAI`, `openAIAgents`, `langChain`, `langGraph`, `mastra`) accept the same `release` field and forward it to the client they construct.
+Framework adapters accept the same `release` option.
 
 ## Next steps
 
