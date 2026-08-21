@@ -1,0 +1,89 @@
+name: Publish coding harness plugins (npm)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "plugins/lemma-pi/package.json"
+      - "plugins/lemma-hermes/package.json"
+      - "plugins/lemma-openclaw/package.json"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-harness-plugins
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: "@uselemma/pi"
+            directory: plugins/lemma-pi
+          - package: "@uselemma/hermes"
+            directory: plugins/lemma-hermes
+          - package: "@uselemma/openclaw"
+            directory: plugins/lemma-openclaw
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./${{ matrix.directory }}/package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Package version: $VERSION"
+
+      - name: Check if already published
+        id: check
+        run: |
+          if npm view "${{ matrix.package }}@${{ steps.version.outputs.version }}" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "Version ${{ steps.version.outputs.version }} is already on npm; skipping publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "Version ${{ steps.version.outputs.version }} is new; will publish."
+          fi
+
+      - name: Install dependencies
+        if: steps.check.outputs.published == 'false'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared tracing package
+        if: steps.check.outputs.published == 'false'
+        run: pnpm --filter @uselemma/tracing build
+
+      - name: Type-check
+        if: steps.check.outputs.published == 'false'
+        run: pnpm --filter "${{ matrix.package }}" type-check
+
+      - name: Build
+        if: steps.check.outputs.published == 'false'
+        run: pnpm --filter "${{ matrix.package }}" build
+
+      - name: Test
+        if: steps.check.outputs.published == 'false'
+        run: pnpm --filter "${{ matrix.package }}" test
+
+      - name: Verify committed package files
+        if: steps.check.outputs.published == 'false'
+        run: git diff --exit-code -- "${{ matrix.directory }}"
+
+      - name: Publish
+        if: steps.check.outputs.published == 'false'
+        run: NODE_AUTH_TOKEN="" pnpm publish --access public --no-git-checks
+        working-directory: ${{ matrix.directory }}
