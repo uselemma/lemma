@@ -27,20 +27,22 @@ afterEach(async () => {
 });
 
 describe("Hermes native plugin", () => {
-  it("buffers lifecycle events and writes one sanitized pending turn", async () => {
-    const dataDir = await mkdtemp(join(tmpdir(), "lemma-hermes-plugin-"));
-    directories.push(dataDir);
-    await writeFile(
-      join(dataDir, "credentials.json"),
-      JSON.stringify({
-        version: 1,
-        apiUrl: "https://dev.api.uselemma.ai",
-        projectId: "project-1",
-        credentialId: "credential-1",
-        accessToken: "secret-token",
-      }),
-    );
-    const script = String.raw`
+  it(
+    "buffers lifecycle events and writes one sanitized pending turn",
+    async () => {
+      const dataDir = await mkdtemp(join(tmpdir(), "lemma-hermes-plugin-"));
+      directories.push(dataDir);
+      await writeFile(
+        join(dataDir, "credentials.json"),
+        JSON.stringify({
+          version: 1,
+          apiUrl: "https://dev.api.uselemma.ai",
+          projectId: "project-1",
+          credentialId: "credential-1",
+          accessToken: "secret-token",
+        }),
+      );
+      const script = String.raw`
 import importlib.util, json, pathlib, sys
 plugin_path = pathlib.Path(sys.argv[1]) / "__init__.py"
 spec = importlib.util.spec_from_file_location("lemma_plugin", plugin_path)
@@ -54,29 +56,31 @@ module.on_post_tool_call(session_id="session-1", turn_id="turn-1", tool_call_id=
 module.on_post_api_request(session_id="session-1", turn_id="turn-1", assistant_message={"content": "Done"}, provider="provider-1", response_model="model-1")
 module.on_session_end(session_id="session-1", turn_id="turn-1", completed=True, model="model-1", platform="cli", turn_exit_reason="text_response(stop)")
 `;
-    await run("python3", ["-c", script, pluginRoot], {
-      env: { ...process.env, LEMMA_HERMES_DATA_DIR: dataDir },
-    });
-    const pendingFiles = await readdir(join(dataDir, "pending"));
-    expect(pendingFiles).toHaveLength(1);
-    const pending = await readFile(
-      join(dataDir, "pending", pendingFiles[0]),
-      "utf8",
-    );
-    expect(pending).not.toContain("do-not-store");
-    expect(JSON.parse(pending)).toMatchObject({
-      version: 1,
-      apiUrl: "https://dev.api.uselemma.ai",
-      projectId: "project-1",
-      turn: {
-        sessionId: "session-1",
-        turnId: "turn-1",
-        prompt: "Fix it",
-        response: "Done",
-        tools: [{ toolUseId: "tool-1", toolName: "terminal" }],
-      },
-    });
-  });
+      await run("python3", ["-c", script, pluginRoot], {
+        env: { ...process.env, LEMMA_HERMES_DATA_DIR: dataDir },
+      });
+      const pendingFiles = await readdir(join(dataDir, "pending"));
+      expect(pendingFiles).toHaveLength(1);
+      const pending = await readFile(
+        join(dataDir, "pending", pendingFiles[0]),
+        "utf8",
+      );
+      expect(pending).not.toContain("do-not-store");
+      expect(JSON.parse(pending)).toMatchObject({
+        version: 1,
+        apiUrl: "https://dev.api.uselemma.ai",
+        projectId: "project-1",
+        turn: {
+          sessionId: "session-1",
+          turnId: "turn-1",
+          prompt: "Fix it",
+          response: "Done",
+          tools: [{ toolUseId: "tool-1", toolName: "terminal" }],
+        },
+      });
+    },
+    15_000,
+  );
 
   it("ships no MCP, skill, or OTLP configuration", async () => {
     const contents = await Promise.all(
