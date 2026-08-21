@@ -96,10 +96,12 @@ function createLemmaPiExtension(dependencies = {}) {
   const readCredentials = dependencies.readCredentials ?? (() => readCredentialsSync());
   const sendTrace = dependencies.sendTrace ?? defaultSendTrace;
   let activeTurn;
+  let latestAssistantResponse = "";
   return (pi) => {
     pi.on(
       "before_agent_start",
       (event, ctx) => {
+        latestAssistantResponse = "";
         activeTurn = startCodingAgentTurn({
           harness: "pi",
           sessionId: ctx.sessionManager.getSessionId(),
@@ -134,36 +136,43 @@ function createLemmaPiExtension(dependencies = {}) {
         endedAt: now().toISOString()
       });
     });
-    pi.on("agent_end", async (event, ctx) => {
-      const open = activeTurn;
-      activeTurn = void 0;
-      if (!open) return;
-      let credentials;
-      try {
-        credentials = readCredentials();
-      } catch {
-        warn(ctx, LEMMA_PI_CREDENTIALS_HELP);
-        return;
-      }
-      if (!credentials) {
-        warn(ctx, LEMMA_PI_CREDENTIALS_HELP);
-        return;
-      }
-      const completed = completeCodingAgentTurn(open, {
-        response: assistantResponse(event),
-        endedAt: now().toISOString(),
-        model: ctx.model?.id,
-        provider: ctx.model?.provider
-      });
-      try {
-        await sendTrace(completed, credentials);
-      } catch {
-        warn(
-          ctx,
-          "Lemma Pi trace delivery failed. Run `pnpm dlx @uselemma/pi setup` to reconnect or rotate the scoped credential."
-        );
-      }
+    pi.on("agent_end", (event) => {
+      if (!activeTurn) return;
+      latestAssistantResponse = assistantResponse(event);
     });
+    pi.on(
+      "agent_settled",
+      async (_event, ctx) => {
+        const open = activeTurn;
+        activeTurn = void 0;
+        if (!open) return;
+        let credentials;
+        try {
+          credentials = readCredentials();
+        } catch {
+          warn(ctx, LEMMA_PI_CREDENTIALS_HELP);
+          return;
+        }
+        if (!credentials) {
+          warn(ctx, LEMMA_PI_CREDENTIALS_HELP);
+          return;
+        }
+        const completed = completeCodingAgentTurn(open, {
+          response: latestAssistantResponse,
+          endedAt: now().toISOString(),
+          model: ctx.model?.id,
+          provider: ctx.model?.provider
+        });
+        try {
+          await sendTrace(completed, credentials);
+        } catch {
+          warn(
+            ctx,
+            "Lemma Pi trace delivery failed. Run `pnpm dlx @uselemma/pi setup` to reconnect or rotate the scoped credential."
+          );
+        }
+      }
+    );
   };
 }
 

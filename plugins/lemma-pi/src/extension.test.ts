@@ -80,6 +80,10 @@ describe("Pi extension compatibility adapter", () => {
       } as never,
       fixture.context,
     );
+    await fixture.handlers.get("agent_settled")?.(
+      { type: "agent_settled" } as never,
+      fixture.context,
+    );
 
     expect(sendTrace).toHaveBeenCalledOnce();
     expect(sendTrace.mock.calls[0][0]).toMatchObject({
@@ -96,6 +100,60 @@ describe("Pi extension compatibility adapter", () => {
     expect(JSON.stringify(sendTrace.mock.calls[0][0])).not.toContain(
       "must-not-leak",
     );
+  });
+
+  it("sends one trace with the latest response after retries settle", async () => {
+    const fixture = extensionFixture();
+    const sendTrace = vi.fn(
+      async (
+        _turn: CompletedCodingAgentTurn,
+        _credentials: LemmaPiCredentials,
+      ) => undefined,
+    );
+    createLemmaPiExtension({
+      createId: () => "turn-1",
+      readCredentials: () => ({
+        version: 1,
+        apiUrl: "https://dev.api.uselemma.ai",
+        projectId: "10000000-0000-0000-0000-000000000001",
+        credentialId: "credential-1",
+        accessToken: "lemma_ci_scoped-secret",
+      }),
+      sendTrace,
+    })(fixture.pi);
+
+    await fixture.handlers.get("before_agent_start")?.(
+      { type: "before_agent_start", prompt: "Retry this" } as never,
+      fixture.context,
+    );
+    await fixture.handlers.get("agent_end")?.(
+      {
+        type: "agent_end",
+        messages: [{ role: "assistant", content: "Temporary failure" }],
+      } as never,
+      fixture.context,
+    );
+    await fixture.handlers.get("agent_end")?.(
+      {
+        type: "agent_end",
+        messages: [{ role: "assistant", content: "Recovered" }],
+      } as never,
+      fixture.context,
+    );
+
+    expect(sendTrace).not.toHaveBeenCalled();
+
+    await fixture.handlers.get("agent_settled")?.(
+      { type: "agent_settled" } as never,
+      fixture.context,
+    );
+
+    expect(sendTrace).toHaveBeenCalledOnce();
+    expect(sendTrace.mock.calls[0][0]).toMatchObject({
+      turnId: "turn-1",
+      prompt: "Retry this",
+      response: "Recovered",
+    });
   });
 
   it("fails closed when setup has not stored credentials", async () => {
@@ -116,6 +174,10 @@ describe("Pi extension compatibility adapter", () => {
     );
     await fixture.handlers.get("agent_end")?.(
       { type: "agent_end", messages: [] } as never,
+      fixture.context,
+    );
+    await fixture.handlers.get("agent_settled")?.(
+      { type: "agent_settled" } as never,
       fixture.context,
     );
     expect(sendTrace).not.toHaveBeenCalled();
