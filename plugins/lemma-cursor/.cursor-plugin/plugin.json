@@ -1,0 +1,15 @@
+{
+  "name": "lemma-cursor",
+  "displayName": "Lemma tracing",
+  "version": "0.1.0",
+  "description": "Capture each completed Cursor prompt as a Lemma trace without MCP.",
+  "author": {
+    "name": "Lemma",
+    "email": "support@uselemma.ai"
+  },
+  "homepage": "https://uselemma.ai",
+  "repository": "https://github.com/uselemma/lemma",
+  "license": "MIT",
+  "keywords": ["cursor", "observability", "tracing"],
+  "hooks": "./hooks/hooks.json"
+}
