@@ -73,6 +73,16 @@ def test_normalize_provider_shapes():
     }
 
 
+def test_normalize_rejects_non_finite_numbers():
+    inf = float("inf")
+    nan = float("nan")
+    # NaN/inf token counts are unusable — omit rather than emit them.
+    assert normalize_token_usage({"inputTokens": inf, "outputTokens": 4}) == {
+        "output_tokens": 4
+    }
+    assert normalize_token_usage({"prompt_tokens": nan}) is None
+
+
 def test_token_usage_attributes():
     attrs = token_usage_attributes(
         {

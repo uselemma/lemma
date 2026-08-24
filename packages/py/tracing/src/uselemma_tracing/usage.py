@@ -18,13 +18,14 @@ do not invent an input/output split.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 
 def _as_finite_number(value: Any) -> int | float | None:
     if isinstance(value, bool):
         return None
-    if isinstance(value, (int, float)) and value == value:  # not NaN
+    if isinstance(value, (int, float)) and math.isfinite(value):  # not NaN/inf
         return value
     return None
 
