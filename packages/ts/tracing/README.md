@@ -464,7 +464,7 @@ Use `attributes` for raw attributes that do not yet have a native SDK prop.
 
 ## Documentation
 
-- [Quickstart](https://docs.uselemma.ai/getting-started/quickstart)
+- [Quickstart](https://docs.uselemma.ai/tracing/instrumentation/setup)
 - [Trace contract](https://docs.uselemma.ai/reference/trace-contract)
 
 ## Examples

@@ -134,9 +134,9 @@ Spans, generations, and tools recorded during `lemma.trace()` become children of
 
 ```text
 support-agent              <- trace root
-`- retrieve-context        <- span
-   |- search_docs          <- tool call
-   `- draft-reply          <- generation
+└── retrieve-context       <- span
+    ├── search_docs        <- tool call
+    └── draft-reply        <- generation
 ```
 
 ## Next steps

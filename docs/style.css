@@ -75,6 +75,48 @@ header li:has(> a[href*="cal.com"]) {
   color: #FFFFFF !important;
 }
 
+/* Trace structure diagram */
+.trace-structure-diagram {
+  --trace-root-bg: #f5f3ff;
+  --trace-root-border: #8b5cf6;
+  --trace-root-title: #5b21b6;
+  --trace-root-label: #7c3aed;
+  --generation-bg: #eff6ff;
+  --generation-border: #60a5fa;
+  --generation-title: #1d4ed8;
+  --tool-bg: #f0fdf4;
+  --tool-border: #4ade80;
+  --tool-title: #15803d;
+  --trace-meta: #6b7280;
+  --trace-connector: #d1d5db;
+}
+
+.dark .trace-structure-diagram {
+  --trace-root-bg: #21183d;
+  --trace-root-border: #a78bfa;
+  --trace-root-title: #ddd6fe;
+  --trace-root-label: #c4b5fd;
+  --generation-bg: #12233f;
+  --generation-border: #60a5fa;
+  --generation-title: #bfdbfe;
+  --tool-bg: #102d20;
+  --tool-border: #4ade80;
+  --tool-title: #bbf7d0;
+  --trace-meta: #cbd5e1;
+  --trace-connector: #64748b;
+}
+
+/* Vendored SVG icons render as external images, so currentColor inside each
+   SVG cannot inherit Mintlify's theme-aware wrapper color. Normalize the
+   monochrome glyphs to black in light mode and white in dark mode. */
+img[src^="/icons/"] {
+  filter: brightness(0) saturate(100%);
+}
+
+.dark img[src^="/icons/"] {
+  filter: brightness(0) saturate(100%) invert(1);
+}
+
 /* Typography: body text + headings letter-spacing */
 body {
   letter-spacing: 0.02em !important;

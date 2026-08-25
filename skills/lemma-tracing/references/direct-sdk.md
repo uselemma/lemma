@@ -8,9 +8,9 @@ Produce one root trace per agent execution:
 
 ```text
 support-agent              <- trace root (input, output, name, thread/user)
-|- retrieve-context        <- span
-|  `- search_docs          <- tool
-`- answer                  <- generation
+├── retrieve-context       <- span
+│   └── search_docs        <- tool
+└── answer                 <- generation
 ```
 
 Required for useful Lemma analysis:

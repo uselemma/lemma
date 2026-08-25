@@ -51,9 +51,14 @@
             "icon": "/icons/rocket.svg",
             "expanded": true,
             "pages": [
-              "getting-started/introduction",
-              "getting-started/quickstart",
-              "getting-started/agent-skill",
+              "getting-started/introduction"
+            ]
+          },
+          {
+            "group": "Platform",
+            "icon": "/icons/stack-line.svg",
+            "expanded": true,
+            "pages": [
               "getting-started/concepts"
             ]
           },
@@ -62,9 +67,8 @@
             "icon": "/icons/workflow.svg",
             "expanded": true,
             "pages": [
-              "tracing/overview",
-              "tracing/instrumentation/instrument-an-agent",
               "tracing/instrumentation/setup",
+              "tracing/instrumentation/instrument-an-agent",
               "tracing/instrumentation/traces",
               "tracing/instrumentation/generations",
               "tracing/instrumentation/tool-calls",
@@ -160,6 +164,18 @@
       "destination": "/reference/trace-contract"
     },
     {
+      "source": "/getting-started/quickstart",
+      "destination": "/tracing/instrumentation/setup"
+    },
+    {
+      "source": "/getting-started/agent-skill",
+      "destination": "/tracing/instrumentation/setup"
+    },
+    {
+      "source": "/tracing/overview",
+      "destination": "/tracing/instrumentation/setup"
+    },
+    {
       "source": "/tracing/instrumentation",
       "destination": "/tracing/instrumentation/setup"
     },
@@ -169,7 +185,7 @@
     },
     {
       "source": "/tracing/wrapping-your-agent",
-      "destination": "/tracing/overview"
+      "destination": "/tracing/instrumentation/setup"
     },
     {
       "source": "/tracing/custom-instrumentation/overview",
