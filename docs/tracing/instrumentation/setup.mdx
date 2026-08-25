@@ -1,132 +1,176 @@
 ---
-title: "Setup"
-description: "Install the Lemma SDK and send traces directly to the Lemma API"
+title: "Quickstart"
+description: "Install the Lemma SDK and send your first complete agent trace"
 ---
 
-The Lemma SDK sends trace JSON directly to the Lemma API.
+Send one complete agent trace to Lemma. The software development kit (SDK) sends JSON to the Lemma API.
 
-## 1. Install
+One agent execution is one [trace](/getting-started/concepts). Record model calls, tool calls, retrieval, and app logic inside that trace.
 
-<Tabs>
-  <Tab title="TypeScript">
-    ```bash
-    npm install @uselemma/tracing
-    ```
-  </Tab>
-  <Tab title="Python">
-    ```bash
-    pip install uselemma-tracing
-    ```
-  </Tab>
-</Tabs>
+## What you are building
 
-## 2. Set environment variables
+You will send one support-agent trace with a nested generation and tool call.
 
-Find your API key and project ID in [Lemma project settings](https://platform.uselemma.ai).
-
-```bash
-export LEMMA_API_KEY="lma_..."
-export LEMMA_PROJECT_ID="proj_..."
+```text
+support-agent              <- trace root (input, output)
+├── draft-reply            <- generation (model, content)
+└── search_docs            <- tool call (args, result)
 ```
 
-<Note>
-  The SDK sends to `https://api.uselemma.ai` by default. Pass `baseUrl` to `new Lemma({ baseUrl })` only when you need a custom endpoint.
-</Note>
+## Steps
 
-## 3. Create a client
+<Steps>
+  <Step title="Install the SDK">
+    <Tabs>
+      <Tab title="TypeScript">
+        ```bash
+        npm install @uselemma/tracing
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```bash
+        pip install uselemma-tracing
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
 
-<Tabs>
-  <Tab title="TypeScript">
-    ```typescript
-    import { Lemma } from "@uselemma/tracing";
+  <Step title="Set environment variables">
+    Find these in [Lemma project settings](https://platform.uselemma.ai).
 
-    export const lemma = new Lemma();
+    ```bash
+    export LEMMA_API_KEY="lma_..."
+    export LEMMA_PROJECT_ID="proj_..."
+    export LEMMA_RELEASE="1.8.3" # optional
     ```
-  </Tab>
-  <Tab title="Python">
-    ```python
-    from uselemma_tracing import Lemma
 
-    lemma = Lemma()
-    ```
-  </Tab>
-</Tabs>
+    The SDK sends to `https://api.uselemma.ai` by default. Pass `baseUrl` / `base_url` only for a custom endpoint.
+  </Step>
 
-## 4. Send your first trace
+  <Step title="Trace one agent execution">
+    Create a client, open a trace, then record one generation and one tool call inside the trace callback.
 
-<Tabs>
-  <Tab title="TypeScript">
-    ```typescript
-    await lemma.trace(
-      {
-        name: "hello-agent",
-        input: "What is the capital of France?",
-      },
-      async () => {
-        return "Paris.";
-      },
-    );
-    ```
-  </Tab>
-  <Tab title="Python">
-    ```python
-    lemma.trace(
-        "hello-agent",
-        lambda trace: "Paris.",
-        input="What is the capital of France?",
-    )
-    ```
-  </Tab>
-</Tabs>
+    <Tabs>
+      <Tab title="TypeScript">
+        ```typescript
+        import { Lemma } from "@uselemma/tracing";
 
-Open the [Lemma dashboard](https://platform.uselemma.ai) -> **Traces**. Your trace appears within seconds.
+        const lemma = new Lemma();
 
-## Optional: stamp a release
+        const answer = await lemma.trace(
+          {
+            name: "support-agent",
+            input: userMessage,
+            threadId: conversationId,
+            userId: user.id,
+          },
+          async (trace) => {
+            const docs = await searchDocs(userMessage);
+            trace.recordTool({
+              name: "search_docs",
+              input: { query: userMessage },
+              output: docs,
+            });
 
-A release is the stable identifier your deployment process assigns to the running app, such as an app version, commit SHA, or container tag. Change it with each deployment.
+            const response = await callModel(userMessage, docs);
+            trace.recordGeneration({
+              name: "draft-reply",
+              input: response.messages,
+              output: response.text,
+              model: "gpt-4o",
+            });
 
-### Option 1: Set an environment variable (recommended)
+            return response.text;
+          },
+        );
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        from uselemma_tracing import Lemma
 
-```bash
-export LEMMA_RELEASE="<stable-deployment-identifier>"
-```
+        lemma = Lemma()
 
-Most CI systems expose the current commit SHA as an environment variable. Set `LEMMA_RELEASE` to that value during deployment to give each deployed code version a unique, stable identifier.
+        def run(trace):
+            docs = search_docs(user_message)
+            trace.record_tool(
+                name="search_docs",
+                input={"query": user_message},
+                output=docs,
+            )
 
-### Option 2: Pass it when creating the client
+            response = call_model(user_message, docs)
+            trace.record_generation(
+                name="draft-reply",
+                input=response.messages,
+                output=response.text,
+                model="gpt-4o",
+            )
+
+            return response.text
+
+        answer = lemma.trace(
+            "support-agent",
+            run,
+            input=user_message,
+            thread_id=conversation_id,
+            user_id=user.id,
+        )
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Verify in Lemma">
+    Open the [Lemma dashboard](https://platform.uselemma.ai) and go to **Traces**. You should see:
+
+    - One trace for the whole execution
+    - The root trace with input and output
+    - A nested generation with model metadata
+    - A nested tool call with arguments and result
+  </Step>
+</Steps>
+
+## Stamp a release
+
+Tag every ingest payload with the stable identifier your deployment process assigns to the running app, such as an app version, commit SHA, or container tag. Change it with each deployment.
+
+Pass `release` on the client, or set `LEMMA_RELEASE`. Most continuous integration systems expose the current commit SHA as an environment variable. Set `LEMMA_RELEASE` to that value during deployment.
+
+An explicit constructor value wins over the environment variable. Lemma omits empty, whitespace-only, longer-than-200-character, or newline, tab, or carriage-return values. It does not guess a git SHA.
+
+Adapters (`vercelAI`, `openAIAgents`, `langChain`, `langGraph`, `mastra`) accept the same `release` field and forward it to the client they construct.
 
 <Tabs>
   <Tab title="TypeScript">
     ```typescript
     const lemma = new Lemma({
-      release: "<stable-deployment-identifier>",
+      release: "1.8.3",
     });
     ```
   </Tab>
   <Tab title="Python">
     ```python
-    lemma = Lemma(release="<stable-deployment-identifier>")
+    lemma = Lemma(release="1.8.3")
     ```
   </Tab>
 </Tabs>
 
-Choose one option. If you set both, the `release` option overrides `LEMMA_RELEASE`.
-
-Framework adapters accept the same `release` option.
-
 ## Next steps
 
+Use these pages after the first trace lands.
+
 <CardGroup cols={2}>
-  <Card title="Traces" icon="/icons/git-branch.svg" href="/tracing/instrumentation/traces">
-    Define one agent execution.
+  <Card title="Instrument an agent" icon="/icons/workflow.svg" href="/tracing/instrumentation/instrument-an-agent">
+    Add spans, tools, generations, and errors to a real agent.
   </Card>
-  <Card title="Generations" icon="/icons/sparkles.svg" href="/tracing/instrumentation/generations">
-    Capture LLM calls with model, prompt, completion, and timing.
-  </Card>
-  <Card title="Tool calls" icon="/icons/wrench.svg" href="/tracing/instrumentation/tool-calls">
-    Record tool arguments and results.
+  <Card title="Concepts" icon="/icons/book.svg" href="/getting-started/concepts">
+    Traces, spans, generations, and threads.
   </Card>
   <Card title="Trace contract" icon="/icons/file-check.svg" href="/reference/trace-contract">
     The exact shape Lemma reads.
+  </Card>
+  <Card title="Threads and context" icon="/icons/users.svg" href="/tracing/instrumentation/context">
+    Group conversations and attach users.
   </Card>
 </CardGroup>

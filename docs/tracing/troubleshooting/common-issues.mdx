@@ -9,6 +9,22 @@ This page is organized by **symptom**. Most issues are trace-shape problems: the
   When behavior is unclear, first enable [Debug mode](/tracing/troubleshooting/debug-mode) in the same runtime that serves traffic. It shows whether the SDK is running, which trace it tries to send, how many child spans were included, and whether the ingest request succeeds.
 </Note>
 
+## Audit traces that already land
+
+Use the Lemma diagnostics skill when traces are arriving and you want to check whether their shape matches the [high-quality traces guide](/guides/building-high-quality-traces). The skill audits your traces without editing your app.
+
+```bash
+npx skills add uselemma/lemma --skill "lemma-diagnostics"
+```
+
+Then prompt your coding agent:
+
+```text
+Are these traces high quality? Audit the shape of traces already in Lemma.
+```
+
+If no traces are arriving, start with [Quickstart](/tracing/instrumentation/setup) instead.
+
 ## No traces in Lemma
 
 **Cause:** credentials, project ID, base URL, or outbound network access is wrong.

@@ -13,34 +13,34 @@ Four nouns describe everything in Lemma. They are the same words used in the das
 
 A single agent execution produces a tree. The root is the trace record; everything inside the execution nests under it as child spans.
 
-<div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "28px 0", gap: 0, fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace" }}>
+<div className="trace-structure-diagram" style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "28px 0", gap: 0, fontFamily: "ui-monospace, 'SF Mono', Menlo, monospace" }}>
 
-  <div style={{ background: "#f5f3ff", border: "1.5px solid #8b5cf6", borderRadius: 10, padding: "10px 20px", textAlign: "center", minWidth: 230 }}>
-    <div style={{ fontSize: 13, fontWeight: 700, color: "#5b21b6" }}>support-agent</div>
-    <div style={{ fontSize: 11, fontWeight: 600, color: "#7c3aed", marginTop: 2 }}>trace root</div>
-    <div style={{ fontSize: 10.5, color: "#9ca3af", marginTop: 3 }}>input · output · timing</div>
+  <div style={{ background: "var(--trace-root-bg)", border: "1.5px solid var(--trace-root-border)", borderRadius: 10, padding: "10px 20px", textAlign: "center", minWidth: 230 }}>
+    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--trace-root-title)" }}>support-agent</div>
+    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--trace-root-label)", marginTop: 2 }}>trace root</div>
+    <div style={{ fontSize: 10.5, color: "var(--trace-meta)", marginTop: 3 }}>input · output · timing</div>
   </div>
 
-  <div style={{ width: 1.5, height: 22, background: "#d1d5db" }} />
+  <div style={{ width: 1.5, height: 22, background: "var(--trace-connector)" }} />
 
   <div style={{ display: "flex", alignItems: "flex-start", position: "relative" }}>
-    <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "calc(100% - 80px)", height: 1.5, background: "#d1d5db", zIndex: 0 }} />
+    <div style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "calc(100% - 80px)", height: 1.5, background: "var(--trace-connector)", zIndex: 0 }} />
 
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 0 }}>
-      <div style={{ width: 1.5, height: 22, background: "#d1d5db" }} />
-      <div style={{ background: "#eff6ff", border: "1.5px solid #60a5fa", borderRadius: 10, padding: "9px 16px", textAlign: "center", minWidth: 170 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "#1d4ed8" }}>draft-reply</div>
-        <div style={{ fontSize: 10.5, color: "#9ca3af", marginTop: 3 }}>generation · model · content</div>
+      <div style={{ width: 1.5, height: 22, background: "var(--trace-connector)" }} />
+      <div style={{ background: "var(--generation-bg)", border: "1.5px solid var(--generation-border)", borderRadius: 10, padding: "9px 16px", textAlign: "center", minWidth: 170 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--generation-title)" }}>draft-reply</div>
+        <div style={{ fontSize: 10.5, color: "var(--trace-meta)", marginTop: 3 }}>generation · model · content</div>
       </div>
     </div>
 
     <div style={{ width: 48 }} />
 
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-      <div style={{ width: 1.5, height: 22, background: "#d1d5db" }} />
-      <div style={{ background: "#f0fdf4", border: "1.5px solid #4ade80", borderRadius: 10, padding: "9px 16px", textAlign: "center", minWidth: 170 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "#15803d" }}>search_docs</div>
-        <div style={{ fontSize: 10.5, color: "#9ca3af", marginTop: 3 }}>tool call · args · result</div>
+      <div style={{ width: 1.5, height: 22, background: "var(--trace-connector)" }} />
+      <div style={{ background: "var(--tool-bg)", border: "1.5px solid var(--tool-border)", borderRadius: 10, padding: "9px 16px", textAlign: "center", minWidth: 170 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--tool-title)" }}>search_docs</div>
+        <div style={{ fontSize: 10.5, color: "var(--trace-meta)", marginTop: 3 }}>tool call · args · result</div>
       </div>
     </div>
   </div>
@@ -78,7 +78,7 @@ A **project** is the top-level container for all traces from your agent(s). Each
   <Card title="Trace contract" icon="/icons/file-check.svg" href="/reference/trace-contract">
     The exact shape Lemma reads.
   </Card>
-  <Card title="Setup" icon="/icons/wrench.svg" href="/tracing/instrumentation/setup">
-    Install the SDK and point it at Lemma.
+  <Card title="Quickstart" icon="/icons/wrench.svg" href="/tracing/instrumentation/setup">
+    Install the SDK and send your first complete agent trace.
   </Card>
 </CardGroup>

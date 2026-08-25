@@ -270,9 +270,9 @@ Avoid relying on ambient trace state. A process can coordinate multiple traces a
 
 ```text
 support-agent              <- trace root (input, output)
-|- draft-reply             <- generation
-|- search_docs             <- tool call
-`- final-answer            <- generation
+├── draft-reply            <- generation
+├── search_docs            <- tool call
+└── final-answer           <- generation
 ```
 
 ## Next steps

@@ -21,7 +21,7 @@ Lemma starts from the *trace* — one end-to-end execution — and requires its 
 - **Typed children** — generations, tools, and generic spans, not undifferentiated records.
 - **Per-generation message history** — the full ordered message list sent to each LLM call.
 
-Because Lemma is an opinionated sink that reads a [specific trace shape](/reference/trace-contract), the migration is to produce that shape explicitly with the Lemma SDK. See [Overview](/tracing/overview) for how Lemma reads your traces.
+Because Lemma is an opinionated sink that reads a [specific trace shape](/reference/trace-contract), the migration is to produce that shape explicitly with the Lemma SDK. See the [trace contract](/reference/trace-contract) for how Lemma reads your traces.
 
 ## Concept mapping
 
@@ -56,7 +56,7 @@ For per-interaction context such as feature flags or arbitrary properties, attac
 
 <Steps>
   <Step title="Install the Lemma SDK">
-    Install the SDK and set `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`. See [Setup](/tracing/instrumentation/setup).
+    Install the SDK and set `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`. See [Quickstart](/tracing/instrumentation/setup).
 
     <Tabs>
       <Tab title="TypeScript">
@@ -87,7 +87,7 @@ For per-interaction context such as feature flags or arbitrary properties, attac
 
 ## Re-instrumenting an interaction
 
-The example below is the Lemma equivalent of a Raindrop `begin()` → tool tracking → `finish()` flow: one trace, a typed tool, and a generation carrying the full message list. Install and configure the SDK first — see [Setup](/tracing/instrumentation/setup).
+The example below is the Lemma equivalent of a Raindrop `begin()` → tool tracking → `finish()` flow: one trace, a typed tool, and a generation carrying the full message list. Install and configure the SDK first. See [Quickstart](/tracing/instrumentation/setup).
 
 <Tabs>
   <Tab title="TypeScript">
@@ -202,8 +202,8 @@ If your run spans streaming callbacks or helpers rather than one function, use a
 ## Related pages
 
 <CardGroup cols={2}>
-  <Card title="Setup" icon="/icons/wrench.svg" href="/tracing/instrumentation/setup">
-    Install the SDK and point it at Lemma.
+  <Card title="Quickstart" icon="/icons/wrench.svg" href="/tracing/instrumentation/setup">
+    Install the SDK and send your first complete agent trace.
   </Card>
   <Card title="Trace contract" icon="/icons/file-check.svg" href="/reference/trace-contract">
     The exact shape and fields Lemma reads.

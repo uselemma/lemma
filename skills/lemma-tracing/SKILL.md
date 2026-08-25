@@ -60,7 +60,7 @@ Use docs in this order:
 
 1. Fetch `https://docs.uselemma.ai/llms.txt` when live docs are needed.
 2. Read the relevant current page before editing:
-   - Setup: `https://docs.uselemma.ai/tracing/instrumentation/setup.md`
+   - Quickstart: `https://docs.uselemma.ai/tracing/instrumentation/setup.md`
    - Step-by-step agent instrumentation: `https://docs.uselemma.ai/tracing/instrumentation/instrument-an-agent.md`
    - Traces and handles: `https://docs.uselemma.ai/tracing/instrumentation/traces.md`
    - Generations: `https://docs.uselemma.ai/tracing/instrumentation/generations.md`
