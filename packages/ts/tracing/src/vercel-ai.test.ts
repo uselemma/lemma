@@ -824,6 +824,65 @@ describe("vercelAI", () => {
     expect(tool).not.toHaveProperty("output");
   });
 
+  it("records MCP isError:false payloads with structuredContent.error as span errors", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await lemma.trace("support-agent", async (trace) => {
+      const integration = vercelAI({ trace });
+
+      integration.onStepStart?.({
+        stepNumber: 0,
+        model: { provider: "openai", modelId: "gpt-4o" },
+        messages: [{ role: "user", content: "return the camera" }],
+      });
+      integration.onToolCallFinish?.({
+        toolCall: {
+          toolName: "return_delivered_order_items",
+          toolCallId: "tool-1",
+          input: { order_id: "#W-001" },
+        },
+        durationMs: 40,
+        success: true,
+        output: {
+          isError: false,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: "Error: Payment method not found",
+              }),
+            },
+          ],
+          structuredContent: { error: "Error: Payment method not found" },
+        },
+      } as never);
+      integration.onStepFinish?.({
+        stepNumber: 0,
+        model: { provider: "openai", modelId: "gpt-4o" },
+        text: "The return could not be completed.",
+      });
+
+      return "The return could not be completed.";
+    });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    const tool = body.trace.spans.find(
+      (span: { type?: string }) => span.type === "tool",
+    );
+    expect(tool).toMatchObject({
+      name: "return_delivered_order_items",
+      type: "tool",
+      status: "ERROR",
+      error: "Error: Payment method not found",
+    });
+    expect(tool).not.toHaveProperty("output");
+  });
+
   it("keeps v6 tool timing inside the parent generation window", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const lemma = new Lemma({

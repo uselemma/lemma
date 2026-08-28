@@ -322,6 +322,64 @@ describe("openAIAgents", () => {
     expect(body.trace.spans[0]).not.toHaveProperty("output");
   });
 
+  it("records function spans with payload-encoded error as error without output", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await processor.onTraceStart({
+      traceId: "trace_payload_err",
+      name: "support-agent",
+    });
+    await processor.onSpanStart({
+      traceId: "trace_payload_err",
+      spanId: "span_tool",
+      spanData: {
+        type: "function",
+        name: "return_delivered_order_items",
+        input: JSON.stringify({ order_id: "#W-001" }),
+      },
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_payload_err",
+      spanId: "span_tool",
+      spanData: {
+        type: "function",
+        name: "return_delivered_order_items",
+        input: JSON.stringify({ order_id: "#W-001" }),
+        output: JSON.stringify({
+          isError: false,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: "Error: Payment method not found",
+              }),
+            },
+          ],
+          structuredContent: { error: "Error: Payment method not found" },
+        }),
+      },
+    });
+    await processor.onTraceEnd({
+      traceId: "trace_payload_err",
+      name: "support-agent",
+    });
+    await processor.forceFlush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      name: "return_delivered_order_items",
+      type: "tool",
+      status: "ERROR",
+      error: "Error: Payment method not found",
+    });
+    expect(body.trace.spans[0]).not.toHaveProperty("output");
+  });
+
   it("extends a parent generation when a child tool ends later", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const processor = openAIAgents({

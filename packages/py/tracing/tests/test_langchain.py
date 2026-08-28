@@ -329,6 +329,43 @@ def test_langchain_records_is_error_tool_end_as_error_without_output():
     assert "output" not in span
 
 
+def test_langchain_records_payload_encoded_tool_failure_as_error():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id="10000000-0000-0000-0000-000000000001",
+        transport=make_transport(calls),
+    )
+
+    handler.on_chain_start({"name": "support-agent"}, "hello", run_id="chain-1")
+    handler.on_tool_start(
+        {"name": "return_delivered_order_items"},
+        {"order_id": "#W-001"},
+        run_id="tool-1",
+        parent_run_id="chain-1",
+    )
+    handler.on_tool_end(
+        {
+            "isError": False,
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps({"error": "Error: Payment method not found"}),
+                }
+            ],
+            "structuredContent": {"error": "Error: Payment method not found"},
+        },
+        run_id="tool-1",
+    )
+    handler.on_chain_end({"ok": True}, run_id="chain-1")
+
+    span = calls[0]["body"]["trace"]["spans"][0]
+    assert span["name"] == "return_delivered_order_items"
+    assert span["status"] == "ERROR"
+    assert span["error"] == "Error: Payment method not found"
+    assert "output" not in span
+
+
 def test_records_inputs_outputs_and_errors():
     calls = []
     handler = langchain(

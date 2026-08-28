@@ -469,6 +469,43 @@ describe("langChain", () => {
     expect(body.trace.spans[0]).not.toHaveProperty("output");
   });
 
+  it("records MCP isError:false payloads with structuredContent.error as span errors", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock);
+
+    h.handleChainStart({ name: "support-agent" }, "hello", "chain-1");
+    h.handleToolStart(
+      { name: "return_delivered_order_items" },
+      { order_id: "#W-001" },
+      "tool-1",
+      "chain-1",
+    );
+    await h.handleToolEnd(
+      {
+        isError: false,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ error: "Error: Payment method not found" }),
+          },
+        ],
+        structuredContent: { error: "Error: Payment method not found" },
+      },
+      "tool-1",
+    );
+    await h.handleChainEnd({ ok: true }, "chain-1");
+
+    await h.flush();
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      name: "return_delivered_order_items",
+      type: "tool",
+      status: "ERROR",
+      error: "Error: Payment method not found",
+    });
+    expect(body.trace.spans[0]).not.toHaveProperty("output");
+  });
+
   it("records inputs, outputs, errors, and structure", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const h = handler(fetchMock);

@@ -305,6 +305,60 @@ def test_openai_agents_records_is_error_function_output_as_error():
     assert calls[0]["trace"].get("error") in (None, )
 
 
+def test_openai_agents_records_payload_encoded_function_output_as_error():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+
+    payload = {
+        "isError": False,
+        "content": [
+            {
+                "type": "text",
+                "text": json.dumps({"error": "Error: Payment method not found"}),
+            }
+        ],
+        "structuredContent": {"error": "Error: Payment method not found"},
+    }
+    processor.on_trace_start(FakeTrace(trace_id="trace_payload_err", name="support-agent"))
+    processor.on_span_start(
+        FakeSpan(
+            trace_id="trace_payload_err",
+            span_id="span_tool",
+            span_data={
+                "type": "function",
+                "name": "return_delivered_order_items",
+                "input": '{"order_id":"#W-001"}',
+            },
+        )
+    )
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_payload_err",
+            span_id="span_tool",
+            span_data={
+                "type": "function",
+                "name": "return_delivered_order_items",
+                "input": '{"order_id":"#W-001"}',
+                "output": json.dumps(payload),
+            },
+        )
+    )
+    processor.on_trace_end(FakeTrace(trace_id="trace_payload_err", name="support-agent"))
+
+    span = calls[0]["trace"]["spans"][0]
+    assert span["name"] == "return_delivered_order_items"
+    assert span["status"] == "ERROR"
+    assert span["error"] == "Error: Payment method not found"
+    assert "output" not in span
+    assert calls[0]["trace"].get("status") != "ERROR"
+
+
 def test_openai_agents_live_function_output_prefers_structured_is_error():
     calls = []
 

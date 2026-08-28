@@ -1,47 +1,71 @@
 /**
  * Detect MCP-style / framework tool results that encode failure in the payload
- * (e.g. `{ isError: true, content: [...] }` or Mastra `{ error: true, message }`)
- * instead of throwing.
- * Returns an error message when the result should be recorded as `error`
- * (with no `output`), or null when it is a normal success payload.
+ * instead of throwing. Protocol flags (`isError: true`, Mastra `error: true`)
+ * and application-level `{ error: "..." }` / `structuredContent.error` strings
+ * are recorded as `error` (with no `output`). Returns null for a normal
+ * success payload.
  */
 export function toolResultError(output: unknown): string | null {
   const record = asResultRecord(output);
   if (!record) return null;
-  if (
-    record.isError !== true &&
-    record.is_error !== true &&
-    record.error !== true
-  ) {
-    return null;
-  }
 
-  const content = record.content;
-  if (Array.isArray(content)) {
-    const text = content
-      .map((part) => {
-        if (!part || typeof part !== "object") return "";
-        const textValue = (part as { text?: unknown }).text;
-        return typeof textValue === "string" ? textValue : "";
-      })
-      .filter(Boolean)
-      .join("\n")
-      .trim();
+  if (isFlaggedFailure(record)) {
+    const text = contentText(record.content);
     if (text) return text;
+    const flaggedError = nonEmptyString(record.error);
+    if (flaggedError) return flaggedError;
+    const message = nonEmptyString(record.message);
+    if (message) return message;
+    try {
+      return JSON.stringify(record);
+    } catch {
+      return "Tool returned an error result";
+    }
   }
 
-  if (typeof record.error === "string" && record.error.trim()) {
-    return record.error;
-  }
-  if (typeof record.message === "string" && record.message.trim()) {
-    return record.message;
-  }
+  return encodedPayloadError(record);
+}
 
-  try {
-    return JSON.stringify(record);
-  } catch {
-    return "Tool returned an error result";
-  }
+function isFlaggedFailure(record: Record<string, unknown>): boolean {
+  return (
+    record.isError === true ||
+    record.is_error === true ||
+    record.error === true
+  );
+}
+
+function encodedPayloadError(record: Record<string, unknown>): string | null {
+  const direct = nonEmptyString(record.error);
+  if (direct) return direct;
+
+  const structured = asResultRecord(record.structuredContent);
+  const nested = structured ? nonEmptyString(structured.error) : null;
+  if (nested) return nested;
+
+  const text = contentText(record.content);
+  if (!text) return null;
+  const parsed = asResultRecord(text);
+  return parsed ? nonEmptyString(parsed.error) : null;
+}
+
+function contentText(content: unknown): string | null {
+  if (!Array.isArray(content)) return null;
+  const text = content
+    .map((part) => {
+      if (!part || typeof part !== "object") return "";
+      const textValue = (part as { text?: unknown }).text;
+      return typeof textValue === "string" ? textValue : "";
+    })
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  return text || null;
+}
+
+function nonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
 
 function asResultRecord(output: unknown): Record<string, unknown> | null {

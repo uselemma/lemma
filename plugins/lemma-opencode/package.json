@@ -31,7 +31,8 @@
     "build": "node build.mjs",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
-    "verify:local": "pnpm run build && node verify-local.mjs"
+    "verify:local": "pnpm run build && node verify-local.mjs",
+    "prepublishOnly": "pnpm run type-check && pnpm run build"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.18.19",
