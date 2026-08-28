@@ -51,3 +51,47 @@ def test_tool_result_error_mastra_error_true_payload():
         )
         == "Tool input validation failed for ship"
     )
+
+
+def test_tool_result_error_string_error_field():
+    assert (
+        tool_result_error({"error": "Error: Payment method not found"})
+        == "Error: Payment method not found"
+    )
+    assert tool_result_error({"error": ""}) is None
+    assert tool_result_error({"error": None}) is None
+
+
+def test_tool_result_error_mcp_structured_content_error():
+    assert (
+        tool_result_error(
+            {
+                "isError": False,
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps({"error": "Error: Payment method not found"}),
+                    }
+                ],
+                "structuredContent": {"error": "Error: Payment method not found"},
+            }
+        )
+        == "Error: Payment method not found"
+    )
+
+
+def test_tool_result_error_parses_error_object_from_content_text():
+    assert (
+        tool_result_error(
+            {
+                "isError": False,
+                "content": [
+                    {
+                        "type": "text",
+                        "text": '{"error":"Error: Payment method should be the original payment method"}',
+                    }
+                ],
+            }
+        )
+        == "Error: Payment method should be the original payment method"
+    )
