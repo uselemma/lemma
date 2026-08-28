@@ -1,6 +1,6 @@
 {
   "name": "@uselemma/opencode",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Lemma SDK tracing for OpenCode coding-agent sessions",
   "license": "MIT",
   "type": "module",
