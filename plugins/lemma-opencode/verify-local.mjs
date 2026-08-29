@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { access, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const OPENCODE_VERSION = "1.18.19";
 const PROJECT_ID = "10000000-0000-0000-0000-000000000001";
@@ -210,11 +211,20 @@ try {
     join(consumerDir, "package.json"),
     `${JSON.stringify({ private: true, type: "module" }, null, 2)}\n`,
   );
+  const pluginRoot = dirname(fileURLToPath(import.meta.url));
+  const tracingRoot = join(pluginRoot, "..", "..", "packages", "ts", "tracing");
   await run("pnpm", ["pack", "--pack-destination", packDir], {
-    cwd: new URL(".", import.meta.url).pathname,
+    cwd: tracingRoot,
   });
-  const archiveName = (await readdir(packDir)).find((name) => name.endsWith(".tgz"));
+  await run("pnpm", ["pack", "--pack-destination", packDir], {
+    cwd: pluginRoot,
+  });
+  const archives = (await readdir(packDir)).filter((name) => name.endsWith(".tgz"));
+  const tracingArchive = archives.find((name) => name.includes("tracing"));
+  const archiveName = archives.find((name) => name.includes("opencode"));
+  assert(tracingArchive, "Tracing package tarball was not created");
   assert(archiveName, "OpenCode package tarball was not created");
+  const tracingArchivePath = join(packDir, tracingArchive);
   const archivePath = join(packDir, archiveName);
   await run(
     "pnpm",
@@ -222,6 +232,7 @@ try {
       "add",
       "--allow-build=opencode-ai",
       "--allow-build=msgpackr-extract",
+      tracingArchivePath,
       archivePath,
       `opencode-ai@${OPENCODE_VERSION}`,
       "typescript@5.9.3",
