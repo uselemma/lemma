@@ -155,7 +155,7 @@ Prompts, tool inputs, tool outputs, model output text, and error messages are al
 | Model call | Generation with model, provider, normalized messages, structured assistant output, and duration when available |
 | Tool execution | Tool call with name, input, output or error, and duration when available |
 
-AI SDK v7 provides model and tool durations directly. AI SDK v6 provides tool execution durations; model-call durations may be inferred by Lemma from start/finish timestamps. v6 `system` + `prompt` are normalized into chat messages.
+AI SDK v7 provides model and tool durations directly. AI SDK v6 provides tool execution durations; model-call durations may be inferred by Lemma from start/finish timestamps. `system` / `instructions` is prepended onto `messages` or `prompt` for that step.
 
 ## Debugging
 

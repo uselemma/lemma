@@ -83,6 +83,9 @@ type VercelAIStepStartEvent = {
   provider: string;
   modelId: string;
   stepNumber: number;
+  /** AI SDK 7 `instructions`; `system` is the deprecated alias. */
+  instructions?: unknown;
+  system?: string;
   messages?: unknown[];
   tools?: unknown;
   functionId?: string;
@@ -119,6 +122,8 @@ type VercelAIV6ModelInfo = {
 type VercelAIV6StepStartEvent = {
   stepNumber: number;
   model: VercelAIV6ModelInfo;
+  instructions?: unknown;
+  system?: string;
   messages?: unknown[];
   tools?: unknown;
   functionId?: string;
@@ -140,6 +145,8 @@ type VercelAIV6StepFinishEvent = {
 
 type VercelAIV6StartEvent = {
   model: VercelAIV6ModelInfo;
+  /** AI SDK 7 `instructions`; `system` is the deprecated alias. */
+  instructions?: unknown;
   system?: string;
   prompt?: string | unknown[];
   messages?: unknown[];
@@ -401,15 +408,89 @@ function lookupString(
   return undefined;
 }
 
+function instructionText(value: unknown): string | undefined {
+  if (typeof value === "string" && value) return value;
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((part) => instructionText(part))
+      .filter((part): part is string => Boolean(part));
+    return parts.length > 0 ? parts.join("\n") : undefined;
+  }
+  if (!value || typeof value !== "object") return undefined;
+  const content = (value as { content?: unknown }).content;
+  return typeof content === "string" && content ? content : undefined;
+}
+
+/** Prefer AI SDK 7 `instructions`; fall back to deprecated `system`. */
+function siblingSystem(event: unknown): string | undefined {
+  if (!event || typeof event !== "object") return undefined;
+  const record = event as { instructions?: unknown; system?: unknown };
+  return instructionText(record.instructions) ?? instructionText(record.system);
+}
+
+function firstMessageRole(messages: unknown[]): unknown {
+  const first = messages[0];
+  if (!first || typeof first !== "object") return undefined;
+  return (first as { role?: unknown }).role;
+}
+
+function firstMessageIsSystem(
+  messages: unknown[],
+  system: string,
+): boolean {
+  const first = messages[0];
+  return Boolean(
+    first &&
+      typeof first === "object" &&
+      (first as { role?: unknown }).role === "system" &&
+      (first as { content?: unknown }).content === system,
+  );
+}
+
+/**
+ * Use this event's instructions/system. If it has none, trust a leading
+ * system message instead of stamping a stale onStart playbook.
+ */
+function resolveSystemForMessages(
+  event: unknown,
+  messages: unknown[] | undefined,
+  fallbackSystem?: string,
+): string | undefined {
+  const sibling = siblingSystem(event);
+  if (sibling) return sibling;
+  if (Array.isArray(messages) && firstMessageRole(messages) === "system") {
+    return undefined;
+  }
+  return fallbackSystem;
+}
+
+/** Prepend a sibling `system` string onto a message list unless already present. */
+function withSystemMessage(
+  system: string | undefined,
+  messages: unknown[] | undefined,
+): unknown[] | undefined {
+  if (!Array.isArray(messages)) return undefined;
+  if (!system || firstMessageIsSystem(messages, system)) return messages;
+  return [{ role: "system", content: system }, ...messages];
+}
+
 /** Normalize v6 system/prompt/messages into a chat message list when possible. */
 function v6NormalizedMessages(
   event: VercelAIV6StepStartEvent | VercelAIV6StartEvent,
+  fallbackSystem?: string,
 ): unknown[] | undefined {
-  if (Array.isArray(event.messages)) return event.messages;
+  const system = resolveSystemForMessages(
+    event,
+    "messages" in event ? event.messages : undefined,
+    fallbackSystem,
+  );
+  if (Array.isArray(event.messages)) {
+    return withSystemMessage(system, event.messages);
+  }
 
   const messages: Array<{ role: string; content: unknown }> = [];
-  if ("system" in event && typeof event.system === "string" && event.system) {
-    messages.push({ role: "system", content: event.system });
+  if (system) {
+    messages.push({ role: "system", content: system });
   }
   if ("prompt" in event && event.prompt !== undefined) {
     if (Array.isArray(event.prompt)) {
@@ -424,8 +505,11 @@ function v6NormalizedMessages(
   return messages.length > 0 ? messages : undefined;
 }
 
-function v6Input(event: VercelAIV6StepStartEvent | VercelAIV6StartEvent) {
-  const normalized = v6NormalizedMessages(event);
+function v6Input(
+  event: VercelAIV6StepStartEvent | VercelAIV6StartEvent,
+  fallbackSystem?: string,
+) {
+  const normalized = v6NormalizedMessages(event, fallbackSystem);
   if (normalized) return normalized;
   if ("prompt" in event) return event.prompt;
   return undefined;
@@ -845,10 +929,11 @@ export function vercelAI(
       "error" in event && event.error != null
         ? describeError(event.error)
         : undefined;
+    const fallbackSystem = siblingSystem(v6Starts.at(-1)?.event);
 
     const generation = {
       name,
-      input: stored?.event && v6Input(stored.event),
+      input: stored?.event && v6Input(stored.event, fallbackSystem),
       output: generationError ? undefined : output,
       metadata: options.metadata,
       attributes: withIntegrationAttrs(),
@@ -858,7 +943,7 @@ export function vercelAI(
       durationMs,
       llmProvider: event.model.provider,
       llmInputMessages: stored?.event
-        ? v6NormalizedMessages(stored.event)
+        ? v6NormalizedMessages(stored.event, fallbackSystem)
         : undefined,
       llmOutputMessages:
         output === undefined || generationError
@@ -906,15 +991,23 @@ export function vercelAI(
           })
         : (options.generationName ?? "vercel-ai-generation");
     const startedAt = new Date();
+    const messages = withSystemMessage(
+      resolveSystemForMessages(
+        event,
+        event.messages,
+        siblingSystem(v6Starts.at(-1)?.event),
+      ),
+      event.messages,
+    );
     const handle = trace.startGeneration({
       name,
-      input: event.messages,
+      input: messages,
       metadata: options.metadata,
       attributes: withIntegrationAttrs(),
       model: event.modelId,
       startedAt,
       llmProvider: event.provider,
-      llmInputMessages: event.messages,
+      llmInputMessages: messages,
       llmTools: event.tools,
     });
 
@@ -939,7 +1032,8 @@ export function vercelAI(
             model: event.model,
           })
         : (options.generationName ?? "vercel-ai-generation");
-    const input = v6Input(event);
+    const fallbackSystem = siblingSystem(v6Starts.at(-1)?.event);
+    const input = v6Input(event, fallbackSystem);
     const handle = trace.startGeneration({
       name,
       input,
@@ -948,7 +1042,7 @@ export function vercelAI(
       model: event.model.modelId,
       startedAt,
       llmProvider: event.model.provider,
-      llmInputMessages: v6NormalizedMessages(event),
+      llmInputMessages: v6NormalizedMessages(event, fallbackSystem),
       llmTools: event.tools,
     });
 
