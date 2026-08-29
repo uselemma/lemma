@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { access, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -207,10 +207,6 @@ try {
       }),
     ),
   );
-  await writeFile(
-    join(consumerDir, "package.json"),
-    `${JSON.stringify({ private: true, type: "module" }, null, 2)}\n`,
-  );
   const pluginRoot = dirname(fileURLToPath(import.meta.url));
   const tracingRoot = join(pluginRoot, "..", "..", "packages", "ts", "tracing");
   await run("pnpm", ["pack", "--pack-destination", packDir], {
@@ -226,13 +222,44 @@ try {
   assert(archiveName, "OpenCode package tarball was not created");
   const tracingArchivePath = join(packDir, tracingArchive);
   const archivePath = join(packDir, archiveName);
+  // pnpm pack rewrites workspace:^ to ^<current version>. That version is
+  // not on npm until this PR merges, so point the packed plugin at the
+  // local tracing tarball before the consumer install.
+  const rewriteDir = join(root, "rewrite");
+  await mkdir(rewriteDir, { recursive: true });
+  await run("tar", ["-xzf", archivePath, "-C", rewriteDir]);
+  const packedManifestPath = join(rewriteDir, "package", "package.json");
+  const packedManifest = JSON.parse(await readFile(packedManifestPath, "utf8"));
+  if (packedManifest.dependencies?.["@uselemma/tracing"]) {
+    packedManifest.dependencies["@uselemma/tracing"] = `file:${tracingArchivePath}`;
+  }
+  await writeFile(
+    packedManifestPath,
+    `${JSON.stringify(packedManifest, null, 2)}\n`,
+  );
+  await run("tar", ["-czf", archivePath, "-C", rewriteDir, "package"]);
+  await writeFile(
+    join(consumerDir, "package.json"),
+    `${JSON.stringify(
+      {
+        private: true,
+        type: "module",
+        pnpm: {
+          overrides: {
+            "@uselemma/tracing": `file:${tracingArchivePath}`,
+          },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+  );
   await run(
     "pnpm",
     [
       "add",
       "--allow-build=opencode-ai",
       "--allow-build=msgpackr-extract",
-      tracingArchivePath,
       archivePath,
       `opencode-ai@${OPENCODE_VERSION}`,
       "typescript@5.9.3",
