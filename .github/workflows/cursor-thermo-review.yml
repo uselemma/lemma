@@ -1,0 +1,70 @@
+name: Cursor Thermo-Nuclear Review
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+concurrency:
+  group: cursor-thermo-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: Launch Thermo-Nuclear Review
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout trusted automation
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Mint a repository-scoped publisher token
+        id: publisher
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ secrets.CODE_REVIEW_PUBLISHER_CLIENT_ID }}
+          private-key: ${{ secrets.CODE_REVIEW_PUBLISHER_PRIVATE_KEY }}
+          permission-contents: read
+          permission-issues: write
+          permission-pull-requests: write
+          permission-statuses: write
+          # Cursor Cloud posts after this job exits. Default revoke-on-job-end
+          # would 401 the agent's GITHUB_STATUS_TOKEN.
+          skip-token-revoke: true
+
+      - name: Launch thermo-nuclear review
+        run: pnpm ci:cursor-thermo-review
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          CURSOR_VALIDATION_STATUS_TOKEN: ${{ steps.publisher.outputs.token }}
+          LEMMA_PUBLISHER_BOT_LOGIN: ${{ format('{0}[bot]', steps.publisher.outputs.app-slug) }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          REPO_URL: ${{ github.event.repository.html_url }}
