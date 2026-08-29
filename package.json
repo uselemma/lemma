@@ -5,12 +5,9 @@
     "build": "turbo run build",
     "type-check": "turbo run type-check",
     "test": "turbo run test",
-    "clean": "turbo run clean",
-    "ci:cursor-tests": "tsx --test scripts/ci/*.test.ts",
-    "ci:cursor-thermo-review": "tsx scripts/ci/cursor-thermo-review.ts"
+    "clean": "turbo run clean"
   },
   "devDependencies": {
-    "tsx": "^4.23.12",
     "turbo": "^2"
   }
 }
