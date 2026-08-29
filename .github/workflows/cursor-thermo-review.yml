@@ -1,0 +1,22 @@
+name: Cursor Thermo-Nuclear Review
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: cursor-thermo-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Launch Thermo-Nuclear Review
+    permissions:
+      contents: read
+    uses: uselemma/code-review/.github/workflows/lemma-cursor-thermo.yml@3720c7ab515ec6187cce11d468d4653e251895bf
+    secrets:
+      cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+      publisher_client_id: ${{ secrets.CODE_REVIEW_PUBLISHER_CLIENT_ID }}
+      publisher_private_key: ${{ secrets.CODE_REVIEW_PUBLISHER_PRIVATE_KEY }}
