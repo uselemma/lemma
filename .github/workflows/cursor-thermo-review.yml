@@ -15,7 +15,7 @@ jobs:
     name: Launch Thermo-Nuclear Review
     permissions:
       contents: read
-    uses: chroline/cursor-thermo-review/.github/workflows/lemma-cursor-thermo.yml@6cee103f2567167b11a145b9758ea0ab8f6cb98d
+    uses: chroline/cursor-thermo-review/.github/workflows/lemma-cursor-thermo.yml@31ee2119a104f785c8dcc84a44839af8e8c7d9f9
     secrets:
       cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
       publisher_client_id: ${{ secrets.CODE_REVIEW_PUBLISHER_CLIENT_ID }}
