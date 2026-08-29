@@ -1,0 +1,49 @@
+---
+title: "Slack"
+description: "Issue alerts and Issue Briefs in your workspace, plus Lemma support Slack Connect"
+---
+
+Lemma has **two separate Slack setups**. Do not mix them.
+
+## Customer Slack integration (product alerts)
+
+This delivers **issue alerts** and optional **Issue Briefs** into *your* Slack workspace.
+
+1. Open the project's **Settings** and find **Slack**.
+2. An organization **owner or admin** connects the Slack workspace through OAuth. The workspace connection applies to the **organization**, not one project.
+3. Select the **alert channel** for this project. Channel binding is **project-scoped**. A connected workspace without a channel does not deliver alerts.
+4. Send a **test message** before relying on alerts.
+5. Optionally enable **Issue Briefs** and choose daily or weekly cadence. Briefs use the **same** project alert channel; they cannot deliver without that binding.
+
+Daily briefs cover the prior 24 hours. Weekly briefs cover the prior seven days and send on **Mondays in UTC**.
+
+Disconnecting the workspace stops product Slack delivery for the organization. Reconnect from the same settings. Connecting Slack never creates Linear tickets and never files issues by itself — it notifies you about issues Lemma already detected.
+
+Permissions: owners/admins connect or disconnect the workspace. Project members can set the project's alert channel and briefs once the workspace is connected (subject to Slack channel membership).
+
+## Lemma support channel (Slack Connect)
+
+The **Lemma support channel** is a private Slack Connect channel **owned by Lemma** for working with the Lemma team. It does **not** deliver product alerts and does **not** require the customer Slack integration above.
+
+1. In Project Settings, find **Lemma support channel**.
+2. An organization owner or admin enters the email they use for Slack and requests the channel.
+3. Accept Slack's emailed Connect invitation. State goes creating → invited → connected.
+
+Availability can depend on plan and environment. Treat unavailable or failed status as real. Set this up independently of product alerts if the plan includes it.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Issues" icon="/icons/bug.svg" href="/platform/issues">
+    The lifecycle Slack notifies you about.
+  </Card>
+  <Card title="Inspect" icon="/icons/sparkles.svg" href="/platform/inspect">
+    In-Slack investigations use the customer integration, not support Connect.
+  </Card>
+  <Card title="Webhooks" icon="/icons/plug.svg" href="/connections/webhooks">
+    The same lifecycle events outside Slack.
+  </Card>
+  <Card title="Connect your workflow" icon="/icons/plug.svg" href="/connections/overview">
+    When Slack is the right connection.
+  </Card>
+</CardGroup>

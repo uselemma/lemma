@@ -1,0 +1,59 @@
+---
+title: "Linear"
+description: "Connect a Linear workspace, set project defaults, and map personal identity"
+---
+
+Linear setup has **organization**, **project**, and **person** scopes. Connecting Linear never creates or links a ticket by itself.
+
+## Organization connection
+
+1. Open **Manage organization → Integrations**.
+2. An organization **owner or admin** connects or reconnects the Linear workspace through OAuth. One active workspace serves the Lemma organization. One Linear workspace can belong to only one Lemma organization.
+3. If the connection is failing, reconnect from organization settings. Lemma keeps existing ticket identities and last-known state across a degraded connection.
+
+Members and coding agents cannot install the workspace. They can inspect connection health for a project they can access.
+
+## Project defaults
+
+1. Open the project's **Settings → Linear**.
+2. Select a default Linear **team** (required for ticket creation readiness).
+3. Optionally select a Linear **project** under that team, then save.
+
+Saving defaults does not create a ticket. If Linear is disconnected, an owner must connect it in organization settings first.
+
+## Personal identity
+
+Each Lemma member who wants personal assignment verifies **only their own** Linear identity from **Account → Profile → Connected accounts**. This is not the organization workspace connection. Lemma does not expose a directory so you can pick someone else's Linear user.
+
+Ordinary issue assignment in Lemma does **not** write to Linear. Combined assignment happens only when **creating** a ticket and selecting an eligible mapped Lemma member. That one action assigns both the Lemma issue and the new ticket. Ticket creation otherwise defaults to unassigned.
+
+API keys and non-human principals have no personal mapping.
+
+## Create, link, replace, unlink
+
+A Lemma issue has at most one active Linear ticket. A Linear ticket has at most one active Lemma issue.
+
+- **Create** — explicit, issue-by-issue, from the issue. Uses project team/project defaults. Safe summary + Lemma link; no raw prompts or tool I/O in the ticket body.
+- **Link** — exact Linear URL or identifier, with preview/confirm. No workspace-wide browser or backfill.
+- **Unlink** — explicit. Replacement is unlink, then create or link again.
+- Recurrence never creates, reopens, or replaces a ticket. A resolved issue that reopens may comment once on the completed ticket; the ticket stays completed.
+- Dismissing a Lemma issue requests cancellation of the active ticket. Linear `completed` resolves the Lemma issue. Linear `canceled` updates the cached snapshot only. Matching evidence never reopens a dismissed issue and has no Linear side effect. Manual reopen does not alter the ticket.
+
+Feature flags, open issues, and detection never auto-file tickets.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Issues" icon="/icons/bug.svg" href="/platform/issues">
+    Create or link a ticket from an issue, explicitly.
+  </Card>
+  <Card title="Connect your workflow" icon="/icons/plug.svg" href="/connections/overview">
+    When Linear is the right connection.
+  </Card>
+  <Card title="Lemma MCP server" icon="/icons/plug.svg" href="/connections/mcp">
+    The same create/link/unlink capabilities via MCP where authorized.
+  </Card>
+  <Card title="Platform overview" icon="/icons/stack-line.svg" href="/platform/overview">
+    Org, project, and person scopes.
+  </Card>
+</CardGroup>

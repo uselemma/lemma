@@ -1,0 +1,82 @@
+---
+title: "Platform overview"
+description: "How traces move through Lemma after they arrive"
+---
+
+Lemma records each agent execution as a **trace**, detects recurring problems as **issues**, and gives you a dashboard plus workflow connections so humans and coding agents can investigate and fix them.
+
+This page is how the product fits together after traces arrive. For the nouns Lemma uses, see [Concepts](/getting-started/concepts). For sending traces, see [Quickstart](/tracing/instrumentation/setup).
+
+## How a trace moves through Lemma
+
+1. An instrumented agent emits a trace for one execution (one turn of a conversation when you set a thread id).
+2. Lemma stores the spans and marks the trace **ready** when it is inspectable in the dashboard. An API key, an SDK dependency, or an ingest attempt alone does not prove observability.
+3. Lemma analyzes completed traces for behavior that materially hurt the agent's task. Detection is probabilistic: review the supporting traces before you treat a finding as ground truth.
+4. Repeated evidence is grouped into an **issue** rather than reported as unrelated one-off failures. Say the issue was observed in a trace.
+5. You investigate in the dashboard or through [Inspect](/platform/inspect), then resolve, dismiss, or send the work into Slack, Linear, MCP, or webhooks.
+
+Lemma evaluates **production usage** from real users. It does not offer offline evaluation. Standalone monitors, incidents, and a standalone metrics product are not current surfaces. Failure alerting follows the **issue** lifecycle.
+
+## Projects, agents, and scope
+
+You **create projects**. A project is the container for traces, issues, artifacts, and project settings. Each project has its own dashboard. Use separate projects to isolate environments (dev / staging / prod) or distinct products.
+
+**Agents appear when named traces arrive.** Lemma does not ask you to register an application entity. The agent name on a trace is how Lemma groups Artifacts, Analytics scorecards, and issue scope. If traces arrive without a usable agent name, they still ingest, but agent-scoped features have nothing to attach to.
+
+| Scope | What lives there |
+| -- | -- |
+| **Organization** | Slack workspace OAuth; Linear workspace OAuth; organization API keys |
+| **Project** | Alert channel and Issue Briefs; Linear team/project defaults; webhooks; traces, issues, artifacts |
+| **Person** | Linear identity mapping. Not applicable to API-key or other non-human principals |
+| **Application** | **Not a Lemma entity.** Agents appear when named traces arrive |
+
+Dashboard click-paths and setup-status field meaning stay in the product UI. This table is the scope model only.
+
+## Recommended workspace sequence
+
+1. Select or create an organization and project.
+2. Generate an API key and instrument the production agent. Keep `LEMMA_API_KEY` server-side — never commit it, never put it in the browser. See [Quickstart](/tracing/instrumentation/setup).
+3. Verify at least one real production trace becomes **ready**.
+4. Add agent-specific [Artifacts](/platform/artifacts) context.
+5. Connect the customer Slack workspace, bind a project alert channel, and optionally enable Issue Briefs. See [Slack](/connections/slack).
+6. Configure [Linear](/connections/linear) if the team turns issues into tickets. Each member verifies their own Linear identity.
+7. Connect external MCP servers only when Lemma needs their tools. See [Lemma MCP server](/connections/mcp#opposite-direction-external-mcp-servers).
+8. Connect the coding agent to [Lemma MCP](/connections/mcp) when it should investigate or act on Lemma evidence.
+9. Add signed [webhooks](/connections/webhooks) when another system needs issue lifecycle events.
+10. Set up the Lemma support Slack Connect channel independently if the plan includes it. It is not a product alert path.
+
+## The dashboard surfaces
+
+| Surface | What it is for |
+| -- | -- |
+| **[Traces](/platform/traces)** | Search, filter, and open individual executions (and threads). Distinct from the instrumentation [Traces](/tracing/instrumentation/traces) page, which explains how to *create* traces. |
+| **[Issues](/platform/issues)** | Recurring failure patterns with status and supporting traces. |
+| **[Inspect](/platform/inspect)** | In-product assistant that reads the page you are on (trace, issue, Analytics, Artifacts, settings) and can share conversations. |
+| **[Artifacts](/platform/artifacts)** | Per-agent context you provide, plus Lemma's generated understanding document and decision-flow diagram. |
+| **[Analytics](/platform/analytics)** | Project-level volume, latency, errors, tools, models, and cost over a timeframe. May not appear in every workspace yet. |
+
+A typical path: Analytics or Issues shows a trend → open supporting traces → ask Inspect → add Artifacts context if detection is off → alert or ticket via [Connections](/connections/overview).
+
+## What to do after the first ready trace
+
+1. Open **Traces** in the project and confirm the execution tree and conversation look complete.
+2. Wait for issues if the conversation is still active; extraction runs after a thread goes quiet (or immediately when there is no thread id).
+3. Add Artifacts context for that agent if domain rules matter.
+4. Connect Slack, Linear, Lemma MCP, or webhooks when the team needs those paths.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Concepts" icon="/icons/book.svg" href="/getting-started/concepts">
+    Trace, span, issue, artifact, and the other nouns.
+  </Card>
+  <Card title="Connect your workflow" icon="/icons/plug.svg" href="/connections/overview">
+    Slack, Linear, MCP, and webhooks after traces exist.
+  </Card>
+  <Card title="Issues" icon="/icons/bug.svg" href="/platform/issues">
+    How recurring failures are grouped and triaged.
+  </Card>
+  <Card title="Artifacts" icon="/icons/box.svg" href="/platform/artifacts">
+    Provided context and generated understanding per agent.
+  </Card>
+</CardGroup>

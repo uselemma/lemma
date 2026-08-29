@@ -1,0 +1,75 @@
+---
+title: "Inspect"
+description: "In-product assistant grounded in this project's traces and issues"
+---
+
+Inspect is Lemma's in-product assistant. It answers from **this project's** traces, issues, artifacts, and settings — not from a generic model of your codebase.
+
+Use it when you already have a question about what you are looking at. Use [Traces](/platform/traces) and [Issues](/platform/issues) when you need to scan, filter, or change status yourself.
+
+## Where it runs
+
+- **Inspect page** — full-page conversation for the project.
+- **Inspect widget** — overlay on other project pages. Same durable conversation model as the page.
+
+Inspect is **page-aware**. It derives context from the URL (and from an open trace drawer) so you can say "this issue" or "this trace" without pasting ids:
+
+| You are on | Inspect treats as |
+| -- | -- |
+| A specific issue | That issue |
+| A specific trace, or a trace drawer | That trace |
+| Traces list (no trace open) | Project traces, list-level prompts |
+| Issues list (no issue open) | Project issues, triage prompts |
+| Analytics | The Analytics window from the URL |
+| Artifacts | The selected agent |
+| Settings | Setup and integration how-tos |
+
+An open trace drawer wins over the issue URL underneath it: Inspect talks about the trace you are viewing.
+
+## What it can read, explain, or change
+
+Inspect can **read and explain** project evidence: traces, issues, Artifacts (understanding + diagram + provided context), Analytics windows, and how Slack / Linear / MCP / webhooks are *meant* to be set up.
+
+It uses Lemma's product grounding so it does not invent standalone monitors, incidents, or offline eval as current features.
+
+Inspect **does not**:
+
+- Replace issue status, Linear linking, or webhook configuration as the system of record. Those stay on Issues and Settings.
+- Return secret values (API keys, Slack tokens, MCP credentials, webhook signing secrets). It points you at the UI or your secret manager.
+- Treat documentation or a configured URL as proof that *this* project finished setup. Setup status is a snapshot.
+
+Conversation actions (when your permissions allow): **edit** a turn, **regenerate**, **fork**, **share** with organization members, **report** a bad response, rename or delete a conversation. Sharing is organization-scoped, not a public unauthenticated URL.
+
+## History, attachments, and new chats
+
+- Conversations persist. Open **history** to resume; start a **new chat** when the topic changes.
+- Attach the current page (for example a trace or artifact) so Inspect has the same object you are looking at.
+- Shared conversations appear in the shared history for members who were given access.
+
+## Suggested questions by page
+
+Examples (the UI replaces generic prompts when the page has its own set):
+
+- Trace: why this run was flagged; find other traces with the same issue.
+- Issue: why it was flagged; scenarios; likely cause; how to fix.
+- Issues list: what to look at first; impact; semantic search.
+- Traces list: frustration, praise, confusion, users asking for a human.
+- Artifacts: what this agent does; decision flow; what context to add; recent issues.
+- Settings: connect Slack, alert on new issues, which integrations exist.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Platform overview" icon="/icons/stack-line.svg" href="/platform/overview">
+    How Inspect fits after traces arrive.
+  </Card>
+  <Card title="Lemma MCP server" icon="/icons/plug.svg" href="/connections/mcp">
+    The same investigation from a coding agent, not the dashboard.
+  </Card>
+  <Card title="Issues" icon="/icons/bug.svg" href="/platform/issues">
+    Change status and read supporting traces yourself.
+  </Card>
+  <Card title="Artifacts" icon="/icons/box.svg" href="/platform/artifacts">
+    Context Inspect reads for a named agent.
+  </Card>
+</CardGroup>

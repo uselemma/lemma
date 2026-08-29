@@ -1,20 +1,30 @@
 ---
-title: "MCP"
-description: "Connect your AI coding tools to Lemma using the Model Context Protocol"
+title: "Lemma MCP server"
+description: "Connect a coding agent to Lemma, or connect an external MCP server into Lemma"
 ---
 
-Give your coding agent direct access to your traces, metrics, and monitors. Instead of switching between your editor and the Lemma dashboard, your agent can pull the exact runs and errors it needs to understand what's going wrong and fix it in place.
+Lemma has **two opposite MCP directions**. Do not mix them.
+
+- **Lemma MCP server** — your coding agent calls Lemma: list traces and issues, inspect evidence, and take authorized actions.
+- **External MCP servers** — Lemma calls tools on a server *you* connect, so Inspect and analysis can use those tools.
+
+[Inspect](/platform/inspect) in the dashboard does **not** use the Lemma MCP connection. Inspect is in-product. Lemma MCP is for editors and coding agents.
+
+Endpoint: `https://api.uselemma.ai/mcp/` (trailing-slash variants are equivalent). Auth: `Authorization: Bearer <organization API key>`. Pass the **project id** on project-scoped tools.
+
+Lemma records MCP **activation** for a project only after a successful **project-scoped** tool call. Saving a URL in Cursor, or configuring a client without calling a project tool, is not activation.
 
 ## Prerequisites
 
-- A [Lemma](https://uselemma.ai) account with at least one project sending traces
-- An MCP-compatible IDE or tool (Cursor, Claude Desktop, Claude Code, or any client that supports MCP)
+- A Lemma organization with at least one project that has (or will have) traces
+- An **organization API key** from **API Keys** or the project get-started flow. Copy it once; Lemma will not show it again. Keep it server-side in the coding tool's MCP config, not in a public repo and not in browser code.
+- An MCP client that supports Streamable HTTP (Cursor, Claude Desktop, Claude Code, and others)
 
 ## Setup
 
 <Steps>
-  <Step title="Get your API key">
-    Go to your project settings in the Lemma dashboard and copy your API key.
+  <Step title="Get an organization API key">
+    Copy an organization API key from **API Keys** or the project get-started flow.
 
     <Warning>
       Copy your key immediately after creating it — you won't be able to see it again.
@@ -30,7 +40,7 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
         {
           "mcpServers": {
             "lemma": {
-              "url": "https://api.uselemma.ai/mcp",
+              "url": "https://api.uselemma.ai/mcp/",
               "headers": {
                 "Authorization": "Bearer <your-api-key>"
               }
@@ -48,7 +58,7 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
           "mcpServers": {
             "lemma": {
               "type": "http",
-              "url": "https://api.uselemma.ai/mcp",
+              "url": "https://api.uselemma.ai/mcp/",
               "headers": {
                 "Authorization": "Bearer <your-api-key>"
               }
@@ -65,7 +75,7 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
 
         ```bash
         claude mcp add --transport http lemma \
-          https://api.uselemma.ai/mcp \
+          https://api.uselemma.ai/mcp/ \
           --header "Authorization: Bearer <your-api-key>"
         ```
       </Tab>
@@ -77,7 +87,7 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
         {
           "mcpServers": {
             "lemma": {
-              "url": "https://api.uselemma.ai/mcp",
+              "url": "https://api.uselemma.ai/mcp/",
               "headers": {
                 "Authorization": "Bearer <your-api-key>"
               }
@@ -88,16 +98,51 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
       </Tab>
     </Tabs>
 
-    Replace `<your-api-key>` with the key from your project settings.
+    Replace `<your-api-key>` with the organization API key.
   </Step>
 
-  <Step title="Try it out">
+  <Step title="Call a project-scoped tool">
     Ask your agent:
 
     ```
     Use Lemma to show me my last 5 traces, including any errors.
     ```
+
+    Include the project id if the client has not selected one. Activation is recorded only after that project-scoped call succeeds.
   </Step>
 </Steps>
 
-See the [API Reference](/api-reference) for the full list of available tools and endpoints.
+## What tools exist
+
+REST and MCP share one operation list. See the [API Reference](/api-reference). Oversized results are truncated; prefer pagination over dumping every span.
+
+Typical uses: last traces with errors, inspect an issue, export issue markdown, Linear create/link when authorized. Write tools require confirmation in MCP clients.
+
+## Opposite direction: external MCP servers
+
+Connect an external MCP server when **Lemma** needs that server's tools — not when a coding agent needs Lemma.
+
+1. Open **Settings → External MCP Connections**.
+2. Enter the server **URL**.
+3. Authenticate with **OAuth** or **custom headers**.
+4. Wait until the connection is **`active`**. `pending`, `expired`, `needs_reauth`, and `revoked` are not healthy.
+5. Optionally add project validation instructions so Lemma knows how to use the tools.
+
+Remove a connection when Lemma should stop calling those tools. External MCP is not a substitute for [Lemma MCP](#prerequisites) and does not deliver [webhook](/connections/webhooks) events.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Connect your workflow" icon="/icons/plug.svg" href="/connections/overview">
+    When to use Slack, Linear, MCP, or webhooks.
+  </Card>
+  <Card title="Issues" icon="/icons/bug.svg" href="/platform/issues">
+    What coding agents typically inspect over MCP.
+  </Card>
+  <Card title="Inspect" icon="/icons/sparkles.svg" href="/platform/inspect">
+    In-product investigation. It does not use this MCP connection.
+  </Card>
+  <Card title="API Reference" icon="/icons/file-check.svg" href="/api-reference">
+    Shared REST and MCP operations.
+  </Card>
+</CardGroup>

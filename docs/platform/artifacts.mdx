@@ -1,0 +1,55 @@
+---
+title: "Artifacts"
+description: "Agent-scoped context and generated understanding"
+---
+
+Artifacts are **agent-scoped context** that improve how Lemma interprets traces and issues. They are not instrumentation and not a substitute for sending complete traces.
+
+Scope: one Lemma **project** + one **agent name**. Agent names come from observed traces. Context for `support-agent` is not evidence about `billing-agent`.
+
+## Two layers
+
+**Provided context** — text (or a supported text file) you supply: behavioral expectations, domain rules, architecture notes, "never do X." Do not upload secrets, API keys, or customer PII.
+
+**Generated understanding** — a **versioned** understanding document and a **decision-flow diagram** Lemma generates for that agent from observed traces plus available context. Review new versions after you regenerate; do not assume the latest draft is correct.
+
+## Setup
+
+1. Send [ready traces](/tracing/instrumentation/setup) that identify the intended agent.
+2. Open **Artifacts** and select the agent (or the untagged bucket if traces have no agent name).
+3. Add concise text or upload a supported text file. Do not upload secrets.
+4. Review the generated document and diagram.
+5. When you change context materially, regenerate if the UI offers it, then review the new version.
+
+Project-wide or unknown-agent artifacts should be described honestly. Do not silently assign them to a named agent.
+
+## How this helps detection
+
+Extraction and Inspect use this context to judge whether behavior violated *your* rules, not only generic failure patterns. Sparse or contradictory notes make findings noisier. Prefer short, testable rules over dumping the entire prompt library.
+
+Artifacts do not:
+
+- Create traces
+- Register an application entity
+- Replace issue status or Slack alerts
+
+## Inspect on this page
+
+Useful prompts: summarize what this agent does; walk through the decision flow; what context to add; recent issues for this agent. Inspect is told the selected agent name so "this agent" resolves.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Platform overview" icon="/icons/stack-line.svg" href="/platform/overview">
+    Where artifacts sit after the first ready trace.
+  </Card>
+  <Card title="Issues" icon="/icons/bug.svg" href="/platform/issues">
+    Detection that this context can sharpen.
+  </Card>
+  <Card title="Inspect" icon="/icons/sparkles.svg" href="/platform/inspect">
+    Ask about the selected agent's understanding and diagram.
+  </Card>
+  <Card title="Building high-quality traces" icon="/icons/file-check.svg" href="/guides/building-high-quality-traces">
+    Complete traces still matter more than extra notes.
+  </Card>
+</CardGroup>

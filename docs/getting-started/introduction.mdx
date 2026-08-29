@@ -5,18 +5,20 @@ meta:
   contentType: "Landing"
 ---
 
-Lemma monitors production artificial intelligence (AI) agents. It records what each agent did, detects silent failures, and gives you the context to fix them.
+Lemma is an observability and evaluation platform for AI agents. It records what each agent did in production, finds recurring problems, and gives humans and coding agents the evidence to investigate.
 
 Traditional monitoring catches explicit errors. It misses agents that return incorrect answers, forget earlier messages, or choose the wrong tool.
 
-Lemma helps you:
+How Lemma works:
 
-- **Inspect agent runs**: Review model calls, tools, retrieval, latency, and errors
-- **Detect recurring failures**: Audit traces against your agent’s instructions and group related failures into issues
-- **Receive relevant alerts**: Triage issues and notify your team in Slack
-- **Fix failures in your editor**: Pull traces and issues into your coding agent through the [Model Context Protocol (MCP)](/connections/mcp)
+1. **Instrument** the production agent so each execution becomes a ready, inspectable [trace](/getting-started/concepts#trace).
+2. **Analyze** completed traces for behavior that materially hurt the agent's task.
+3. **Group** repeated evidence into an [issue](/getting-started/concepts#issue).
+4. **Investigate** in the dashboard, [Inspect](/platform/inspect), Slack, Linear, or a coding agent, then follow recurrence.
 
-## Start monitoring your agents
+Lemma evaluates **production usage** from real users. It does not offer offline evaluation. If someone says "online eval," they mean evaluating actual production usage. Standalone monitors, incidents, and a standalone metrics product are not current surfaces. Failure alerting follows the **issue** lifecycle through [Slack](/connections/slack) and [webhooks](/connections/webhooks).
+
+## Start sending traces
 
 Choose how you’ll send agent data to Lemma.
 
@@ -28,7 +30,10 @@ Choose how you’ll send agent data to Lemma.
     Trace agents built with OpenAI Agents, Vercel AI SDK, LangChain, LangGraph, or Mastra.
   </Card>
   <Card title="Core concepts" icon="/icons/book.svg" href="/getting-started/concepts">
-    Learn how Lemma defines traces, spans, generations, and threads.
+    Learn how Lemma defines traces, spans, issues, and artifacts.
+  </Card>
+  <Card title="Platform overview" icon="/icons/stack-line.svg" href="/platform/overview">
+    How traces move through the product after they arrive.
   </Card>
 </CardGroup>
 
@@ -37,11 +42,14 @@ Choose how you’ll send agent data to Lemma.
 Use Lemma to review detected failures, receive alerts, and investigate from your editor.
 
 <CardGroup cols={2}>
-  <Card title="Issues" icon="/icons/bug.svg" href="https://platform.uselemma.ai">
+  <Card title="Issues" icon="/icons/bug.svg" href="/platform/issues">
     Review recurring failures that Lemma detects across your agent traces.
   </Card>
-  <Card title="Alerts" icon="/icons/circle-check.svg" href="/connections/webhooks">
-    Receive Slack alerts and send incident events through signed webhooks.
+  <Card title="Slack" icon="/icons/circle-check.svg" href="/connections/slack">
+    Receive issue alerts and optional Issue Briefs in your Slack workspace.
+  </Card>
+  <Card title="Webhooks" icon="/icons/plug.svg" href="/connections/webhooks">
+    Send signed issue lifecycle events to another system.
   </Card>
   <Card title="Lemma MCP" icon="/icons/plug.svg" href="/connections/mcp">
     Give your coding agent the traces and issues it needs to investigate a failure.

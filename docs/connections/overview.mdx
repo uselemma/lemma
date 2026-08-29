@@ -1,0 +1,50 @@
+---
+title: "Connect your workflow"
+description: "Attach Lemma findings to Slack, Linear, MCP, and webhooks"
+---
+
+**Integrations** (OpenAI Agents, Vercel AI SDK, LangChain, LangGraph, Mastra) attach Lemma tracing to your **agent framework**. They are how traces get into Lemma.
+
+**Connections** attach Lemma **findings** to the rest of the team's workflow after traces exist. They do not instrument the agent.
+
+| Connection | Use it when |
+| -- | -- |
+| **[Slack](/connections/slack)** | The team should see issue alerts and optional Issue Briefs in a Slack channel you choose. |
+| **[Linear](/connections/linear)** | Issues should become or link to Linear tickets with explicit create/link, not automatic filing. |
+| **[Lemma MCP server](/connections/mcp)** | A coding agent in Cursor, Claude Code, or similar should query this project's traces and issues. |
+| **External MCP servers** | Lemma itself should call tools on a server you connect. See the opposite-direction section on [Lemma MCP](/connections/mcp#opposite-direction-external-mcp-servers). |
+| **[Webhooks](/connections/webhooks)** | Another system should receive signed HTTP POSTs for issue lifecycle events. |
+
+You can use several at once. None of them replace the dashboard.
+
+## Suggested order
+
+Follow the full [workspace sequence](/platform/overview#recommended-workspace-sequence) on Platform overview. After ready traces exist:
+
+1. Confirm ready traces in the project.
+2. Slack workspace + project alert channel (optional Issue Briefs).
+3. Linear workspace + project defaults if you file tickets; each person maps their own Linear identity.
+4. External MCP servers only when Lemma needs those tools.
+5. Lemma MCP for coding-agent investigation.
+6. Webhooks for machine-to-machine issue events.
+
+Lemma support Slack Connect is **not** a workflow connection for alerts. It is a private channel with the Lemma team. See [Slack](/connections/slack).
+
+Owners and admins connect organization-wide Slack and Linear workspaces. Project members bind the project's Slack channel and Linear defaults (defaults require owner/admin). API keys and webhook secrets are shown once.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Platform overview" icon="/icons/stack-line.svg" href="/platform/overview">
+    The 10-step setup sequence and scope table.
+  </Card>
+  <Card title="Slack" icon="/icons/circle-check.svg" href="/connections/slack">
+    Customer alerts versus support Slack Connect.
+  </Card>
+  <Card title="Linear" icon="/icons/git-branch.svg" href="/connections/linear">
+    Org, project, and personal Linear setup.
+  </Card>
+  <Card title="Lemma MCP server" icon="/icons/plug.svg" href="/connections/mcp">
+    Coding agent to Lemma, or external servers into Lemma.
+  </Card>
+</CardGroup>

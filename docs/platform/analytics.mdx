@@ -1,0 +1,73 @@
+---
+title: "Analytics"
+description: "Project-level volume, latency, errors, tools, models, and estimated cost"
+---
+
+Analytics is the project-level telemetry view: volume, latency, errors, tools, models, and estimated LLM cost for traces in a time window. Use it to spot a trend, then jump to supporting traces or issues.
+
+**Availability:** Analytics is feature-gated. If you do not see **Analytics** in the project sidebar, it is not enabled for your workspace. The project **Dashboard** (home / setup) is a different page.
+
+Cost figures are **estimated model cost from recorded usage**, not a billed invoice. Lemma does not claim you were charged a specific amount on this page. Analytics is not a standalone metrics product.
+
+## Timeframes and granularity
+
+Choose a window:
+
+- All time (clamped to the Analytics horizon)
+- This week, this month, this quarter, this year
+- Custom range
+
+Bucket the charts by **day**, **week**, or **month**. Defaults stay readable (for example, this week/month → day; quarter → week; year / all time → month).
+
+Analytics looks at a rolling **90-day** horizon. Older data is not shown even if you pick "all time." Individual **traces** in the Traces list are retained for **14 days**. A chart point can exist for a day whose raw traces have already aged out of the list. Use Analytics for trends; use [Traces](/platform/traces) for the executions you can still open.
+
+## Project and agent scope
+
+Analytics is **project-scoped**. The agent scorecard lists every agent that appeared in the window (agent names come from traces, not from a separate registry).
+
+If an agent is missing, it did not emit ready traces in this project and window — not that it was deleted from a catalog.
+
+## What the surface shows
+
+Headline stats for the window (with period-over-period deltas when the previous window still fits the horizon):
+
+- Trace count
+- Errors
+- p50 / p95 end-to-end latency
+- Estimated cost
+
+Widgets you can add, remove, or reorder (only widgets whose required telemetry is present are offered):
+
+- **Agent scorecard** — volume, latency, error rate, tools, tokens, cost per agent
+- **Trace latency over time** — p50 and p95
+- **Model comparison** — generation volume, latency, error rate, tokens, cost by model
+- **Cost by model** — stacked estimated cost over time
+- **Tool call volume** — stacked calls by tool
+- **Tool comparison** — calls, latency, error rate, share of traces
+- **Error rate** — root-span error rate
+- **Tool error concentration** — tools ranked by failing proportion, with links into Traces
+
+Empty and low-data states are expected: a new project, a quiet agent, or traces that omit model/tool/cost fields will hide or zero the widgets that need those fields. Send complete traces (see [Building high-quality traces](/guides/building-high-quality-traces) and [Analytics telemetry](/reference/analytics-telemetry)) rather than treating empty charts as a product outage.
+
+## From a trend to evidence
+
+- Open **Traces** filtered to the window (and tool, when the widget provides that link).
+- Open **Issues** when the failure looks recurring rather than a single error spike.
+- Ask **Inspect** on the Analytics page for window-aware questions. Inspect does not replace the charts; it explains what you are looking at.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Platform overview" icon="/icons/stack-line.svg" href="/platform/overview">
+    How Analytics fits with traces and issues.
+  </Card>
+  <Card title="Traces" icon="/icons/workflow.svg" href="/platform/traces">
+    The executions you can still open.
+  </Card>
+  <Card title="Issues" icon="/icons/bug.svg" href="/platform/issues">
+    Recurring failures behind a trend.
+  </Card>
+  <Card title="Analytics telemetry" icon="/icons/file-check.svg" href="/reference/analytics-telemetry">
+    What the SDK must emit for these charts.
+  </Card>
+</CardGroup>

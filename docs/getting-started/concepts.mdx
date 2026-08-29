@@ -3,7 +3,7 @@ title: "Concepts"
 description: "Core concepts and terminology in Lemma"
 ---
 
-Four nouns describe everything in Lemma. They are the same words used in the dashboard and across these docs.
+These nouns are the same words used in the dashboard and across these docs. A [trace](#trace) is one execution. [Issues](#issue) and [artifacts](#artifact) are how Lemma groups evidence and agent context after traces arrive.
 
 <Note>
   **One agent execution = one trace.** The root is the trace record; LLM calls, tool calls, and app logic are child spans inside it.
@@ -48,13 +48,13 @@ A single agent execution produces a tree. The root is the trace record; everythi
 
 ## Trace
 
-A **trace** is a single end-to-end execution of your agent, from the user's input to the final response. It carries the input, the output (or error), timing, and the tree of spans inside it. Each trace has a unique trace ID.
+A **trace** is one end-to-end execution of your agent, or a related thread of turns when you set a thread id. It carries the input, the output (or error), timing, and the tree of spans inside it. Each trace has a unique trace ID.
 
 If every model or tool call shows up as its own trace, the child work ran without the root trace handle or trace IDs. Create the root trace first, then record child spans through that trace or an explicit parent span handle. See [Traces](/tracing/instrumentation/traces).
 
 ## Span
 
-A **span** is one unit of work inside a trace - retrieval, ranking, parsing, a database query, or any app operation. Spans nest: a parent span can contain child spans, forming the execution tree. See [Spans](/tracing/instrumentation/spans).
+A **span** is one timed operation inside a trace — an LLM call, a tool invocation, a sub-agent, retrieval, ranking, parsing, a database query, or any app operation. Spans nest: a parent span can contain child spans, forming the execution tree. See [Spans](/tracing/instrumentation/spans).
 
 ## Generation
 
@@ -72,6 +72,22 @@ A **thread** groups the traces of a multi-turn conversation. Each turn is its ow
 
 A **project** is the top-level container for all traces from your agent(s). Each project has an API key and project ID (used when sending traces) and its own dashboard. Use separate projects to isolate environments (dev/staging/prod) or distinct products.
 
+## Issue
+
+An **issue** is a durable grouped failure pattern inferred from trace evidence. Say the issue was **observed in a trace**. Statuses are **open**, **in progress**, **resolved**, and **dismissed**.
+
+Detection is probabilistic: always open the supporting traces before you treat a title as a confirmed bug. Lemma does not ship standalone monitors or incidents. Alerting follows this issue lifecycle. See [Issues](/platform/issues).
+
+## Artifact
+
+**Artifacts** are agent-scoped. **Provided** context is customer-supplied text (or a supported text file) about that agent. **Generated** artifacts are a versioned understanding document and a decision-flow diagram Lemma builds from traces plus that context. Agent names come from observed traces. Context for one named agent is not evidence about another. See [Artifacts](/platform/artifacts).
+
+## Production evaluation
+
+Lemma evaluates **production usage** from real users. It does not offer offline evaluation. If someone asks about "online eval," they mean evaluating actual production usage.
+
+Standalone monitors, incidents, and a standalone metrics product are not current surfaces. Failure alerting follows the issue lifecycle via [Slack](/connections/slack) and [webhooks](/connections/webhooks).
+
 ## Next steps
 
 <CardGroup cols={2}>
@@ -80,5 +96,11 @@ A **project** is the top-level container for all traces from your agent(s). Each
   </Card>
   <Card title="Quickstart" icon="/icons/wrench.svg" href="/tracing/instrumentation/setup">
     Install the SDK and send your first complete agent trace.
+  </Card>
+  <Card title="Platform overview" icon="/icons/stack-line.svg" href="/platform/overview">
+    How traces, issues, and artifacts fit together.
+  </Card>
+  <Card title="Issues" icon="/icons/bug.svg" href="/platform/issues">
+    Grouped failure patterns and their statuses.
   </Card>
 </CardGroup>

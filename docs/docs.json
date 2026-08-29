@@ -59,7 +59,13 @@
             "icon": "/icons/stack-line.svg",
             "expanded": true,
             "pages": [
-              "getting-started/concepts"
+              "getting-started/concepts",
+              "platform/overview",
+              "platform/analytics",
+              "platform/inspect",
+              "platform/traces",
+              "platform/issues",
+              "platform/artifacts"
             ]
           },
           {
@@ -109,6 +115,9 @@
             "icon": "/icons/plug.svg",
             "expanded": true,
             "pages": [
+              "connections/overview",
+              "connections/slack",
+              "connections/linear",
               "connections/mcp",
               "connections/webhooks"
             ]
