@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { access, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const OPENCODE_VERSION = "1.18.19";
 const PROJECT_ID = "10000000-0000-0000-0000-000000000001";
@@ -206,16 +207,53 @@ try {
       }),
     ),
   );
+  const pluginRoot = dirname(fileURLToPath(import.meta.url));
+  const tracingRoot = join(pluginRoot, "..", "..", "packages", "ts", "tracing");
+  await run("pnpm", ["pack", "--pack-destination", packDir], {
+    cwd: tracingRoot,
+  });
+  await run("pnpm", ["pack", "--pack-destination", packDir], {
+    cwd: pluginRoot,
+  });
+  const archives = (await readdir(packDir)).filter((name) => name.endsWith(".tgz"));
+  const tracingArchive = archives.find((name) => name.includes("tracing"));
+  const archiveName = archives.find((name) => name.includes("opencode"));
+  assert(tracingArchive, "Tracing package tarball was not created");
+  assert(archiveName, "OpenCode package tarball was not created");
+  const tracingArchivePath = join(packDir, tracingArchive);
+  const archivePath = join(packDir, archiveName);
+  // pnpm pack rewrites workspace:^ to ^<current version>. That version is
+  // not on npm until this PR merges, so point the packed plugin at the
+  // local tracing tarball before the consumer install.
+  const rewriteDir = join(root, "rewrite");
+  await mkdir(rewriteDir, { recursive: true });
+  await run("tar", ["-xzf", archivePath, "-C", rewriteDir]);
+  const packedManifestPath = join(rewriteDir, "package", "package.json");
+  const packedManifest = JSON.parse(await readFile(packedManifestPath, "utf8"));
+  if (packedManifest.dependencies?.["@uselemma/tracing"]) {
+    packedManifest.dependencies["@uselemma/tracing"] = `file:${tracingArchivePath}`;
+  }
+  await writeFile(
+    packedManifestPath,
+    `${JSON.stringify(packedManifest, null, 2)}\n`,
+  );
+  await run("tar", ["-czf", archivePath, "-C", rewriteDir, "package"]);
   await writeFile(
     join(consumerDir, "package.json"),
-    `${JSON.stringify({ private: true, type: "module" }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        private: true,
+        type: "module",
+        pnpm: {
+          overrides: {
+            "@uselemma/tracing": `file:${tracingArchivePath}`,
+          },
+        },
+      },
+      null,
+      2,
+    )}\n`,
   );
-  await run("pnpm", ["pack", "--pack-destination", packDir], {
-    cwd: new URL(".", import.meta.url).pathname,
-  });
-  const archiveName = (await readdir(packDir)).find((name) => name.endsWith(".tgz"));
-  assert(archiveName, "OpenCode package tarball was not created");
-  const archivePath = join(packDir, archiveName);
   await run(
     "pnpm",
     [

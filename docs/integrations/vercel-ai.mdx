@@ -143,7 +143,7 @@ await lemmaTelemetry.flush();
 | Model call / step | Generation with model, provider, normalized messages, structured assistant output, and duration |
 | Tool execution | Tool call with name, arguments, result or soft/hard error (never both success output and error), and duration |
 
-AI SDK v7 provides model and tool durations directly. AI SDK v6 provides tool execution durations; model-call durations are inferred from start and finish timestamps when the AI SDK does not provide an explicit duration. For v6, `system` + `prompt` are normalized into chat messages on the generation.
+AI SDK v7 provides model and tool durations directly. AI SDK v6 provides tool execution durations; model-call durations are inferred from start and finish timestamps when the AI SDK does not provide an explicit duration. `system` / `instructions` is prepended onto `messages` or `prompt` so generations include the playbook that was sent for that step.
 
 Use `telemetry.functionId` / `experimental_telemetry.functionId` for the agent name, or set it on the integration with `vercelAI({ agentName: "support-agent" })`.
 
