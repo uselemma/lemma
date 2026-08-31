@@ -1,0 +1,79 @@
+---
+title: "Overview"
+description: "How Lemma turns a trace into an issue, and where projects and agents fit"
+meta:
+  contentType: "Conceptual"
+---
+
+Lemma turns each agent execution into a trace, finds the executions that went wrong, and groups the repeat offenders into issues you can triage. This page walks through that path end to end: how a trace becomes an issue, how projects and agents relate to each other, and which dashboard surface to open at each step.
+
+For the SDK vocabulary (trace, span, generation, tool call, thread, project), see [SDK concepts](/tracing/instrumentation/concepts). For the dashboard vocabulary (issues, occurrences, artifacts, agents), see [Platform concepts](/platform/concepts). To send your first trace, see [Quickstart](/tracing/instrumentation/setup).
+
+<Frame>
+  <img src="/images/platform/dashboard-home.png" alt="Project dashboard showing to-do items, headline stats, and resolved-versus-dismissed and traces-per-month charts" />
+</Frame>
+
+## How a trace becomes an issue
+
+An instrumented agent emits one trace per execution, or per conversation turn when you set a thread ID. From there:
+
+1. Lemma stores the trace's spans and marks the trace ready once you can inspect it in the dashboard.
+2. Lemma analyzes ready traces for behavior that hurt the agent's task: a wrong answer, a dropped tool error, a forgotten instruction.
+3. Detection is probabilistic. Treat a finding as a hypothesis and open the supporting traces before you call it confirmed.
+4. Repeated evidence of the same failure gets grouped into one issue instead of surfacing as unrelated one-off reports.
+5. You investigate in the dashboard or through Inspect, then resolve, dismiss, or route the finding to Slack, Linear, MCP, or webhooks.
+
+Lemma evaluates production usage from real users; it doesn't run offline evaluations. There's no standalone monitors product, no incidents, and no separate metrics surface. Failure alerting follows the issue lifecycle described above.
+
+## Projects and agents
+
+You create projects. A project is the container for traces, issues, artifacts, and project settings, and it has its own dashboard. Split projects along environment (dev, staging, prod) or product line when you need traces isolated.
+
+Agents work differently: you don't register them. An agent appears the moment a trace carries its name. Lemma uses that name to group Artifacts, Analytics scorecards, and issue scope, so a trace with no usable agent name still ingests, but nothing agent-scoped has a home for it.
+
+## The dashboard surfaces
+
+Each surface below answers a different question about the same underlying traces:
+
+| Surface | What it's for |
+| -- | -- |
+| **[Traces](/platform/traces)** | Search, filter, and open individual executions and threads. Distinct from the instrumentation [Agent traces](/tracing/instrumentation/traces) page, which explains how to create traces. |
+| **[Issues](/platform/issues)** | Recurring failure patterns with occurrences, status, and evidence. |
+| **[Inspect](/platform/inspect)** | An in-product assistant that reads the page you're on (a trace, an issue, Analytics, Artifacts, settings) and can share conversations. |
+| **[Artifacts](/platform/artifacts)** | Per-agent context you provide, plus Lemma's generated understanding document and decision-flow diagram. |
+| **[Analytics](/platform/analytics)** | Project-level volume, latency, errors, tools, models, and cost over a timeframe. Feature-gated; may not appear in your workspace yet. |
+
+A typical investigation starts on Analytics or Issues, where you spot a trend. From there you open the supporting traces, ask Inspect what's going on, add Artifacts context if detection missed the mark, and alert or ticket the finding through [Connections](/connections/overview).
+
+## What to do after the first trace
+
+1. Open **[Traces](https://platform.uselemma.ai)** in the project and confirm the execution tree and conversation look complete.
+2. Wait for issues if the conversation is still active. Extraction runs after a thread goes quiet, or immediately when there's no thread ID.
+3. Add [Artifacts](/platform/artifacts) context for that agent if domain rules matter to how you'd judge a run.
+4. Connect Slack, Linear, Lemma MCP, or webhooks once the team needs those paths. See [Connect your workflow](/connections/overview).
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Concepts" href="/platform/concepts">
+    Traces, issues, occurrences, artifacts, and agents.
+  </Card>
+  <Card title="Analytics" href="/platform/analytics">
+    Project-level volume, latency, errors, tools, models, and cost.
+  </Card>
+  <Card title="Inspect" href="/platform/inspect">
+    Ask questions about the trace, issue, or page you're on.
+  </Card>
+  <Card title="Traces" href="/platform/traces">
+    Search and inspect ready executions in the dashboard.
+  </Card>
+  <Card title="Issues" href="/platform/issues">
+    Recurring failure patterns with status and evidence.
+  </Card>
+  <Card title="Artifacts" href="/platform/artifacts">
+    Per-agent context, understanding document, and decision-flow diagram.
+  </Card>
+  <Card title="Connect your workflow" href="/connections/overview">
+    Slack, Linear, Lemma MCP, and webhooks.
+  </Card>
+</CardGroup>

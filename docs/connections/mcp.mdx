@@ -1,27 +1,31 @@
 ---
-title: "MCP"
-description: "Connect your AI coding tools to Lemma using the Model Context Protocol"
+title: "Lemma MCP server"
+description: "Let your coding agent list traces and issues through the Model Context Protocol"
+meta:
+  contentType: "How-to"
 ---
 
-Give your coding agent direct access to your traces, metrics, and monitors. Instead of switching between your editor and the Lemma dashboard, your agent can pull the exact runs and errors it needs to understand what's going wrong and fix it in place.
+The Lemma MCP server lets your coding agent call Lemma directly: list traces and issues, inspect evidence, and take the same authorized actions the API exposes, all without you switching to the dashboard. This isn't the same connection as [Inspect](/platform/inspect); Inspect runs in-product, while Lemma MCP is for editors and coding agents.
+
+The endpoint is `https://api.uselemma.ai/mcp` (trailing slash variants work the same), authenticated with `Authorization: Bearer <organization API key>`. Pass a project ID on project-scoped tools. Lemma only records MCP activation for a project after a successful project-scoped tool call, so saving the URL in Cursor isn't activation by itself.
 
 ## Prerequisites
 
-- A [Lemma](https://uselemma.ai) account with at least one project sending traces
-- An MCP-compatible IDE or tool (Cursor, Claude Desktop, Claude Code, or any client that supports MCP)
+- A Lemma organization with at least one project that has, or will have, traces
+- An organization API key from **API Keys** or the project get-started flow. Copy it immediately; Lemma won't show it again. Keep it server-side in your coding tool's MCP config, never in a public repo.
+- An MCP client that supports Streamable HTTP, such as Cursor, Claude Desktop, or Claude Code
 
-## Setup
+## Connect your coding agent
 
 <Steps>
   <Step title="Get your API key">
-    Go to your project settings in the Lemma dashboard and copy your API key.
+    Create an organization API key in the [Lemma dashboard](https://platform.uselemma.ai).
 
     <Warning>
-      Copy your key immediately after creating it — you won't be able to see it again.
+      Copy your key immediately after creating it. You won't be able to see it again.
     </Warning>
   </Step>
-
-  <Step title="Add to your IDE">
+  <Step title="Add it to your IDE">
     <Tabs>
       <Tab title="Cursor">
         In **Settings > MCP Servers**, add:
@@ -39,7 +43,6 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
         }
         ```
       </Tab>
-
       <Tab title="Claude Desktop">
         Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -59,7 +62,6 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
 
         Restart Claude Desktop after saving.
       </Tab>
-
       <Tab title="Claude Code">
         Run this in your terminal:
 
@@ -69,9 +71,8 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
           --header "Authorization: Bearer <your-api-key>"
         ```
       </Tab>
-
       <Tab title="Other">
-        For any MCP client that supports Streamable HTTP transport:
+        Any MCP client that supports Streamable HTTP transport uses the same shape:
 
         ```json
         {
@@ -88,16 +89,38 @@ Give your coding agent direct access to your traces, metrics, and monitors. Inst
       </Tab>
     </Tabs>
 
-    Replace `<your-api-key>` with the key from your project settings.
+    Replace `<your-api-key>` with the organization API key you copied.
   </Step>
-
   <Step title="Try it out">
     Ask your agent:
 
     ```
     Use Lemma to show me my last 5 traces, including any errors.
     ```
+
+    Include the project ID if your client hasn't already selected one.
   </Step>
 </Steps>
 
-See the [API Reference](/api-reference) for the full list of available tools and endpoints.
+## What tools exist
+
+REST and MCP share one operation list; see the [API Reference](/api-reference) for the full set. Results get truncated once they're oversized, so prefer pagination over asking for every span at once.
+
+Typical uses include pulling the last traces with errors, inspecting a specific issue, exporting an issue as markdown, and creating or linking a Linear ticket when you're authorized to. MCP clients require confirmation before running any write tool.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Issues" href="/platform/issues">
+    The issues your coding agent can list and act on.
+  </Card>
+  <Card title="Inspect" href="/platform/inspect">
+    In-product investigation. Inspect doesn't use this MCP connection.
+  </Card>
+  <Card title="Connect your workflow" href="/connections/overview">
+    When to use MCP versus Slack, Linear, or webhooks.
+  </Card>
+  <Card title="API Reference" href="/api-reference">
+    The shared REST and MCP operation list.
+  </Card>
+</CardGroup>

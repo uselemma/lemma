@@ -59,7 +59,13 @@
             "icon": "/icons/stack-line.svg",
             "expanded": true,
             "pages": [
-              "getting-started/concepts"
+              "platform/overview",
+              "platform/concepts",
+              "platform/analytics",
+              "platform/inspect",
+              "platform/traces",
+              "platform/issues",
+              "platform/artifacts"
             ]
           },
           {
@@ -67,6 +73,7 @@
             "icon": "/icons/workflow.svg",
             "expanded": true,
             "pages": [
+              "tracing/instrumentation/concepts",
               "tracing/instrumentation/setup",
               "tracing/instrumentation/instrument-an-agent",
               "tracing/instrumentation/traces",
@@ -74,14 +81,6 @@
               "tracing/instrumentation/tool-calls",
               "tracing/instrumentation/spans",
               "tracing/instrumentation/context",
-              {
-                "group": "Troubleshooting",
-                "expanded": false,
-                "pages": [
-                  "tracing/troubleshooting/debug-mode",
-                  "tracing/troubleshooting/common-issues"
-                ]
-              },
               {
                 "group": "Reference",
                 "expanded": false,
@@ -109,6 +108,9 @@
             "icon": "/icons/plug.svg",
             "expanded": true,
             "pages": [
+              "connections/overview",
+              "connections/slack",
+              "connections/linear",
               "connections/mcp",
               "connections/webhooks"
             ]
@@ -123,15 +125,6 @@
             "pages": [
               "guides/building-high-quality-traces",
               "guides/instrumenting-multi-turn-agents"
-            ]
-          },
-          {
-            "group": "Migration guides",
-            "icon": "/icons/arrow-right-left.svg",
-            "pages": [
-              "guides/migrations/raindrop",
-              "guides/migrations/langfuse",
-              "guides/migrations/opentelemetry"
             ]
           }
         ]
@@ -166,6 +159,10 @@
     {
       "source": "/getting-started/quickstart",
       "destination": "/tracing/instrumentation/setup"
+    },
+    {
+      "source": "/getting-started/concepts",
+      "destination": "/tracing/instrumentation/concepts"
     },
     {
       "source": "/getting-started/agent-skill",

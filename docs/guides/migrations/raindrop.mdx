@@ -183,7 +183,7 @@ The example below is the Lemma equivalent of a Raindrop `begin()` → tool track
 
 Pass the **full ordered message list** for each call as both `input` and `llmInputMessages` / `llm_input_messages`. The root trace `input` is only the current user turn. For live handles that measure real duration, error recording, and nesting a tool under a measured parent span, see [Generations](/tracing/instrumentation/generations) and [Tool calls](/tracing/instrumentation/tool-calls).
 
-If your run spans streaming callbacks or helpers rather than one function, use a TypeScript trace handle and end it from the terminal callback. See [Traces](/tracing/instrumentation/traces).
+If your run spans streaming callbacks or helpers rather than one function, use a TypeScript trace handle and end it from the terminal callback. See [Agent traces](/tracing/instrumentation/traces).
 
 ## Pitfalls
 
@@ -202,16 +202,16 @@ If your run spans streaming callbacks or helpers rather than one function, use a
 ## Related pages
 
 <CardGroup cols={2}>
-  <Card title="Quickstart" icon="/icons/wrench.svg" href="/tracing/instrumentation/setup">
+  <Card title="Quickstart" href="/tracing/instrumentation/setup">
     Install the SDK and send your first complete agent trace.
   </Card>
-  <Card title="Trace contract" icon="/icons/file-check.svg" href="/reference/trace-contract">
+  <Card title="Trace contract" href="/reference/trace-contract">
     The exact shape and fields Lemma reads.
   </Card>
-  <Card title="Building high-quality traces" icon="/icons/circle-check.svg" href="/guides/building-high-quality-traces">
+  <Card title="Building high-quality traces" href="/guides/building-high-quality-traces">
     Bad → better → best examples for the ideal path.
   </Card>
-  <Card title="Instrument an agent" icon="/icons/bot.svg" href="/tracing/instrumentation/instrument-an-agent">
+  <Card title="Instrument an agent" href="/tracing/instrumentation/instrument-an-agent">
     Build a complete Lemma trace one piece at a time.
   </Card>
 </CardGroup>

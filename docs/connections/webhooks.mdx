@@ -1,65 +1,60 @@
 ---
 title: "Webhooks"
-description: "Receive signed HTTP POST requests when incidents are detected, analyzed, or resolved"
+description: "Receive signed HTTP POST requests for issue lifecycle events"
+meta:
+  contentType: "How-to"
 ---
 
-Webhooks let you react to incident events in real time. When something happens in Lemma — a new incident, a completed RCA, a resolution — Lemma POSTs a signed JSON payload to your endpoint. Use this to trigger your own agents, send alerts, or update external systems.
+Project webhooks send a signed HTTP POST request whenever an issue changes state, separate from both Slack alerts and MCP. Open the project's **Settings → Webhooks** in the [Lemma dashboard](https://platform.uselemma.ai) to configure one.
+
+Lemma doesn't emit `incident.*` events today; customer alerting follows issues instead. If you find incident-named events in older samples or docs, they're stale.
 
 ## Events
 
 | Event | When it fires |
-|-------|---------------|
-| `incident.created` | A new incident has been detected by a monitor |
-| `incident.analyzed` | RCA is complete — includes root cause and suggested fix |
-| `incident.resolved` | The incident has been marked as resolved |
-| `incident.dismissed` | The incident has been dismissed |
+| -- | -- |
+| `issue.created` | A new issue was created |
+| `issue.resolved` | The issue was marked resolved |
+| `issue.dismissed` | The issue was dismissed |
+| `issue.reopened` | A resolved issue reopened from matching evidence. Dismissed issues never reopen this way. |
 
-## Setup
+## Set up an endpoint
 
 <Steps>
-  <Step title="Add a webhook endpoint">
-    In your project, go to **Settings → Developer → Webhooks** and click **Add endpoint**.
-
-    Enter a publicly accessible HTTPS URL and select the events you want to receive.
+  <Step title="Add an HTTPS endpoint">
+    Open the project's **Settings → Webhooks**, add an HTTPS endpoint, and select the issue events you want.
   </Step>
-
   <Step title="Save your signing secret">
-    After creating the endpoint, Lemma shows your signing secret **once**. Copy it immediately and store it securely — you won't be able to retrieve it again.
-
-    If you lose it, you can regenerate a new secret from the endpoint's edit dialog.
+    Copy the signing secret when Lemma shows it. It won't be shown again, and regenerating it replaces the old value, so store it in your receiver's secret manager right away.
   </Step>
-
   <Step title="Verify signatures">
-    Every request includes an `X-Lemma-Signature` header containing `sha256=<hex>`. Verify it before processing the payload to ensure the request came from Lemma.
+    Every request includes an `X-Lemma-Signature` header containing `sha256=<hex>`. Verify it against the raw request body before you process anything.
 
     <Tabs>
       <Tab title="Node.js">
         ```typescript
-        import { createHmac } from 'crypto';
+        import { createHmac, timingSafeEqual } from "crypto";
 
         function verifyLemmaSignature(
           rawBody: string,
           secret: string,
-          signature: string // X-Lemma-Signature header
+          signature: string,
         ): boolean {
-          const expected = 'sha256=' + createHmac('sha256', secret)
-            .update(rawBody)
-            .digest('hex');
-          return expected === signature;
+          const expected =
+            "sha256=" +
+            createHmac("sha256", secret).update(rawBody).digest("hex");
+          const a = Buffer.from(expected);
+          const b = Buffer.from(signature);
+          return a.length === b.length && timingSafeEqual(a, b);
         }
         ```
       </Tab>
-
       <Tab title="Python">
         ```python
         import hmac, hashlib
 
-        def verify_lemma_signature(
-            raw_body: bytes,
-            secret: str,
-            signature: str,  # X-Lemma-Signature header
-        ) -> bool:
-            expected = 'sha256=' + hmac.new(
+        def verify_lemma_signature(raw_body: bytes, secret: str, signature: str) -> bool:
+            expected = "sha256=" + hmac.new(
                 secret.encode(), raw_body, hashlib.sha256
             ).hexdigest()
             return hmac.compare_digest(expected, signature)
@@ -68,45 +63,55 @@ Webhooks let you react to incident events in real time. When something happens i
     </Tabs>
 
     <Warning>
-      Always use the **raw request body** for signature verification. Parsing and re-serializing the JSON will change whitespace and break the signature check.
+      Always verify against the raw request body. Parsing and re-serializing the JSON changes whitespace and breaks the signature check.
     </Warning>
+  </Step>
+  <Step title="Test delivery">
+    Send a test event, confirm your endpoint returns `2xx` quickly, and leave it enabled.
   </Step>
 </Steps>
 
+## Headers and verification
+
+Every request carries three headers you'll use to verify and route it: `X-Lemma-Signature` (the `sha256=<hex>` HMAC-SHA256 of the raw body), `X-Lemma-Timestamp` (for checking freshness), and `X-Lemma-Event` (the event type).
+
 ## Payload shape
 
-All events share a common envelope:
+The envelope always includes `event`, `timestamp`, `projectId`, and an `issue` object with the issue's ID, status, and related fields. Don't expect an `incident` object; that shape doesn't exist anymore.
 
 ```json
 {
-  "event": "incident.analyzed",
-  "timestamp": "2025-04-07T12:00:00.000Z",
+  "event": "issue.created",
+  "timestamp": "2026-08-28T12:00:00.000Z",
   "projectId": "39e9c46a-...",
-  "incident": {
+  "issue": {
     "id": "abc123",
-    "status": "unresolved",
-    "metricName": "tool_call_success_rate",
-    "rootCause": "OpenAI tool call parsing fails when response contains nested JSON strings",
-    "createdAt": "2025-04-07T11:58:00.000Z"
+    "status": "open"
   }
 }
 ```
 
-The `incident` object is present on all event types. The `rootCause` field is only populated on `incident.analyzed`.
-
 ## Delivery and retries
 
-Lemma considers a delivery successful if your endpoint responds with a `2xx` status within **10 seconds**. Failed deliveries are retried with exponential backoff.
-
-You can view the full delivery history — including request bodies, response codes, and latency — for each endpoint in **Settings → Developer → Webhooks → Delivery log**.
-
-## Testing
-
-Use the **Send test ping** button (paper plane icon) next to any endpoint to send a synthetic `incident.analyzed` payload. This is useful for verifying your endpoint is reachable and your signature verification is working before you receive real events.
+Lemma counts a `2xx` response within 10 seconds as a successful delivery and retries failures with exponential backoff. You can review delivery history, status, and latency (not signing secrets) in **Settings → Webhooks → Delivery log**. Offload slow processing to a background job so you can return `2xx` immediately.
 
 ## Security checklist
 
-- Always verify the `X-Lemma-Signature` header before processing
+- Verify both `X-Lemma-Signature` and `X-Lemma-Timestamp` on every request
 - Use HTTPS endpoints only
-- Store your signing secret in an environment variable, never in source code
-- Return `2xx` quickly — offload any slow processing to a background job to avoid timeouts
+- Store the signing secret in an environment variable, never in source control
+- Remember this is distinct from Slack alerts and from Linear's inbound webhooks to Lemma
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Issues" href="/platform/issues">
+    The lifecycle these events report.
+  </Card>
+  <Card title="Slack" href="/connections/slack">
+    Human-readable issue alerts in Slack instead of HTTP.
+  </Card>
+  <Card title="Connect your workflow" href="/connections/overview">
+    When to use webhooks versus Slack, Linear, or MCP.
+  </Card>
+</CardGroup>

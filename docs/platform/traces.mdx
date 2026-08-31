@@ -1,0 +1,67 @@
+---
+title: "Traces"
+description: "Search, filter, and inspect ready traces in the Lemma dashboard"
+meta:
+  contentType: "Conceptual"
+---
+
+<Note>
+  This page covers searching, filtering, and inspecting traces in the dashboard once they're ready. To create traces in the SDK, see [Agent traces](/tracing/instrumentation/traces).
+</Note>
+
+Open **Traces** in a project in the [Lemma dashboard](https://platform.uselemma.ai), at `/dashboard/projects/{projectId}/traces`. This page is where you go once traces exist and you need to find a specific execution, not where you instrument one.
+
+<Frame>
+  <img src="/images/platform/traces-table.png" alt="Traces table showing rows with input previews, span counts, durations, and error marks" />
+</Frame>
+
+## What a row is
+
+Each row is one ready agent execution, meaning one conversation turn. Columns include time, agent, duration, span count, an input preview, and separate marks for errors and issues. Traces stay on this list for 14 days before they age out.
+
+Agent, release, user, and thread aren't separate dashboards; they're attributes on the trace that come from your SDK context. Filter or search on those fields directly, and see [Threads and context](/tracing/instrumentation/context) for how to set them. SDK `metadata` and `attributes` both land as searchable span attributes after ingest.
+
+## Search and filters
+
+You can combine several filters at once:
+
+- Full-text or structured search, with saved searches
+- Time range, absolute or relative
+- Agent name
+- Duration, span count, token count, error state, and issue state
+- Attribute filters, for example `user.uid` if you recorded it
+
+Live updates can pause while you work a snapshot; refresh the page to pull in newly arrived traces. Batch **export** and **delete** apply to your current selection. Delete only removes the trace from the dashboard; it doesn't un-send the original OTLP payload your agent already sent.
+
+An empty list usually means no ready traces exist in this project and window. Confirm ingest through the project get-started flow, or check ingest status for a specific OTel trace ID, before assuming the dashboard is wrong.
+
+## Opening a trace
+
+The detail view, whether a drawer or a dedicated page, has two panels that answer different questions. **Conversation** shows the user and assistant turns as a readable thread, and if traces share a thread ID, stitches multiple turns into one conversation. **Execution tree** shows the nested spans, generations, tool calls, and other work, each with timing, input and output, and any errors.
+
+Read the conversation to see what the user experienced, and the tree to find which tool or model call actually failed. Any issue attached to the trace appears as an occurrence you can open directly.
+
+<Frame>
+  <img src="/images/platform/trace-detail-drawer.png" alt="Trace detail view with the conversation and an occurrence dropdown on the left, and the execution tree with span timings on the right" />
+</Frame>
+
+## From traces to the rest of the product
+
+An issue mark means extraction grouped this run into a failure pattern; open **[Issues](/platform/issues)** to see its status and every other occurrence. An error mark just means a span or the root failed, which may or may not turn into an issue. From an open trace, ask **[Inspect](/platform/inspect)** to explain the flagged issue or find other traces like it. And when you need the aggregate view across many traces rather than one execution, that's **[Analytics](/platform/analytics)**.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Overview" href="/platform/overview">
+    How traces become issues after they arrive.
+  </Card>
+  <Card title="Issues" href="/platform/issues">
+    Grouped failure patterns across many traces.
+  </Card>
+  <Card title="Inspect" href="/platform/inspect">
+    Ask questions about the trace you have open.
+  </Card>
+  <Card title="Agent traces" href="/tracing/instrumentation/traces">
+    How to create a root trace in the SDK.
+  </Card>
+</CardGroup>

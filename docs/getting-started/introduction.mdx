@@ -27,8 +27,11 @@ Choose how you’ll send agent data to Lemma.
   <Card title="Integrations" icon="/icons/plug-zap.svg" href="/integrations/openai-agents">
     Trace agents built with OpenAI Agents, Vercel AI SDK, LangChain, LangGraph, or Mastra.
   </Card>
-  <Card title="Core concepts" icon="/icons/book.svg" href="/getting-started/concepts">
+  <Card title="Core concepts" icon="/icons/book.svg" href="/tracing/instrumentation/concepts">
     Learn how Lemma defines traces, spans, generations, and threads.
+  </Card>
+  <Card title="Overview" icon="/icons/stack-line.svg" href="/platform/overview">
+    What to do after the first trace arrives.
   </Card>
 </CardGroup>
 
@@ -37,11 +40,14 @@ Choose how you’ll send agent data to Lemma.
 Use Lemma to review detected failures, receive alerts, and investigate from your editor.
 
 <CardGroup cols={2}>
-  <Card title="Issues" icon="/icons/bug.svg" href="https://platform.uselemma.ai">
+  <Card title="Issues" icon="/icons/bug.svg" href="/platform/issues">
     Review recurring failures that Lemma detects across your agent traces.
   </Card>
-  <Card title="Alerts" icon="/icons/circle-check.svg" href="/connections/webhooks">
-    Receive Slack alerts and send incident events through signed webhooks.
+  <Card title="Inspect" icon="/icons/sparkles.svg" href="/platform/inspect">
+    Ask questions about the trace, issue, or page you are on.
+  </Card>
+  <Card title="Slack" icon="/icons/circle-check.svg" href="/connections/slack">
+    Receive issue alerts and optional Issue Briefs in Slack.
   </Card>
   <Card title="Lemma MCP" icon="/icons/plug.svg" href="/connections/mcp">
     Give your coding agent the traces and issues it needs to investigate a failure.
