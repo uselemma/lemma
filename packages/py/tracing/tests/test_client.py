@@ -118,6 +118,8 @@ def test_lemma_trace_posts_completed_trace():
         "llm.input_messages.0.message.role": "user",
         "llm.input_messages.0.message.content": "where is my order?",
         "llm.model_name": "gpt-4o",
+        "gen_ai.request.model": "gpt-4o",
+        "ai.model.id": "gpt-4o",
         "lemma.sdk.language": "python",
         "lemma.sdk.integration": "manual",
     }

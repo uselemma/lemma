@@ -182,7 +182,10 @@ def _span_attributes(
     attrs = dict(caller)
     _add_defined(attrs, "input.mime_type", input_mime_type)
     _add_defined(attrs, "output.mime_type", output_mime_type)
-    _add_defined(attrs, "llm.model_name", llm_model_name or model)
+    model_identity = llm_model_name or model
+    _add_defined(attrs, "llm.model_name", model_identity)
+    _add_defined(attrs, "gen_ai.request.model", model_identity)
+    _add_defined(attrs, "ai.model.id", model_identity)
     _add_defined(attrs, "llm.provider", llm_provider)
     _add_defined(attrs, "llm.system", llm_system)
     # gen_ai.system from llm_system when set, else llm_provider.
@@ -308,7 +311,7 @@ class SpanHandle:
             output=output,
             metadata=metadata or self.metadata,
             attributes=attributes or self.attributes,
-            model=model or self.model,
+            model=self.model or model,
             tool_name=tool_name or self.tool_name,
             user_facing_message=self.user_facing_message,
             input_mime_type=input_mime_type,

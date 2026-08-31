@@ -7,6 +7,7 @@ import {
 import { describeError } from "./error-message";
 import { scheduleMacrotask } from "./schedule";
 import { toolResultError } from "./tool-result";
+import { pickGenerationModelIdentity, pickModelIdentity } from "./model";
 import { normalizeTokenUsage, type TokenUsage } from "./usage";
 
 const INTEGRATION_ATTRS = {
@@ -133,22 +134,11 @@ function modelName(
   serialized: Serialized | undefined,
   extraParams?: Record<string, unknown>,
 ) {
-  const kwargs = serialized?.kwargs;
-  const sources = [kwargs, serialized, extraParams];
-  for (const source of sources) {
-    if (!source) continue;
-    for (const key of [
-      "model",
-      "modelName",
-      "model_name",
-      "model_id",
-      "modelId",
-    ]) {
-      const value = source[key];
-      if (typeof value === "string" && value) return value;
-    }
-  }
-  return undefined;
+  return (
+    pickModelIdentity(serialized?.kwargs) ??
+    pickModelIdentity(serialized) ??
+    pickModelIdentity(extraParams)
+  );
 }
 
 function lookupString(
@@ -1192,6 +1182,7 @@ export class LemmaLangChainCallbackHandler {
     const softError = toolResultError(structured);
     const awaitingTools = !softError && hasToolCalls(structured);
 
+    const model = pickGenerationModelIdentity(output);
     run.handle.end({
       output: softError ? undefined : structured,
       error: softError ?? undefined,
@@ -1200,6 +1191,7 @@ export class LemmaLangChainCallbackHandler {
       durationMs: durationMs(run.startedAt, endedAt),
       llmOutputMessages: softError ? undefined : outputMessages,
       usage: llmTokenUsage(output),
+      ...(model ? { model } : {}),
     });
 
     const stored = this.storedTrace(run.owningTraceId);

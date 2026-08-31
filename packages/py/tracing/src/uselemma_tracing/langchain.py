@@ -6,6 +6,7 @@ from typing import Any
 
 from .client import Lemma, SpanHandle, TraceContext, _duration_ms, _now
 from .error_message import describe_error
+from .model import pick_generation_model_identity, pick_model_identity
 from .tool_result import tool_result_error
 from .usage import normalize_token_usage
 
@@ -102,15 +103,11 @@ def _serialized_name(serialized: Any, fallback: str) -> str:
 
 
 def _model_name(serialized: Any, extra_params: dict[str, Any] | None = None) -> str | None:
-    kwargs = _get(serialized, "kwargs", {}) or {}
-    for source in (kwargs, serialized, extra_params or {}):
-        if not isinstance(source, dict) and source is not serialized:
-            continue
-        for key in ("model", "model_name", "modelName", "model_id", "modelId"):
-            value = _get(source, key)
-            if isinstance(value, str) and value:
-                return value
-    return None
+    return (
+        pick_model_identity(_get(serialized, "kwargs"))
+        or pick_model_identity(serialized)
+        or pick_model_identity(extra_params)
+    )
 
 
 def _lookup_string(
@@ -1031,6 +1028,7 @@ class LemmaLangChainCallbackHandler:
             duration_ms=_duration_ms(run.started_at, ended_at),
             llm_output_messages=(output_messages if soft_error is None else None),
             usage=llm_token_usage(response),
+            model=pick_generation_model_identity(response),
         )
 
         stored = self._traces.get(run.owning_trace_id)

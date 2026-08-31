@@ -7,6 +7,7 @@ import {
 } from "./client";
 import { describeError } from "./error-message";
 import { scheduleMacrotask } from "./schedule";
+import { pickModelIdentity } from "./model";
 import { toolResultError } from "./tool-result";
 import { normalizeTokenUsage, type TokenUsage } from "./usage";
 
@@ -313,6 +314,10 @@ function subtractMs(endedAt: Date, durationMs: number | undefined): Date {
 
 function v7StepKey(callId: string, stepNumber: number) {
   return `${callId}:${stepNumber}`;
+}
+
+function generationModelId(event: unknown): string | undefined {
+  return pickModelIdentity(event);
 }
 
 function isV7StepStart(
@@ -937,7 +942,7 @@ export function vercelAI(
       output: generationError ? undefined : output,
       metadata: options.metadata,
       attributes: withIntegrationAttrs(),
-      model: event.model.modelId,
+      model: generationModelId(event),
       startedAt,
       endedAt,
       durationMs,
@@ -1004,7 +1009,7 @@ export function vercelAI(
       input: messages,
       metadata: options.metadata,
       attributes: withIntegrationAttrs(),
-      model: event.modelId,
+      model: generationModelId(event),
       startedAt,
       llmProvider: event.provider,
       llmInputMessages: messages,
@@ -1039,7 +1044,7 @@ export function vercelAI(
       input,
       metadata: options.metadata,
       attributes: withIntegrationAttrs(),
-      model: event.model.modelId,
+      model: generationModelId(event),
       startedAt,
       llmProvider: event.model.provider,
       llmInputMessages: v6NormalizedMessages(event, fallbackSystem),
@@ -1078,7 +1083,7 @@ export function vercelAI(
 
     stored.handle.end({
       output: generationError ? undefined : output,
-      model: event.model.modelId,
+      model: generationModelId(event),
       durationMs,
       endedAt: addMs(stored.startedAt, durationMs),
       llmProvider: event.model.provider,
@@ -1141,7 +1146,7 @@ export function vercelAI(
         input: event.messages,
         metadata: options.metadata,
         attributes: withIntegrationAttrs(),
-        model: event.modelId,
+        model: generationModelId(event),
         startedAt,
         llmProvider: event.provider,
         llmInputMessages: event.messages,
@@ -1168,7 +1173,7 @@ export function vercelAI(
       const output = structuredAssistantOutput(undefined, event.content);
       stored.handle.end({
         output,
-        model: event.modelId,
+        model: generationModelId(event),
         durationMs,
         endedAt: addMs(stored.startedAt, durationMs),
         llmProvider: event.provider,
