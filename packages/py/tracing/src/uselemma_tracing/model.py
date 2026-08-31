@@ -1,7 +1,8 @@
 """Pick a canonical model identity string from provider / framework payloads.
 
 Looks at invocation, response, and ``response_metadata`` aliases. Does not
-invent a name when none is present.
+invent a name when none is present. Bare strings (completions, messages) are
+never treated as a model id — only named model fields on objects.
 """
 
 from __future__ import annotations
@@ -30,6 +31,8 @@ _NESTED_CONTAINERS = (
     "response",
 )
 
+_SKIP_TYPES = (bool, int, float, str, list, tuple, bytes)
+
 
 def _as_non_empty_string(value: Any) -> str | None:
     if isinstance(value, str) and value.strip():
@@ -44,16 +47,12 @@ def _get_key(raw: Any, key: str) -> Any:
 
 
 def pick_model_identity(raw: Any) -> str | None:
-    """Extract a model id from a string, invocation dict, response, or wrapper.
+    """Extract a model id from an invocation dict, response, or wrapper.
 
-    Recurses only into known nested containers (``response_metadata``,
-    ``kwargs``, ``message``, …).
+    Recurses only into known nested objects (``response_metadata``,
+    ``kwargs``, ``message``, …). A bare string is never a model id.
     """
-    from_string = _as_non_empty_string(raw)
-    if from_string:
-        return from_string
-
-    if raw is None or isinstance(raw, (bool, int, float, list, tuple, bytes)):
+    if raw is None or isinstance(raw, _SKIP_TYPES):
         return None
 
     for key in _MODEL_KEYS:
@@ -61,7 +60,7 @@ def pick_model_identity(raw: Any) -> str | None:
         as_string = _as_non_empty_string(value)
         if as_string:
             return as_string
-        if value is not None and not isinstance(value, (str, bool, int, float)):
+        if value is not None and not isinstance(value, _SKIP_TYPES):
             nested = pick_model_identity(value)
             if nested:
                 return nested

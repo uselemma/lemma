@@ -5,16 +5,17 @@ import {
 } from "./model";
 
 describe("pickModelIdentity", () => {
-  it("returns undefined for empty payloads", () => {
+  it("returns undefined for empty payloads and bare strings", () => {
     expect(pickModelIdentity(undefined)).toBeUndefined();
     expect(pickModelIdentity(null)).toBeUndefined();
     expect(pickModelIdentity({})).toBeUndefined();
     expect(pickModelIdentity("")).toBeUndefined();
     expect(pickModelIdentity("   ")).toBeUndefined();
+    expect(pickModelIdentity("gpt-4o")).toBeUndefined();
+    expect(pickModelIdentity("It arrives Friday.")).toBeUndefined();
   });
 
   it("reads model aliases including ls_model_name", () => {
-    expect(pickModelIdentity("gpt-4o")).toBe("gpt-4o");
     expect(pickModelIdentity({ model: "gpt-4o" })).toBe("gpt-4o");
     expect(pickModelIdentity({ model_name: "gpt-4o-mini" })).toBe("gpt-4o-mini");
     expect(pickModelIdentity({ modelName: "claude-3" })).toBe("claude-3");
@@ -34,6 +35,15 @@ describe("pickModelIdentity", () => {
         model: { modelId: "gpt-4o", provider: "openai" },
       }),
     ).toBe("gpt-4o");
+  });
+
+  it("does not treat message/response/text strings as a model id", () => {
+    expect(pickModelIdentity({ message: "hello" })).toBeUndefined();
+    expect(pickModelIdentity({ response: "hello" })).toBeUndefined();
+    expect(pickModelIdentity({ text: "It arrives Friday." })).toBeUndefined();
+    expect(
+      pickModelIdentity({ role: "assistant", content: "hello" }),
+    ).toBeUndefined();
   });
 });
 
@@ -66,5 +76,13 @@ describe("pickGenerationModelIdentity", () => {
         ],
       }),
     ).toBe("gpt-4o");
+  });
+
+  it("does not treat generation text or string messages as a model id", () => {
+    expect(
+      pickGenerationModelIdentity({
+        generations: [[{ text: "It arrives Friday.", message: "hello" }]],
+      }),
+    ).toBeUndefined();
   });
 });

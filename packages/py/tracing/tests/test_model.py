@@ -9,10 +9,11 @@ def test_pick_model_identity_empty():
     assert pick_model_identity({}) is None
     assert pick_model_identity("") is None
     assert pick_model_identity("   ") is None
+    assert pick_model_identity("gpt-4o") is None
+    assert pick_model_identity("It arrives Friday.") is None
 
 
 def test_pick_model_identity_aliases():
-    assert pick_model_identity("gpt-4o") == "gpt-4o"
     assert pick_model_identity({"model": "gpt-4o"}) == "gpt-4o"
     assert pick_model_identity({"model_name": "gpt-4o-mini"}) == "gpt-4o-mini"
     assert pick_model_identity({"modelName": "claude-3"}) == "claude-3"
@@ -30,6 +31,13 @@ def test_pick_model_identity_nested_response_metadata():
         pick_model_identity({"model": {"modelId": "gpt-4o", "provider": "openai"}})
         == "gpt-4o"
     )
+
+
+def test_pick_model_identity_ignores_message_response_and_text_strings():
+    assert pick_model_identity({"message": "hello"}) is None
+    assert pick_model_identity({"response": "hello"}) is None
+    assert pick_model_identity({"text": "It arrives Friday."}) is None
+    assert pick_model_identity({"role": "assistant", "content": "hello"}) is None
 
 
 class _FakeAIMessage:
@@ -68,4 +76,13 @@ def test_pick_generation_model_identity_prefers_top_level():
             }
         )
         == "gpt-4o"
+    )
+
+
+def test_pick_generation_model_identity_ignores_text_and_string_messages():
+    assert (
+        pick_generation_model_identity(
+            {"generations": [[{"text": "It arrives Friday.", "message": "hello"}]]}
+        )
+        is None
     )

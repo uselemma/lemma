@@ -403,7 +403,15 @@ export class LemmaMastraExporter {
       trace.recordGeneration({
         ...base,
         name: this.options.generationName ?? span.name,
-        model: pickModelIdentity(attrs) ?? pickModelIdentity(span.output),
+        model:
+          pickModelIdentity(attrs) ??
+          pickModelIdentity(
+            span.output !== null &&
+              typeof span.output === "object" &&
+              !Array.isArray(span.output)
+              ? span.output
+              : undefined,
+          ),
         llmProvider: attributeString(attrs, "provider"),
         llmInvocationParameters: attrs?.parameters,
         llmInputMessages,

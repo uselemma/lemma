@@ -2,7 +2,8 @@
  * Pick a canonical model identity string from provider / framework payloads.
  *
  * Looks at invocation, response, and `response_metadata` aliases. Does not
- * invent a name when none is present.
+ * invent a name when none is present. Bare strings (completions, messages)
+ * are never treated as a model id — only named model fields on objects.
  */
 
 const MODEL_KEYS = [
@@ -40,13 +41,10 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 /**
- * Extract a model id from a string, invocation dict, response, or
- * `response_metadata` wrapper. Recurses only into known nested containers.
+ * Extract a model id from an invocation dict, response, or
+ * `response_metadata` wrapper. Recurses only into known nested objects.
  */
 export function pickModelIdentity(raw: unknown): string | undefined {
-  const fromString = asNonEmptyString(raw);
-  if (fromString) return fromString;
-
   const record = asRecord(raw);
   if (!record) return undefined;
 
@@ -54,7 +52,7 @@ export function pickModelIdentity(raw: unknown): string | undefined {
     const value = record[key];
     const asString = asNonEmptyString(value);
     if (asString) return asString;
-    if (value && typeof value === "object") {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
       const nested = pickModelIdentity(value);
       if (nested) return nested;
     }
