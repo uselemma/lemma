@@ -1,0 +1,19 @@
+name: Thermo-Nuclear Autopilot
+
+on:
+  issue_comment:
+    types: [edited]
+
+permissions: {}
+
+jobs:
+  autopilot:
+    name: Autopilot
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: chroline/cursor-cloud-thermo-nuclear-pr-review/.github/workflows/cursor-cloud-thermo-nuclear-autopilot.yml@e9d6912239b0f611c11bc1aec2703471dfaaf86f
+    secrets:
+      cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+      publisher_client_id: ${{ secrets.CODE_REVIEW_PUBLISHER_CLIENT_ID }}
+      publisher_private_key: ${{ secrets.CODE_REVIEW_PUBLISHER_PRIVATE_KEY }}
