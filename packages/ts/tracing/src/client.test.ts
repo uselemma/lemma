@@ -88,6 +88,8 @@ describe("Lemma", () => {
           "llm.input_messages.0.message.role": "user",
           "llm.input_messages.0.message.content": "where is my order?",
           "llm.model_name": "gpt-4o",
+          "gen_ai.request.model": "gpt-4o",
+          "ai.model.id": "gpt-4o",
         },
       },
     ]);
@@ -139,6 +141,9 @@ describe("Lemma", () => {
         "llm.token_count.completion": 20,
         "lemma.sdk.language": "typescript",
         "lemma.sdk.integration": "manual",
+        "llm.model_name": "gpt-4o",
+        "gen_ai.request.model": "gpt-4o",
+        "ai.model.id": "gpt-4o",
       },
     });
   });

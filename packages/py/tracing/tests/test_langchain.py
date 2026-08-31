@@ -125,6 +125,49 @@ def test_llm_end_emits_usage_from_llm_output_token_usage():
     assert span["attributes"]["lemma.sdk.language"] == "python"
 
 
+def test_chat_model_end_stamps_response_metadata_model_name():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id="10000000-0000-0000-0000-000000000001",
+        transport=make_transport(calls),
+    )
+
+    handler.on_chat_model_start(
+        {
+            "id": ["langchain", "chat_models", "fake", "FakeMessagesListChatModel"],
+            "name": "FakeMessagesListChatModel",
+            "kwargs": {"responses": [{"type": "ai", "content": "It arrives Friday."}]},
+        },
+        [[{"type": "human", "content": "where is my order?"}]],
+        run_id="llm-fake",
+    )
+    handler.on_llm_end(
+        {
+            "generations": [
+                [
+                    {
+                        "text": "It arrives Friday.",
+                        "message": {
+                            "type": "ai",
+                            "content": "It arrives Friday.",
+                            "response_metadata": {"model_name": "gpt-4o-mini"},
+                        },
+                    }
+                ]
+            ]
+        },
+        run_id="llm-fake",
+    )
+
+    span = calls[0]["body"]["trace"]["spans"][0]
+    assert span["type"] == "generation"
+    assert span["model"] == "gpt-4o-mini"
+    assert span["attributes"]["llm.model_name"] == "gpt-4o-mini"
+    assert span["attributes"]["gen_ai.request.model"] == "gpt-4o-mini"
+    assert span["attributes"]["ai.model.id"] == "gpt-4o-mini"
+
+
 def test_standalone_chat_model_finalizes_one_owned_trace():
     calls = []
     handler = langchain(

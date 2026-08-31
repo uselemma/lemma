@@ -297,6 +297,50 @@ describe("langChain", () => {
     });
   });
 
+  it("stamps response_metadata.model_name onto the generation when start omits model", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock);
+
+    h.handleChatModelStart(
+      {
+        id: ["langchain", "chat_models", "fake", "FakeMessagesListChatModel"],
+        name: "FakeMessagesListChatModel",
+        kwargs: { responses: [{ type: "ai", content: "It arrives Friday." }] },
+      },
+      [[{ type: "human", content: "where is my order?" }]],
+      "llm-fake",
+    );
+    await h.handleLLMEnd(
+      {
+        generations: [
+          [
+            {
+              text: "It arrives Friday.",
+              message: {
+                type: "ai",
+                content: "It arrives Friday.",
+                response_metadata: { model_name: "gpt-4o-mini" },
+              },
+            },
+          ],
+        ],
+      },
+      "llm-fake",
+    );
+
+    await h.flush();
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      type: "generation",
+      model: "gpt-4o-mini",
+      attributes: {
+        "llm.model_name": "gpt-4o-mini",
+        "gen_ai.request.model": "gpt-4o-mini",
+        "ai.model.id": "gpt-4o-mini",
+      },
+    });
+  });
+
   it("omits usage when the provider did not supply token counts", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const h = handler(fetchMock);

@@ -365,11 +365,10 @@ function contractAttributes(
   const attributes: Record<string, unknown> = {};
   addDefined(attributes, "input.mime_type", options.inputMimeType);
   addDefined(attributes, "output.mime_type", options.outputMimeType);
-  addDefined(
-    attributes,
-    "llm.model_name",
-    options.llmModelName ?? options.model,
-  );
+  const modelIdentity = options.llmModelName ?? options.model;
+  addDefined(attributes, "llm.model_name", modelIdentity);
+  addDefined(attributes, "gen_ai.request.model", modelIdentity);
+  addDefined(attributes, "ai.model.id", modelIdentity);
   addDefined(attributes, "llm.provider", options.llmProvider);
   // llm.system from explicit llmSystem; gen_ai.system from llmSystem or llmProvider.
   addDefined(attributes, "llm.system", options.llmSystem);
@@ -542,6 +541,9 @@ export class SpanHandle {
           id: this.id,
           startedAt: this.options.startedAt,
           endedAt: options.endedAt ?? new Date(),
+          // Keep a start-time model when end() omits it or would overwrite
+          // with undefined. Fill in from the response only when unset.
+          model: this.options.model ?? options.model,
         },
         this.options.type ?? "span",
       ),
