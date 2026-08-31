@@ -102,14 +102,6 @@ def _serialized_name(serialized: Any, fallback: str) -> str:
     return fallback
 
 
-def _model_name(serialized: Any, extra_params: dict[str, Any] | None = None) -> str | None:
-    return (
-        pick_model_identity(_get(serialized, "kwargs"))
-        or pick_model_identity(serialized)
-        or pick_model_identity(extra_params)
-    )
-
-
 def _lookup_string(
     sources: list[dict[str, Any] | None],
     keys: list[str],
@@ -924,7 +916,11 @@ class LemmaLangChainCallbackHandler:
         self._note_bounds(stored, started_at, None)
 
         provider = llm_provider(serialized, invocation_params)
-        model = _model_name(serialized, invocation_params)
+        model = (
+            pick_model_identity(_get(serialized, "kwargs"))
+            or pick_model_identity(serialized)
+            or pick_model_identity(invocation_params)
+        )
         handle = stored.context.start_generation(
             name=_serialized_name(serialized, "langchain-llm"),
             parent_id=parent_id,
@@ -986,7 +982,11 @@ class LemmaLangChainCallbackHandler:
         self._note_bounds(stored, started_at, None)
 
         provider = llm_provider(serialized, invocation_params)
-        model = _model_name(serialized, invocation_params)
+        model = (
+            pick_model_identity(_get(serialized, "kwargs"))
+            or pick_model_identity(serialized)
+            or pick_model_identity(invocation_params)
+        )
         handle = stored.context.start_generation(
             name=_serialized_name(serialized, "langchain-chat-model"),
             parent_id=parent_id,
@@ -1020,6 +1020,7 @@ class LemmaLangChainCallbackHandler:
         soft_error = tool_result_error(structured)
         awaiting_tools = soft_error is None and _has_tool_calls(structured)
 
+        model = pick_generation_model_identity(response)
         run.handle.end(
             output=structured if soft_error is None else None,
             error=soft_error,
@@ -1028,7 +1029,7 @@ class LemmaLangChainCallbackHandler:
             duration_ms=_duration_ms(run.started_at, ended_at),
             llm_output_messages=(output_messages if soft_error is None else None),
             usage=llm_token_usage(response),
-            model=pick_generation_model_identity(response),
+            **({"model": model} if model else {}),
         )
 
         stored = self._traces.get(run.owning_trace_id)

@@ -130,17 +130,6 @@ function serializedName(serialized: Serialized | undefined, fallback: string) {
   return fallback;
 }
 
-function modelName(
-  serialized: Serialized | undefined,
-  extraParams?: Record<string, unknown>,
-) {
-  return (
-    pickModelIdentity(serialized?.kwargs) ??
-    pickModelIdentity(serialized) ??
-    pickModelIdentity(extraParams)
-  );
-}
-
 function lookupString(
   sources: Array<Record<string, unknown> | undefined>,
   keys: string[],
@@ -1079,7 +1068,10 @@ export class LemmaLangChainCallbackHandler {
     this.noteBounds(attachment.stored, startedAt, undefined);
 
     const provider = llmProvider(serialized, extraParams);
-    const model = modelName(serialized, extraParams);
+    const model =
+      pickModelIdentity(serialized?.kwargs) ??
+      pickModelIdentity(serialized) ??
+      pickModelIdentity(extraParams);
     const handle = attachment.stored.handle.startGeneration({
       name: serializedName(serialized, "langchain-llm"),
       parentId: attachment.parentId,
@@ -1135,7 +1127,10 @@ export class LemmaLangChainCallbackHandler {
     this.noteBounds(attachment.stored, startedAt, undefined);
 
     const provider = llmProvider(serialized, extraParams);
-    const model = modelName(serialized, extraParams);
+    const model =
+      pickModelIdentity(serialized?.kwargs) ??
+      pickModelIdentity(serialized) ??
+      pickModelIdentity(extraParams);
     const handle = attachment.stored.handle.startGeneration({
       name: serializedName(serialized, "langchain-chat-model"),
       parentId: attachment.parentId,
