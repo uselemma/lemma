@@ -5,7 +5,7 @@ meta:
   contentType: "How-to"
 ---
 
-The Lemma MCP server lets your coding agent call Lemma directly: list traces and issues, inspect evidence, and take the same authorized actions the API exposes, all without you switching to the dashboard. This isn't the same connection as [Inspect](/platform/inspect); Inspect runs in-product, while Lemma MCP is for editors and coding agents.
+The MCP server lets your coding agent call Lemma directly: list traces and issues, inspect evidence, and take the same authorized actions the API exposes, all without you switching to the dashboard. This isn't the same connection as [Inspect](/platform/inspect); Inspect runs in-product, while the MCP server is for editors and coding agents.
 
 The endpoint is `https://api.uselemma.ai/mcp` (trailing slash variants work the same), authenticated with `Authorization: Bearer <organization API key>`. Pass a project ID on project-scoped tools. Lemma only records MCP activation for a project after a successful project-scoped tool call, so saving the URL in Cursor isn't activation by itself.
 
