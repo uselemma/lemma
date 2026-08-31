@@ -7,6 +7,8 @@ meta:
 
 Once traces start arriving, five more nouns describe what you see in the dashboard. They build on the SDK vocabulary in [Concepts](/tracing/instrumentation/concepts): a trace is still the unit you send, but everything below describes what Lemma does with traces after ingest.
 
+Lemma evaluates production traces after the fact; it doesn't run offline evaluations. There's no standalone monitors product, no incidents, and no separate metrics surface — detection and alerting both run through the issue lifecycle defined below.
+
 ## Project
 
 A **project** is the top-level container for traces, issues, artifacts, and settings from your agent or agents. Each project has its own dashboard, API key, and project ID. Use separate projects to isolate environments (dev, staging, prod) or distinct products.

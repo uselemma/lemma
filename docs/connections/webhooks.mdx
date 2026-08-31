@@ -27,37 +27,59 @@ Lemma doesn't emit `incident.*` events today; customer alerting follows issues i
   <Step title="Save your signing secret">
     Copy the signing secret when Lemma shows it. It won't be shown again, and regenerating it replaces the old value, so store it in your receiver's secret manager right away.
   </Step>
-  <Step title="Verify signatures">
-    Every request includes an `X-Lemma-Signature` header containing `sha256=<hex>`. Verify it against the raw request body before you process anything.
+  <Step title="Verify signature and timestamp">
+    Every request includes an `X-Lemma-Signature` header containing `sha256=<hex>` and an `X-Lemma-Timestamp` header with the Unix delivery time in seconds. Verify the signature against the raw request body, then check the timestamp is recent, before you process anything. A 5-minute tolerance (the convention Stripe and GitHub also use) absorbs normal delivery and retry delay while still rejecting a replayed request.
 
     <Tabs>
       <Tab title="Node.js">
         ```typescript
         import { createHmac, timingSafeEqual } from "crypto";
 
+        const TOLERANCE_SECONDS = 5 * 60;
+
         function verifyLemmaSignature(
           rawBody: string,
           secret: string,
           signature: string,
+          timestamp: string,
         ): boolean {
           const expected =
             "sha256=" +
             createHmac("sha256", secret).update(rawBody).digest("hex");
           const a = Buffer.from(expected);
           const b = Buffer.from(signature);
-          return a.length === b.length && timingSafeEqual(a, b);
+          const signatureValid =
+            a.length === b.length && timingSafeEqual(a, b);
+
+          const ageSeconds = Math.abs(Date.now() / 1000 - Number(timestamp));
+          const timestampFresh =
+            Number.isFinite(ageSeconds) && ageSeconds <= TOLERANCE_SECONDS;
+
+          return signatureValid && timestampFresh;
         }
         ```
       </Tab>
       <Tab title="Python">
         ```python
-        import hmac, hashlib
+        import hmac, hashlib, time
 
-        def verify_lemma_signature(raw_body: bytes, secret: str, signature: str) -> bool:
+        TOLERANCE_SECONDS = 5 * 60
+
+        def verify_lemma_signature(
+            raw_body: bytes, secret: str, signature: str, timestamp: str
+        ) -> bool:
             expected = "sha256=" + hmac.new(
                 secret.encode(), raw_body, hashlib.sha256
             ).hexdigest()
-            return hmac.compare_digest(expected, signature)
+            signature_valid = hmac.compare_digest(expected, signature)
+
+            try:
+                age_seconds = abs(time.time() - float(timestamp))
+                timestamp_fresh = age_seconds <= TOLERANCE_SECONDS
+            except ValueError:
+                timestamp_fresh = False
+
+            return signature_valid and timestamp_fresh
         ```
       </Tab>
     </Tabs>
@@ -73,7 +95,7 @@ Lemma doesn't emit `incident.*` events today; customer alerting follows issues i
 
 ## Headers and verification
 
-Every request carries three headers you'll use to verify and route it: `X-Lemma-Signature` (the `sha256=<hex>` HMAC-SHA256 of the raw body), `X-Lemma-Timestamp` (for checking freshness), and `X-Lemma-Event` (the event type).
+Every request carries three headers you'll use to verify and route it: `X-Lemma-Signature` (the `sha256=<hex>` HMAC-SHA256 of the raw body), `X-Lemma-Timestamp` (Unix seconds; reject requests older than your tolerance to block replays), and `X-Lemma-Event` (the event type).
 
 ## Payload shape
 
@@ -97,7 +119,7 @@ Lemma counts a `2xx` response within 10 seconds as a successful delivery and ret
 
 ## Security checklist
 
-- Verify both `X-Lemma-Signature` and `X-Lemma-Timestamp` on every request
+- Verify `X-Lemma-Signature` and reject stale `X-Lemma-Timestamp` values (a 5-minute tolerance works well) on every request
 - Use HTTPS endpoints only
 - Store the signing secret in an environment variable, never in source control
 - Remember this is distinct from Slack alerts and from Linear's inbound webhooks to Lemma

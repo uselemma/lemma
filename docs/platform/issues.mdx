@@ -11,7 +11,7 @@ An issue is a group of occurrences: a durable failure pattern that Lemma infers 
   <img src="/images/platform/issues-workspace.png" alt="Issues table grouped by agent, showing signals, occurrence counts, assignee, status, and last seen" />
 </Frame>
 
-You don't write assertions for this to work. Once a conversation goes quiet, or immediately if there's no thread ID, Lemma analyzes the traces for behavior that hurt the agent's task and groups the repeated evidence into an issue. Detection and grouping are probabilistic, so open the supporting traces before you treat a title as a confirmed bug. Lemma doesn't ship standalone monitors or incidents; alerting follows this issue lifecycle through [Slack](/connections/slack) and [webhooks](/connections/webhooks).
+You don't write assertions for this to work: Lemma analyzes traces and groups repeated evidence into issues on its own. See [Concepts](/platform/concepts) for how that detection and grouping work, and why both are probabilistic. Alerting follows this issue lifecycle through [Slack](/connections/slack) and [webhooks](/connections/webhooks).
 
 ## Issue versus occurrence
 
