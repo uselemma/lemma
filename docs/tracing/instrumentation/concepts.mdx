@@ -1,9 +1,11 @@
 ---
 title: "Concepts"
-description: "Core concepts and terminology in Lemma"
+description: "Core SDK concepts and terminology in Lemma"
+meta:
+  contentType: "Conceptual"
 ---
 
-Four nouns describe everything in Lemma. They are the same words used in the dashboard and across these docs.
+Five nouns describe everything the SDK records. They're the same words used in the dashboard and across these docs.
 
 <Note>
   **One agent execution = one trace.** The root is the trace record; LLM calls, tool calls, and app logic are child spans inside it.
@@ -50,11 +52,11 @@ A single agent execution produces a tree. The root is the trace record; everythi
 
 A **trace** is a single end-to-end execution of your agent, from the user's input to the final response. It carries the input, the output (or error), timing, and the tree of spans inside it. Each trace has a unique trace ID.
 
-If every model or tool call shows up as its own trace, the child work ran without the root trace handle or trace IDs. Create the root trace first, then record child spans through that trace or an explicit parent span handle. See [Traces](/tracing/instrumentation/traces).
+If every model or tool call shows up as its own trace, the child work ran without the root trace handle or trace IDs. Create the root trace first, then record child spans through that trace or an explicit parent span handle. See [Agent traces](/tracing/instrumentation/traces).
 
 ## Span
 
-A **span** is one unit of work inside a trace - retrieval, ranking, parsing, a database query, or any app operation. Spans nest: a parent span can contain child spans, forming the execution tree. See [Spans](/tracing/instrumentation/spans).
+A **span** is one unit of work inside a trace: retrieval, ranking, parsing, a database query, or any app operation. Spans nest, so a parent span can contain child spans, forming the execution tree. See [Spans](/tracing/instrumentation/spans).
 
 ## Generation
 
@@ -62,23 +64,27 @@ A **generation** is a span that represents a single LLM call. Typing a span as a
 
 ## Tool call
 
-A **tool call** is a span that represents a single tool invocation - its name, arguments, and result. Tool execution usually happens in your code, so it must be recorded explicitly to be visible. See [Tool calls](/tracing/instrumentation/tool-calls).
+A **tool call** is a span that represents a single tool invocation: its name, arguments, and result. Tool execution usually happens in your code, so it must be recorded explicitly to be visible. See [Tool calls](/tracing/instrumentation/tool-calls).
 
 ## Thread
 
-A **thread** groups the traces of a multi-turn conversation. Each turn is its own trace; giving related turns the same thread id (`threadId` / `thread_id`) groups them into one conversation. See [Threads & context](/tracing/instrumentation/context).
+A **thread** groups the traces of a multi-turn conversation. Each turn is its own trace; giving related turns the same thread ID (`threadId` / `thread_id`) groups them into one conversation. See [Threads & context](/tracing/instrumentation/context).
 
-## Project
-
-A **project** is the top-level container for all traces from your agent(s). Each project has an API key and project ID (used when sending traces) and its own dashboard. Use separate projects to isolate environments (dev/staging/prod) or distinct products.
+Every trace also belongs to a **project**, the container that holds your API key and project ID. See [Platform concepts](/platform/concepts) for how projects, agents, and issues fit together on the dashboard side.
 
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Trace contract" icon="/icons/file-check.svg" href="/reference/trace-contract">
+  <Card title="Platform concepts" href="/platform/concepts">
+    Issues, occurrences, artifacts, and agents once traces arrive.
+  </Card>
+  <Card title="Trace contract" href="/reference/trace-contract">
     The exact shape Lemma reads.
   </Card>
-  <Card title="Quickstart" icon="/icons/wrench.svg" href="/tracing/instrumentation/setup">
+  <Card title="Quickstart" href="/tracing/instrumentation/setup">
     Install the SDK and send your first complete agent trace.
+  </Card>
+  <Card title="Traces in the dashboard" href="/platform/traces">
+    Search and inspect ready executions.
   </Card>
 </CardGroup>

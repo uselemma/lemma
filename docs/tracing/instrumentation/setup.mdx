@@ -5,7 +5,7 @@ description: "Install the Lemma SDK and send your first complete agent trace"
 
 Send one complete agent trace to Lemma. The software development kit (SDK) sends JSON to the Lemma API.
 
-One agent execution is one [trace](/getting-started/concepts). Record model calls, tool calls, retrieval, and app logic inside that trace.
+One agent execution is one [trace](/tracing/instrumentation/concepts). Record model calls, tool calls, retrieval, and app logic inside that trace.
 
 ## What you are building
 
@@ -122,12 +122,14 @@ support-agent              <- trace root (input, output)
   </Step>
 
   <Step title="Verify in Lemma">
-    Open the [Lemma dashboard](https://platform.uselemma.ai) and go to **Traces**. You should see:
+    Open **[Traces](/platform/traces)** in the [Lemma dashboard](https://platform.uselemma.ai). You should see:
 
     - One trace for the whole execution
     - The root trace with input and output
     - A nested generation with model metadata
     - A nested tool call with arguments and result
+
+    After the trace looks complete, see [Overview](/platform/overview) for issues, Inspect, and workflow connections.
   </Step>
 </Steps>
 
@@ -161,16 +163,16 @@ Adapters (`vercelAI`, `openAIAgents`, `langChain`, `langGraph`, `mastra`) accept
 Use these pages after the first trace lands.
 
 <CardGroup cols={2}>
-  <Card title="Instrument an agent" icon="/icons/workflow.svg" href="/tracing/instrumentation/instrument-an-agent">
+  <Card title="Instrument an agent" href="/tracing/instrumentation/instrument-an-agent">
     Add spans, tools, generations, and errors to a real agent.
   </Card>
-  <Card title="Concepts" icon="/icons/book.svg" href="/getting-started/concepts">
-    Traces, spans, generations, and threads.
+  <Card title="Traces in the dashboard" href="/platform/traces">
+    Search and inspect the trace you just sent.
   </Card>
-  <Card title="Trace contract" icon="/icons/file-check.svg" href="/reference/trace-contract">
+  <Card title="Overview" href="/platform/overview">
+    Issues, Inspect, Artifacts, and Analytics after ingest.
+  </Card>
+  <Card title="Trace contract" href="/reference/trace-contract">
     The exact shape Lemma reads.
-  </Card>
-  <Card title="Threads and context" icon="/icons/users.svg" href="/tracing/instrumentation/context">
-    Group conversations and attach users.
   </Card>
 </CardGroup>
