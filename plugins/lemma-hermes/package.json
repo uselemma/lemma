@@ -1,6 +1,6 @@
 {
   "name": "@uselemma/hermes",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lemma SDK tracing for Hermes Agent sessions",
   "license": "MIT",
   "type": "module",
