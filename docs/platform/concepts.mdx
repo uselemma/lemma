@@ -27,7 +27,7 @@ An **occurrence** is one instance of a failure pattern showing up in a specific 
 
 ## Issue
 
-An **issue** is a group of occurrences that share the same underlying failure pattern. Lemma detects an occurrence by analyzing a trace after its conversation goes quiet, then canonicalizes it against existing issues so the same bug accumulates occurrences instead of spawning a new issue every time it recurs. One issue, many occurrences, many traces: opening an issue shows you the pattern; opening an occurrence shows you the specific run that triggered it. See [Issues](/platform/issues) for status, priority, and investigation.
+An **issue** is a group of occurrences that share the same underlying failure pattern. Lemma detects an occurrence by analyzing a trace after its conversation goes quiet, or immediately if the trace has no thread ID, then canonicalizes it against existing issues so the same bug accumulates occurrences instead of spawning a new issue every time it recurs. One issue, many occurrences, many traces: opening an issue shows you the pattern; opening an occurrence shows you the specific run that triggered it. See [Issues](/platform/issues) for status, priority, and investigation.
 
 Detection and grouping are probabilistic. Treat an issue as a hypothesis backed by evidence, not a certainty, and open the underlying occurrences before you call it confirmed.
 

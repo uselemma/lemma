@@ -15,7 +15,7 @@ For the SDK vocabulary (trace, span, generation, tool call, thread, project), se
 
 ## How a trace becomes an issue
 
-An instrumented agent emits one trace per execution, or per conversation turn when you set a thread ID. Lemma stores the trace's spans, marks it ready, analyzes it for behavior that hurt the agent's task, and groups repeated evidence of the same failure into one issue. See [Concepts](/platform/concepts) for how detection and grouping work, and why both are probabilistic.
+An instrumented agent emits one trace per execution, or per conversation turn when you set a thread ID. See [Concepts](/platform/concepts) for how Lemma turns that trace into an issue — the detection timing, the probabilistic grouping, and the vocabulary for both.
 
 Once an issue exists, you investigate it in the dashboard or through Inspect, then resolve, dismiss, or route it to Slack, Linear, MCP, or webhooks.
 
