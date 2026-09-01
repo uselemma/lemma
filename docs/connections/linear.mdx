@@ -53,7 +53,14 @@ A Lemma issue can have at most one active Linear ticket, and a Linear ticket can
 - **Link** to an exact Linear URL or identifier, with a preview and confirmation step. There's no workspace-wide browsing or backfill.
 - **Unlink** explicitly when you need to replace a link; unlink first, then create or link again.
 
-Recurrence never creates, reopens, or replaces a ticket on its own. If a resolved issue reopens from matching evidence, Lemma comments once on the already-completed ticket rather than reopening it. Dismissing a Lemma issue requests cancellation of its active ticket: a Linear `completed` status resolves the Lemma issue, while `canceled` only updates the cached snapshot. Matching evidence never reopens a dismissed issue, and manual reopening never alters the ticket. Feature flags, open issues, and detection don't auto-file tickets under any circumstance.
+Feature flags, open issues, and detection don't auto-file tickets under any circumstance; the actions above are the only way a ticket gets created.
+
+## How ticket status stays in sync
+
+- **Recurrence**: never creates, reopens, or replaces a ticket on its own.
+- **Reopen from matching evidence**: if a resolved issue reopens, Lemma comments once on the already-completed ticket instead of reopening it. Matching evidence never reopens a dismissed issue.
+- **Dismiss**: requests cancellation of the active ticket. A Linear `completed` status resolves the Lemma issue; `canceled` only updates the cached snapshot.
+- **Manual reopen**: reopening an issue in Lemma never alters the linked ticket.
 
 ## Related pages
 

@@ -61,11 +61,11 @@
             "pages": [
               "platform/overview",
               "platform/concepts",
-              "platform/analytics",
-              "platform/inspect",
               "platform/traces",
               "platform/issues",
-              "platform/artifacts"
+              "platform/inspect",
+              "platform/artifacts",
+              "platform/analytics"
             ]
           },
           {
@@ -81,6 +81,14 @@
               "tracing/instrumentation/tool-calls",
               "tracing/instrumentation/spans",
               "tracing/instrumentation/context",
+              {
+                "group": "Troubleshooting",
+                "expanded": false,
+                "pages": [
+                  "tracing/troubleshooting/debug-mode",
+                  "tracing/troubleshooting/common-issues"
+                ]
+              },
               {
                 "group": "Reference",
                 "expanded": false,
@@ -124,7 +132,16 @@
             "group": "Guides",
             "pages": [
               "guides/building-high-quality-traces",
-              "guides/instrumenting-multi-turn-agents"
+              "guides/instrumenting-multi-turn-agents",
+              {
+                "group": "Migrations",
+                "expanded": false,
+                "pages": [
+                  "guides/migrations/raindrop",
+                  "guides/migrations/langfuse",
+                  "guides/migrations/opentelemetry"
+                ]
+              }
             ]
           }
         ]

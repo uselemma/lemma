@@ -7,6 +7,8 @@ meta:
 
 Once traces start arriving, five more nouns describe what you see in the dashboard. They build on the SDK vocabulary in [Concepts](/tracing/instrumentation/concepts): a trace is still the unit you send, but everything below describes what Lemma does with traces after ingest.
 
+Lemma evaluates production traces after the fact; it doesn't run offline evaluations. There's no standalone monitors product, no incidents, and no separate metrics surface — detection and alerting both run through the issue lifecycle defined below.
+
 ## Project
 
 A **project** is the top-level container for traces, issues, artifacts, and settings from your agent or agents. Each project has its own dashboard, API key, and project ID. Use separate projects to isolate environments (dev, staging, prod) or distinct products.
@@ -25,7 +27,7 @@ An **occurrence** is one instance of a failure pattern showing up in a specific 
 
 ## Issue
 
-An **issue** is a group of occurrences that share the same underlying failure pattern. Lemma detects an occurrence by analyzing a trace after its conversation goes quiet, then canonicalizes it against existing issues so the same bug accumulates occurrences instead of spawning a new issue every time it recurs. One issue, many occurrences, many traces: opening an issue shows you the pattern; opening an occurrence shows you the specific run that triggered it. See [Issues](/platform/issues) for status, priority, and investigation.
+An **issue** is a group of occurrences that share the same underlying failure pattern. Lemma detects an occurrence by analyzing a trace after its conversation goes quiet, or immediately if the trace has no thread ID, then canonicalizes it against existing issues so the same bug accumulates occurrences instead of spawning a new issue every time it recurs. One issue, many occurrences, many traces: opening an issue shows you the pattern; opening an occurrence shows you the specific run that triggered it. See [Issues](/platform/issues) for status, priority, and investigation.
 
 Detection and grouping are probabilistic. Treat an issue as a hypothesis backed by evidence, not a certainty, and open the underlying occurrences before you call it confirmed.
 

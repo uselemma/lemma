@@ -15,21 +15,13 @@ For the SDK vocabulary (trace, span, generation, tool call, thread, project), se
 
 ## How a trace becomes an issue
 
-An instrumented agent emits one trace per execution, or per conversation turn when you set a thread ID. From there:
+An instrumented agent emits one trace per execution, or per conversation turn when you set a thread ID. See [Concepts](/platform/concepts) for how Lemma turns that trace into an issue — the detection timing, the probabilistic grouping, and the vocabulary for both.
 
-1. Lemma stores the trace's spans and marks the trace ready once you can inspect it in the dashboard.
-2. Lemma analyzes ready traces for behavior that hurt the agent's task: a wrong answer, a dropped tool error, a forgotten instruction.
-3. Detection is probabilistic. Treat a finding as a hypothesis and open the supporting traces before you call it confirmed.
-4. Repeated evidence of the same failure gets grouped into one issue instead of surfacing as unrelated one-off reports.
-5. You investigate in the dashboard or through Inspect, then resolve, dismiss, or route the finding to Slack, Linear, MCP, or webhooks.
-
-Lemma evaluates production usage from real users; it doesn't run offline evaluations. There's no standalone monitors product, no incidents, and no separate metrics surface. Failure alerting follows the issue lifecycle described above.
+Once an issue exists, you investigate it in the dashboard or through Inspect, then resolve, dismiss, or route it to Slack, Linear, MCP, or webhooks.
 
 ## Projects and agents
 
-You create projects. A project is the container for traces, issues, artifacts, and project settings, and it has its own dashboard. Split projects along environment (dev, staging, prod) or product line when you need traces isolated.
-
-Agents work differently: you don't register them. An agent appears the moment a trace carries its name. Lemma uses that name to group Artifacts, Analytics scorecards, and issue scope, so a trace with no usable agent name still ingests, but nothing agent-scoped has a home for it.
+You create projects to isolate traces by environment (dev, staging, prod) or product line; each has its own dashboard, API key, and settings. Agents aren't registered the same way — see [Concepts](/platform/concepts) for how a trace's agent name scopes Artifacts, Analytics, and issue grouping.
 
 ## The dashboard surfaces
 
