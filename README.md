@@ -23,47 +23,6 @@
 | [Lemma tracing skill](skills/lemma-tracing)                         | Let a coding agent add tracing for you.      |
 | [Lemma diagnostics skill](skills/lemma-diagnostics) | Let a coding agent audit traces already in Lemma. |
 
-## Install
-
-TypeScript:
-
-```bash
-npm install @uselemma/tracing
-```
-
-Python:
-
-```bash
-pip install uselemma-tracing
-```
-
-Both SDKs read Lemma credentials from environment variables by default:
-
-```bash
-export LEMMA_API_KEY=...
-export LEMMA_PROJECT_ID=...
-export LEMMA_RELEASE=1.8.3   # optional deployed version
-```
-
-## Integrations
-
-Lemma includes first-party tracing helpers for common agent stacks:
-
-| Integration       | Guide                                                       |
-| ----------------- | ----------------------------------------------------------- |
-| Vercel AI SDK     | [docs](https://docs.uselemma.ai/integrations/vercel-ai)     |
-| OpenAI Agents SDK | [docs](https://docs.uselemma.ai/integrations/openai-agents) |
-| LangChain         | [docs](https://docs.uselemma.ai/integrations/langchain)     |
-| LangGraph         | [docs](https://docs.uselemma.ai/integrations/langgraph)     |
-| Mastra            | [docs](https://docs.uselemma.ai/integrations/mastra)        |
-| Codex             | [local plugin](plugins/lemma-codex)                         |
-| Hermes Agent      | [Hermes plugin](plugins/lemma-hermes)                       |
-| OpenClaw          | [OpenClaw plugin](plugins/lemma-openclaw)                   |
-| OpenCode          | [OpenCode plugin](plugins/lemma-opencode)                   |
-| Pi                | [Pi package](plugins/lemma-pi)                              |
-
-For manual instrumentation, start with the [tracing overview](https://docs.uselemma.ai/tracing/overview).
-
 ## Repository Layout
 
 | Path                                           | Contents                                                                        |
