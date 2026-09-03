@@ -82,7 +82,7 @@ jobs:
         if: steps.check.outputs.published == 'false'
         run: pnpm --filter "${{ matrix.package }}" test
 
-      - name: Verify committed package files
+      - name: Verify build did not dirty tracked source
         if: steps.check.outputs.published == 'false'
         run: git diff --exit-code -- "${{ matrix.directory }}"
 

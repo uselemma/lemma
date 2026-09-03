@@ -56,5 +56,6 @@ pnpm --filter @uselemma/cursor-plugin test
 pnpm --filter @uselemma/cursor-plugin build
 ```
 
-The generated runtime and setup bundles are committed because local and
-marketplace plugin installs load the plugin directory directly.
+The generated `runtime/` and `scripts/` bundles are not committed. Build
+them before setup or a local plugin install (Cursor loads this directory
+directly).

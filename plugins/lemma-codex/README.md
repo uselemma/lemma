@@ -59,6 +59,6 @@ pnpm --filter @uselemma/codex-plugin test
 pnpm --filter @uselemma/codex-plugin build
 ```
 
-The generated `runtime/hook.mjs`, `runtime/notify.mjs`, and
-`scripts/setup.mjs` are committed because Codex copies only the plugin
-directory during local installation.
+The generated `runtime/` and `scripts/` bundles are not committed. Build
+them before setup, tests that read the runtime, or a local Codex install
+(Codex copies only this plugin directory).
