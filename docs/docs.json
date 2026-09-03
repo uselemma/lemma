@@ -50,7 +50,7 @@
       {
         "title": "Open in Claude Code",
         "description": "Ask questions about this page.",
-        "icon": "/claude.svg",
+        "icon": "/icons/claude.svg",
         "href": {
           "base": "claude-cli://open",
           "query": [
@@ -110,7 +110,7 @@
         "icon": "/icons/workflow.svg",
         "groups": [
           {
-            "group": "Instrumentation",
+            "group": "Tracing",
             "expanded": true,
             "pages": [
               "tracing/instrumentation/concepts",
