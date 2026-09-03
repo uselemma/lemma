@@ -16,7 +16,7 @@ How Lemma works:
 3. **Group** repeated evidence into an [issue](/platform/concepts#issue).
 4. **Investigate** in the dashboard, [Inspect](/platform/inspect), Slack, Linear, or a coding agent, then follow recurrence.
 
-Lemma evaluates **production usage** from real users. It does not offer offline evaluation. If someone says “online eval,” they mean evaluating actual production usage. Standalone monitors, incidents, and a standalone metrics product are not current surfaces. Failure alerting follows the **issue** lifecycle through [Slack](/connections/slack) and [webhooks](/connections/webhooks).
+See [Product boundaries](/platform/concepts#product-boundaries) for what Lemma evaluates and which surfaces are not shipped.
 
 <Frame>
   <img src="/images/platform/dashboard-home.png" alt="Project dashboard showing to-do items, headline stats, and resolved-versus-dismissed and traces-per-month charts" />
@@ -36,8 +36,8 @@ Choose how you’ll send agent data to Lemma.
   <Card title="Core concepts" href="/tracing/instrumentation/concepts">
     Learn how Lemma defines traces, spans, generations, and threads.
   </Card>
-  <Card title="Overview" href="/platform/overview">
-    What to do after the first trace arrives.
+  <Card title="Overview" href="/platform/overview#recommended-workspace-sequence">
+    What to do after the first ready trace arrives.
   </Card>
 </CardGroup>
 

@@ -11,9 +11,7 @@ An **issue** is a durable grouped failure pattern that Lemma infers from trace e
   <img src="/images/platform/issues-workspace.png" alt="Issues table grouped by agent, showing signals, supporting-trace counts, assignee, status, and last seen" />
 </Frame>
 
-You don’t write assertions for this to work. Lemma analyzes traces and groups repeated evidence into issues on its own. Detection and grouping are probabilistic: always open supporting traces before you treat a title as a confirmed bug. Alerting follows this issue lifecycle through [Slack](/connections/slack) and [webhooks](/connections/webhooks).
-
-Lemma does not currently ship standalone monitors or incidents.
+You don’t write assertions for this to work. Lemma analyzes traces and groups repeated evidence into issues on its own. Detection and grouping are probabilistic: always open supporting traces before you treat a title as a confirmed bug. Alerting follows this issue lifecycle through [Slack](/connections/slack) and [webhooks](/connections/webhooks). See [Product boundaries](/platform/concepts#product-boundaries) for what Lemma does not ship.
 
 ## Issues and supporting traces
 

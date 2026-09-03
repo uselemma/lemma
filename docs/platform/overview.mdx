@@ -7,9 +7,7 @@ meta:
 
 Lemma turns each agent execution into a [trace](/tracing/instrumentation/concepts#trace), finds the executions that went wrong, and groups repeated evidence into [issues](/platform/concepts#issue) you can triage. This page is the path after traces arrive: how a trace becomes an issue, how projects and agents relate, and which dashboard surface to open at each step.
 
-For software development kit (SDK) vocabulary, see [SDK concepts](/tracing/instrumentation/concepts). For dashboard vocabulary, see [Platform concepts](/platform/concepts). To send your first trace, see [Quickstart](/tracing/instrumentation/setup).
-
-Lemma evaluates **production usage** from real users. It does not offer offline evaluation. Standalone monitors, incidents, and a standalone metrics product are not current surfaces. Failure alerting follows the issue lifecycle.
+For software development kit (SDK) vocabulary, see [SDK concepts](/tracing/instrumentation/concepts). For dashboard vocabulary, see [Platform concepts](/platform/concepts). To send your first trace, see [Quickstart](/tracing/instrumentation/setup). See [Product boundaries](/platform/concepts#product-boundaries) for what Lemma evaluates and which surfaces are not shipped.
 
 ## How a trace moves through Lemma
 
@@ -36,7 +34,7 @@ You **create projects**. A project holds traces, issues, artifacts, and project 
 
 1. Select or create an organization and project.
 2. Generate an API key and instrument the production agent. Keep `LEMMA_API_KEY` server-side: never commit it, and never put it in the browser. See [Quickstart](/tracing/instrumentation/setup).
-3. Verify at least one real production trace becomes **ready**.
+3. Verify at least one real production trace becomes **ready**. Open [Traces](/platform/traces) and confirm the execution tree and conversation look complete. If the conversation is still active, wait: extraction runs after a thread goes quiet, or immediately when there’s no thread ID.
 4. Add agent-specific [Artifacts](/platform/artifacts) context.
 5. Connect the customer Slack workspace, bind a project alert channel, and optionally enable Issue Briefs. See [Slack](/connections/slack).
 6. Configure [Linear](/connections/linear) if the team turns issues into tickets. Each member verifies their own Linear identity.
@@ -58,13 +56,6 @@ Each surface answers a different question about the same traces:
 | **[Analytics](/platform/analytics)** | Project-level volume, latency, errors, tools, models, and cost over a timeframe. Feature-gated; it may not appear in your workspace yet. |
 
 A typical investigation starts on Analytics or Issues, where you spot a trend. From there you open the supporting traces, ask Inspect what’s going on, add Artifacts context if detection missed the mark, and alert or ticket the finding through [Connections](/connections/overview).
-
-## What to do after the first ready trace
-
-1. Open **[Traces](/platform/traces)** in the project and confirm the execution tree and conversation look complete.
-2. Wait for issues if the conversation is still active. Extraction runs after a thread goes quiet, or immediately when there’s no thread ID.
-3. Add [Artifacts](/platform/artifacts) context for that agent if domain rules matter to how you’d judge a run.
-4. Connect Slack, Linear, Lemma MCP, or webhooks once the team needs those paths. See [Connect your workflow](/connections/overview).
 
 ## Related pages
 

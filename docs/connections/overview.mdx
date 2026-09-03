@@ -21,16 +21,10 @@ You can use several at once, and none of them replace the dashboard as the sourc
 
 ## Suggested order
 
-Follow the full [workspace sequence](/platform/overview#recommended-workspace-sequence) on Platform overview. After ready traces exist:
+Follow the [workspace sequence](/platform/overview#recommended-workspace-sequence) on Platform overview after ready traces exist. Two connection-specific caveats:
 
-1. Confirm ready traces in the project.
-2. Connect a Slack workspace and pick this project’s alert channel. Turn on Issue Briefs if you want them.
-3. Connect a Linear workspace and set project defaults if you file tickets. Each person maps their own Linear identity separately.
-4. Connect external MCP servers only when Lemma needs those tools.
-5. Add the Lemma MCP server for coding-agent investigation.
-6. Add webhooks last for machine-to-machine issue events.
-
-The Lemma support channel, a Slack Connect channel with the Lemma team, isn’t a workflow connection for alerts. See [Slack](/connections/slack) for the distinction.
+- The Lemma support channel is a Slack Connect channel with the Lemma team, not a product alert path. See [Slack](/connections/slack).
+- Lemma MCP and external MCP servers are opposite directions. See [Lemma MCP server](/connections/mcp).
 
 Organization owners and admins connect Slack and Linear at the workspace level. Project members can bind the project’s Slack channel and Linear defaults on top of that connection, though setting defaults still requires an owner or admin. API keys and webhook secrets are shown exactly once at creation.
 

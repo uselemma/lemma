@@ -33,7 +33,7 @@ An open trace drawer takes priority over the issue URL underneath it, so Inspect
 
 ## What it can read, explain, or change
 
-Inspect reads and explains project evidence: traces, issues, Artifacts (the understanding document, the diagram, and whatever context you provided), Analytics windows, and how Slack, Linear, MCP, and webhooks are meant to be set up. It’s grounded in Lemma’s actual product surface. See [Concepts](/platform/concepts) for what that surface does and doesn’t include, so Inspect won’t invent standalone monitors, incidents, or offline evaluation as current features.
+Inspect reads and explains project evidence: traces, issues, Artifacts (the understanding document, the diagram, and whatever context you provided), Analytics windows, and how Slack, Linear, MCP, and webhooks are meant to be set up. It’s grounded in Lemma’s actual product surface. See [Product boundaries](/platform/concepts#product-boundaries) for what that surface does and doesn’t include.
 
 Inspect doesn’t replace the system of record. Issue status, Linear linking, and webhook configuration still live on Issues and Settings; Inspect can explain them but not change them on your behalf. It never returns secret values like API keys, Slack tokens, MCP credentials, or webhook signing secrets. It points you to the UI or your secret manager instead. It treats setup status as a snapshot: documentation or a configured URL isn’t proof that this specific project finished setup.
 

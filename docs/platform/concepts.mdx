@@ -7,8 +7,6 @@ meta:
 
 Once traces start arriving, four more nouns describe what you see in the dashboard. They build on the software development kit (SDK) vocabulary in [SDK concepts](/tracing/instrumentation/concepts): a trace is still the unit you send, and everything below describes what Lemma does with traces after ingest.
 
-Lemma evaluates production traces after the fact. It does not run offline evaluations. There is no standalone monitors product, no incidents, and no separate metrics surface. Detection and alerting both run through the issue lifecycle defined below.
-
 ## Project
 
 A **project** is the top-level container for traces, issues, artifacts, and settings from your agent or agents. Each project has its own dashboard, API key, and project ID. Use separate projects to isolate environments (dev, staging, prod) or distinct products.
@@ -27,15 +25,13 @@ An **issue** is a durable grouped failure pattern inferred from trace evidence. 
 
 Lemma analyzes a trace after its conversation goes quiet, or immediately if the trace has no thread ID, then groups repeated evidence so the same bug accumulates supporting traces instead of spawning a new issue every time it recurs. Opening an issue shows you the pattern. Opening a supporting trace shows you the specific run. See [Issues](/platform/issues) for status, priority, and investigation.
 
-Detection and grouping are probabilistic. Treat an issue as a hypothesis backed by evidence, not a certainty, and open the supporting traces before you call it confirmed.
-
-Lemma does not ship standalone monitors or incidents. Alerting follows this issue lifecycle.
+Detection and grouping are probabilistic. Treat an issue as a hypothesis backed by evidence, not a certainty, and open the supporting traces before you call it confirmed. Alerting follows this issue lifecycle; see [Product boundaries](#product-boundaries).
 
 ## Artifact
 
 **Artifacts** are agent-scoped. **Provided** context is text (or a supported text file) you supply about that agent. **Generated** artifacts are a versioned understanding document and a decision-flow diagram Lemma builds from traces plus that context. Agent names come from observed traces. Context for one named agent is not evidence about another. See [Artifacts](/platform/artifacts).
 
-## Production evaluation
+## Product boundaries
 
 Lemma evaluates **production usage** from real users. It does not offer offline evaluation. If someone asks about “online eval,” they mean evaluating actual production usage.
 
