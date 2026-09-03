@@ -50,7 +50,7 @@
       {
         "title": "Open in Claude Code",
         "description": "Ask questions about this page.",
-        "src": "/claude.svg",
+        "icon": "/claude.svg",
         "href": {
           "base": "claude-cli://open",
           "query": [
