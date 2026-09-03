@@ -33,3 +33,7 @@ pnpm dlx @uselemma/hermes setup --api-url https://dev.api.uselemma.ai
 Trace delivery is bounded to ten seconds and runs in a detached process after
 the Hermes turn ends. Failed deliveries remain in `~/.hermes/lemma/pending` for
 the next turn to retry, and never block the agent loop.
+
+Generated `scripts/` and `hermes-plugin/lemma/runtime/` are not committed.
+Build them with `pnpm --filter @uselemma/hermes build` before tests or pack.
+

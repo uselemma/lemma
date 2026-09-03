@@ -50,6 +50,3 @@ jobs:
 
       - name: Test
         run: pnpm --filter @uselemma/hermes test
-
-      - name: Verify committed bundles
-        run: git diff --exit-code -- plugins/lemma-hermes/hermes-plugin/lemma/runtime/flush.mjs plugins/lemma-hermes/scripts/setup.mjs
