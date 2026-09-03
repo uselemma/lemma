@@ -45,6 +45,7 @@
     "tabs": [
       {
         "tab": "Documentation",
+        "icon": "/icons/book.svg",
         "groups": [
           {
             "group": "Getting Started",
@@ -127,6 +128,7 @@
       },
       {
         "tab": "Guides",
+        "icon": "/icons/article.svg",
         "groups": [
           {
             "group": "Guides",
@@ -148,6 +150,7 @@
       },
       {
         "tab": "API Reference",
+        "icon": "/icons/code.svg",
         "openapi": "https://api.uselemma.ai/openapi.json"
       }
     ]
