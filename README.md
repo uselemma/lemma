@@ -17,6 +17,7 @@
 | Resource                                                            | Use it for                                   |
 | ------------------------------------------------------------------- | -------------------------------------------- |
 | [Quickstart](https://docs.uselemma.ai/tracing/instrumentation/setup) | Send your first useful trace to Lemma.       |
+| [Runnable examples](https://docs.uselemma.ai/guides/examples) | Same docs chat agent, instrumented per stack. |
 | [Trace contract](https://docs.uselemma.ai/reference/trace-contract) | Learn the trace shape Lemma expects.         |
 | [TypeScript SDK](packages/ts/tracing)                               | Instrument Node and TypeScript applications. |
 | [Python SDK](packages/py/tracing)                                   | Instrument Python applications.              |
@@ -27,6 +28,7 @@
 
 | Path                                           | Contents                                                                        |
 | ---------------------------------------------- | ------------------------------------------------------------------------------- |
+| [`examples/`](examples) | Same docs chat agent, instrumented once per first-party stack. |
 | [`docs/`](docs)                                | Mintlify documentation source for [docs.uselemma.ai](https://docs.uselemma.ai). |
 | [`packages/ts/tracing`](packages/ts/tracing)   | TypeScript SDK package: `@uselemma/tracing`.                                    |
 | [`packages/py/tracing`](packages/py/tracing)   | Python SDK package: `uselemma-tracing`.                                         |

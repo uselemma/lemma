@@ -513,9 +513,13 @@ Use `attributes` for raw attributes that do not yet have a native SDK prop.
 
 ## Examples
 
-See [`examples/`](./examples) for complete callback tracing, trace handle,
-record-by-ID, cross-process turn journal, Vercel AI SDK v6/v7, OpenAI Agents SDK, LangChain, and LangGraph
-examples.
+Runnable docs-chat agents for every first-party stack live in the repo-root
+[`examples/`](../../../examples) directory. See
+[Runnable examples](https://docs.uselemma.ai/guides/examples).
+
+This package also ships SDK API snippets in [`examples/`](./examples) (callback
+tracing, trace handles, record-by-ID, cross-process turns, and per-integration
+wiring).
 
 ## License
 

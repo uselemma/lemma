@@ -8,6 +8,8 @@ Use `vercelAI()` when your app calls `generateText`, `streamText`, or an AI SDK 
 
 Create a **new** `vercelAI()` integration for each AI SDK operation. One integration object owns one in-flight run; concurrent reuse fails fast because AI SDK terminal events do not carry a reliable run ID. Sequential reuse after a completed run is supported.
 
+A complete docs-chat agent using this integration lives in [`examples/vercel-ai`](https://github.com/uselemma/lemma/tree/main/examples/vercel-ai). See [Runnable examples](/guides/examples).
+
 ## Install
 
 ```bash

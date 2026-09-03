@@ -1,0 +1,20 @@
+{
+  "name": "@lemma/example-openai-agents",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lemma/examples-shared": "workspace:*",
+    "@openai/agents": "^0.3.0",
+    "@uselemma/tracing": "workspace:*",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.8",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
