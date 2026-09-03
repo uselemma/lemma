@@ -32,6 +32,7 @@ function jsonBody(call: unknown[]) {
         started_at?: string | null;
         ended_at?: string | null;
         model?: string;
+        attributes?: Record<string, unknown>;
       }>;
     };
   };
@@ -53,7 +54,7 @@ describe("cross-process turn journal", () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const host = hostClient(fetchMock);
 
-    const turn = host.startTurn({
+    const turn = startTurn(host, {
       id: "trace-1",
       name: "agent-turn",
       input: "fix the bug",
@@ -157,7 +158,7 @@ describe("cross-process turn journal", () => {
   it("re-applying the same journal does not duplicate spans", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const host = hostClient(fetchMock);
-    const turn = host.startTurn({
+    const turn = startTurn(host, {
       id: "trace-1",
       name: "agent-turn",
       startedAt: "2026-09-03T00:00:00.000Z",
@@ -229,7 +230,7 @@ describe("cross-process turn journal", () => {
   it("allows incomplete tools and host ERROR when the child exits uncleanly", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const host = hostClient(fetchMock);
-    const turn = host.startTurn({
+    const turn = startTurn(host, {
       id: "trace-1",
       name: "agent-turn",
       startedAt: "2026-09-03T00:00:00.000Z",
@@ -274,7 +275,7 @@ describe("cross-process turn journal", () => {
   it("keeps turn.end() strict so ingest failures can be retried", async () => {
     const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
     const host = hostClient(fetchMock);
-    const turn = host.startTurn({ name: "agent-turn" });
+    const turn = startTurn(host, { name: "agent-turn" });
     await expect(turn.end({ output: "ok" })).rejects.toThrow(
       "failed to ingest trace (503): nope",
     );
@@ -352,6 +353,72 @@ describe("cross-process turn journal", () => {
       name: "agent-turn",
       input: "hi",
       output: "ok",
+    });
+  });
+
+  it("preserves LLM and tool journal fields on start/end apply", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const host = hostClient(fetchMock);
+    const turn = startTurn(host, { id: "trace-1", name: "agent-turn" });
+    turn.apply({
+      version: 1,
+      token: {
+        version: 1,
+        traceId: "trace-1",
+        parentSpanId: "sandbox-1",
+        startedAt: "2026-09-03T00:00:00.000Z",
+      },
+      records: [
+        {
+          op: "start",
+          id: "gen-1",
+          parentId: "sandbox-1",
+          name: "answer",
+          type: "generation",
+          model: "gpt-4o",
+          llmModelName: "gpt-4o-mini",
+          llmSystem: "openai",
+          llmPromptTemplate: "Say {x}",
+          llmPromptTemplateVariables: { x: "hi" },
+          llmPromptTemplateVersion: "1",
+          startedAt: "2026-09-03T00:00:01.000Z",
+        },
+        {
+          op: "end",
+          id: "gen-1",
+          output: "hello",
+          llmModelName: "gpt-4o-mini",
+          endedAt: "2026-09-03T00:00:02.000Z",
+        },
+        {
+          op: "start",
+          id: "tool-1",
+          parentId: "sandbox-1",
+          name: "search",
+          type: "tool",
+          userFacingMessage: "Looking it up",
+          startedAt: "2026-09-03T00:00:02.000Z",
+        },
+        {
+          op: "end",
+          id: "tool-1",
+          output: { hits: 1 },
+          userFacingMessage: "Looking it up",
+          endedAt: "2026-09-03T00:00:03.000Z",
+        },
+      ],
+    });
+    await turn.end({ output: "ok" });
+    const spans = jsonBody(fetchMock.mock.calls[0]).trace.spans;
+    const byId = Object.fromEntries(spans.map((span) => [span.id, span]));
+    expect(byId["gen-1"]?.attributes).toMatchObject({
+      "llm.model_name": "gpt-4o-mini",
+      "llm.system": "openai",
+      "llm.prompt_template.template": "Say {x}",
+      "llm.prompt_template.version": "1",
+    });
+    expect(byId["tool-1"]?.attributes).toMatchObject({
+      "lemma.tool.message": "Looking it up",
     });
   });
 });

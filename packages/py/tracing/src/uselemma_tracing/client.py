@@ -239,6 +239,12 @@ def _span_attributes(
 def _resolve_usage(usage: Any = None) -> dict[str, int | float] | None:
     return normalize_token_usage(usage)
 
+
+def _span_build_kwargs(trace: "TraceContext", payload: dict[str, Any]) -> dict[str, Any]:
+    params = inspect.signature(trace._build_span).parameters
+    return {key: value for key, value in payload.items() if key in params}
+
+
 @dataclass
 class SpanHandle:
     trace: "TraceContext"
@@ -260,90 +266,66 @@ class SpanHandle:
     payload: dict[str, Any] | None = None
     ended: bool = False
     user_facing_message: str | None = None
+    open_kwargs: dict[str, Any] = field(default_factory=dict, repr=False)
 
-    def end(
-        self,
-        *,
-        output: Any = None,
-        duration_ms: int | None = None,
-        status: Status | None = None,
-        error: Any = None,
-        ended_at: datetime | str | None = None,
-        metadata: dict[str, Any] | None = None,
-        attributes: dict[str, Any] | None = None,
-        model: str | None = None,
-        tool_name: str | None = None,
-        llm_provider: str | None = None,
-        llm_invocation_parameters: Any = None,
-        llm_output_messages: list[Any] | None = None,
-        input_mime_type: str | None = None,
-        output_mime_type: str | None = None,
-        embedding_model_name: str | None = None,
-        embedding_invocation_parameters: Any = None,
-        embedding_embeddings: Any = None,
-        reranker_model_name: str | None = None,
-        reranker_input_documents: list[Any] | None = None,
-        reranker_output_documents: list[Any] | None = None,
-        usage: dict[str, int | float] | None = None,
-        input_tokens: int | float | None = None,
-        output_tokens: int | float | None = None,
-        cache_read_input_tokens: int | float | None = None,
-        cache_creation_input_tokens: int | float | None = None,
-        reasoning_output_tokens: int | float | None = None,
-    ) -> None:
+    def end(self, **kwargs: Any) -> None:
         if self.ended:
             return
         self.ended = True
+        usage = kwargs.get("usage")
         resolved_usage = _resolve_usage(
             usage
             if usage is not None
             else _compact(
                 {
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "cache_read_input_tokens": cache_read_input_tokens,
-                    "cache_creation_input_tokens": cache_creation_input_tokens,
-                    "reasoning_output_tokens": reasoning_output_tokens,
+                    "input_tokens": kwargs.get("input_tokens"),
+                    "output_tokens": kwargs.get("output_tokens"),
+                    "cache_read_input_tokens": kwargs.get("cache_read_input_tokens"),
+                    "cache_creation_input_tokens": kwargs.get(
+                        "cache_creation_input_tokens"
+                    ),
+                    "reasoning_output_tokens": kwargs.get("reasoning_output_tokens"),
                 }
             )
             or self.usage
         )
-        span = self.trace._build_span(
-            name=self.name,
-            input=self.input,
-            output=output,
-            metadata=metadata or self.metadata,
-            attributes=attributes or self.attributes,
-            model=self.model or model,
-            tool_name=tool_name or self.tool_name,
-            user_facing_message=self.user_facing_message,
-            input_mime_type=input_mime_type,
-            output_mime_type=output_mime_type,
-            llm_provider=llm_provider or self.llm_provider,
-            llm_invocation_parameters=(
-                llm_invocation_parameters
-                if llm_invocation_parameters is not None
-                else self.llm_invocation_parameters
-            ),
-            llm_input_messages=self.llm_input_messages,
-            llm_output_messages=llm_output_messages,
-            llm_tools=self.llm_tools,
-            embedding_model_name=embedding_model_name,
-            embedding_invocation_parameters=embedding_invocation_parameters,
-            embedding_embeddings=embedding_embeddings,
-            reranker_model_name=reranker_model_name,
-            reranker_input_documents=reranker_input_documents,
-            reranker_output_documents=reranker_output_documents,
-            usage=resolved_usage,
-            status=status,
-            error=error,
-            id=self.id,
-            started_at=self.started_at,
-            ended_at=ended_at or _now(),
-            duration_ms=duration_ms,
-            parent_id=self.parent_id,
-            type=self.type,
-        )
+        merged = {
+            "name": self.name,
+            "input": self.input,
+            "metadata": self.metadata,
+            "attributes": self.attributes,
+            "model": self.model,
+            "tool_name": self.tool_name,
+            "user_facing_message": self.user_facing_message,
+            "llm_provider": self.llm_provider,
+            "llm_invocation_parameters": self.llm_invocation_parameters,
+            "llm_input_messages": self.llm_input_messages,
+            "llm_tools": self.llm_tools,
+            "id": self.id,
+            "parent_id": self.parent_id,
+            "type": self.type,
+            "started_at": self.started_at,
+            **self.open_kwargs,
+            **kwargs,
+            "usage": resolved_usage,
+            "ended_at": kwargs.get("ended_at") or _now(),
+            "open_span": False,
+        }
+        if merged.get("metadata") is None:
+            merged["metadata"] = self.metadata
+        if merged.get("attributes") is None:
+            merged["attributes"] = self.attributes
+        if not merged.get("model"):
+            merged["model"] = self.model
+        if not merged.get("tool_name"):
+            merged["tool_name"] = self.tool_name
+        if merged.get("user_facing_message") is None:
+            merged["user_facing_message"] = self.user_facing_message
+        if merged.get("llm_provider") is None:
+            merged["llm_provider"] = self.llm_provider
+        if merged.get("llm_invocation_parameters") is None:
+            merged["llm_invocation_parameters"] = self.llm_invocation_parameters
+        span = self.trace._build_span(**_span_build_kwargs(self.trace, merged))
         if self.payload is None:
             self.trace.spans.append(span)
             self.payload = span
@@ -564,9 +546,10 @@ class TraceContext:
         id: str | None = None,
         parent_id: str | None = None,
         type: SpanType = "span",
+        open_span: bool = False,
     ) -> dict[str, Any]:
         started = started_at or _now()
-        ended = ended_at or _now()
+        ended_iso = None if open_span else _iso(ended_at or _now())
         resolved_usage = _resolve_usage(usage)
         return _compact(
             {
@@ -604,7 +587,7 @@ class TraceContext:
                     usage=resolved_usage,
                 ),
                 "started_at": _iso(started),
-                "ended_at": _iso(ended),
+                "ended_at": ended_iso,
                 "duration_ms": duration_ms,
                 "status": status or ("ERROR" if error is not None else None),
                 "error": _failure_message(error),
@@ -733,6 +716,55 @@ class TraceContext:
         )
 
     record_tool = tool
+
+    def _open_span(self, **kwargs: Any) -> SpanHandle:
+        """Start an open span from canonical span() kwargs (journal replay)."""
+        payload = dict(kwargs)
+        span_type = payload.pop("type", None) or "span"
+        name = payload.get("name") or "span"
+        span_id = payload.get("id") or str(uuid.uuid4())
+        parent_id = payload.get("parent_id")
+        started_at = _datetime_or_now(payload.get("started_at"))
+        open_kwargs = {
+            **payload,
+            "name": name,
+            "id": span_id,
+            "parent_id": parent_id,
+            "type": span_type,
+            "started_at": started_at,
+            "open_span": True,
+        }
+        open_kwargs.pop("output", None)
+        open_kwargs.pop("duration_ms", None)
+        open_kwargs.pop("status", None)
+        open_kwargs.pop("error", None)
+        open_kwargs.pop("ended_at", None)
+        span = self._build_span(**_span_build_kwargs(self, open_kwargs))
+        handle = SpanHandle(
+            trace=self,
+            name=name,
+            input=payload.get("input"),
+            metadata=payload.get("metadata"),
+            attributes=payload.get("attributes"),
+            type=span_type,
+            id=span_id,
+            parent_id=parent_id,
+            started_at=started_at,
+            model=payload.get("model"),
+            tool_name=payload.get("tool_name"),
+            llm_provider=payload.get("llm_provider"),
+            llm_invocation_parameters=payload.get("llm_invocation_parameters"),
+            llm_input_messages=payload.get("llm_input_messages"),
+            llm_tools=payload.get("llm_tools"),
+            usage=payload.get("usage"),
+            user_facing_message=payload.get("user_facing_message"),
+            payload=span,
+            open_kwargs=open_kwargs,
+        )
+        self.spans.append(span)
+        self._handles[handle.id] = handle
+        self._debug_span("span started", span)
+        return handle
 
     def start_span(
         self,

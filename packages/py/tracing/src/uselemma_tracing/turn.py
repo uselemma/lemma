@@ -30,10 +30,18 @@ _RECORD_KEYS = (
     "userFacingMessage",
     "llmProvider",
     "llmModelName",
+    "llmSystem",
     "llmInputMessages",
     "llmOutputMessages",
     "llmInvocationParameters",
     "llmTools",
+    "llmPromptTemplate",
+    "llmPromptTemplateVariables",
+    "llmPromptTemplateVersion",
+    "toolDescription",
+    "toolParameters",
+    "inputMimeType",
+    "outputMimeType",
 )
 
 
@@ -96,61 +104,29 @@ def _span_kwargs(record: dict[str, Any], fallback_parent_id: str | None) -> dict
             "user_facing_message": record.get("userFacingMessage"),
             "llm_provider": record.get("llmProvider"),
             "llm_model_name": record.get("llmModelName"),
+            "llm_system": record.get("llmSystem"),
             "llm_input_messages": record.get("llmInputMessages"),
             "llm_output_messages": record.get("llmOutputMessages"),
             "llm_invocation_parameters": record.get("llmInvocationParameters"),
             "llm_tools": record.get("llmTools"),
+            "llm_prompt_template": record.get("llmPromptTemplate"),
+            "llm_prompt_template_variables": record.get(
+                "llmPromptTemplateVariables"
+            ),
+            "llm_prompt_template_version": record.get("llmPromptTemplateVersion"),
+            "tool_description": record.get("toolDescription"),
+            "tool_parameters": record.get("toolParameters"),
+            "input_mime_type": record.get("inputMimeType"),
+            "output_mime_type": record.get("outputMimeType"),
         }
     )
 
 
-_START_SPAN_KEYS = {
-    "name",
-    "input",
-    "metadata",
-    "attributes",
-    "id",
-    "parent_id",
-    "started_at",
-}
-_START_GENERATION_KEYS = _START_SPAN_KEYS | {
-    "model",
-    "llm_provider",
-    "llm_invocation_parameters",
-    "llm_input_messages",
-    "llm_tools",
-}
-_START_TOOL_KEYS = _START_SPAN_KEYS | {"tool_name", "user_facing_message"}
-_END_KEYS = {
-    "output",
-    "duration_ms",
-    "status",
-    "error",
-    "ended_at",
-    "metadata",
-    "attributes",
-    "model",
-    "tool_name",
-    "llm_provider",
-    "llm_invocation_parameters",
-    "llm_output_messages",
-    "usage",
-    "input_tokens",
-    "output_tokens",
-}
+_END_IDENTITY_KEYS = {"id", "name", "type", "started_at", "parent_id"}
 
 
-def _pick(kwargs: dict[str, Any], allowed: set[str]) -> dict[str, Any]:
-    return {key: value for key, value in kwargs.items() if key in allowed}
-
-
-def _start_from_record(context: TraceContext, kwargs: dict[str, Any]) -> SpanHandle:
-    span_type = kwargs.get("type") or "span"
-    if span_type == "generation":
-        return context.start_generation(**_pick(kwargs, _START_GENERATION_KEYS))
-    if span_type == "tool":
-        return context.start_tool(**_pick(kwargs, _START_TOOL_KEYS))
-    return context.start_span(**_pick(kwargs, _START_SPAN_KEYS))
+def _start_from_record(context: TraceContext, kwargs: dict[str, Any]) -> None:
+    context._open_span(**kwargs)
 
 
 def _record_from_record(context: TraceContext, kwargs: dict[str, Any]) -> None:
@@ -175,28 +151,11 @@ def apply_turn_journal(context: TraceContext, value: Any) -> None:
             handle = context.span_handle(span_id)
             if handle is not None:
                 handle.end(
-                    **_pick(
-                        _compact(
-                            {
-                                "output": record.get("output"),
-                                "metadata": record.get("metadata"),
-                                "attributes": record.get("attributes"),
-                                "ended_at": record.get("endedAt"),
-                                "duration_ms": record.get("durationMs"),
-                                "status": record.get("status"),
-                                "error": record.get("error"),
-                                "model": record.get("model"),
-                                "tool_name": record.get("toolName"),
-                                "usage": record.get("usage"),
-                                "llm_provider": record.get("llmProvider"),
-                                "llm_output_messages": record.get("llmOutputMessages"),
-                                "llm_invocation_parameters": record.get(
-                                    "llmInvocationParameters"
-                                ),
-                            }
-                        ),
-                        _END_KEYS,
-                    )
+                    **{
+                        key: value
+                        for key, value in kwargs.items()
+                        if key not in _END_IDENTITY_KEYS
+                    }
                 )
                 continue
             if context.has_span(span_id):
@@ -269,10 +228,20 @@ def _record_fields(
             "userFacingMessage": kwargs.get("user_facing_message"),
             "llmProvider": kwargs.get("llm_provider"),
             "llmModelName": kwargs.get("llm_model_name"),
+            "llmSystem": kwargs.get("llm_system"),
             "llmInputMessages": kwargs.get("llm_input_messages"),
             "llmOutputMessages": kwargs.get("llm_output_messages"),
             "llmInvocationParameters": kwargs.get("llm_invocation_parameters"),
             "llmTools": kwargs.get("llm_tools"),
+            "llmPromptTemplate": kwargs.get("llm_prompt_template"),
+            "llmPromptTemplateVariables": kwargs.get(
+                "llm_prompt_template_variables"
+            ),
+            "llmPromptTemplateVersion": kwargs.get("llm_prompt_template_version"),
+            "toolDescription": kwargs.get("tool_description"),
+            "toolParameters": kwargs.get("tool_parameters"),
+            "inputMimeType": kwargs.get("input_mime_type"),
+            "outputMimeType": kwargs.get("output_mime_type"),
         }
     )
     return {key: record[key] for key in ("op", *_RECORD_KEYS) if key in record}

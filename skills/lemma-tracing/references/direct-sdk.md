@@ -220,7 +220,7 @@ Detached child records require `traceId`. Pass `parentSpanId` when the record be
 TypeScript host + child (same shape as `packages/ts/tracing/examples/cross-process-turn.ts`):
 
 ```typescript
-import { Lemma, attachTurn } from "@uselemma/tracing";
+import { Lemma, attachTurn, startTurn } from "@uselemma/tracing";
 
 const lemma = new Lemma();
 
@@ -240,7 +240,7 @@ function runInSandbox(tokenJson: string, userMessage: string) {
   return local.records();
 }
 
-const turn = lemma.startTurn({
+const turn = startTurn(lemma, {
   name: "agent-turn",
   input: userMessage,
   threadId,
@@ -283,7 +283,7 @@ turn.end(output=answer)
 
 `turn.end()` / coordinator `ingest()` stays strict so a failed send can be retried. Re-applying the same journal does not duplicate spans (stable ids). If the child exits uncleanly, end the sandbox span as ERROR and `turn.fail(...)`; incomplete tools are allowed.
 
-Standalone helpers: `startTurn` / `attachTurn` / `applyTurnJournal` (Python `start_turn` / `attach_turn` / `apply_turn_journal`). Instance aliases: `lemma.startTurn` / `lemma.attach` (Python `lemma.start_turn` / `Lemma.attach`).
+Standalone helpers: `startTurn` / `attachTurn` / `applyTurnJournal` (Python `start_turn` / `attach_turn` / `apply_turn_journal`). TypeScript keeps those exported functions only (no `Lemma` methods — `client.ts` cannot import `turn.ts` without a cycle). Python also exposes `lemma.start_turn` / `Lemma.attach` via lazy imports.
 
 ## Native Contract Props
 

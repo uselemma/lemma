@@ -26,7 +26,7 @@ The journal is the only thing that crosses the process boundary. The TypeScript 
 <Tabs>
   <Tab title="TypeScript">
     ```typescript
-    import { Lemma, attachTurn } from "@uselemma/tracing";
+    import { Lemma, attachTurn, startTurn } from "@uselemma/tracing";
 
     const lemma = new Lemma();
 
@@ -47,7 +47,7 @@ The journal is the only thing that crosses the process boundary. The TypeScript 
     }
 
     export async function runHostAndSandbox(userMessage: string) {
-      const turn = lemma.startTurn({
+      const turn = startTurn(lemma, {
         name: "agent-turn",
         input: userMessage,
         threadId: conversationId,
@@ -185,9 +185,9 @@ If the sandbox dies before a clean journal, the host still owns the root:
 
 | Role | TypeScript | Python |
 | --- | --- | --- |
-| Start the host root | `lemma.startTurn(...)` / `startTurn(lemma, ...)` | `lemma.start_turn(...)` / `start_turn(lemma, ...)` |
+| Start the host root | `startTurn(lemma, ...)` | `lemma.start_turn(...)` / `start_turn(lemma, ...)` |
 | Mint the child token | `turn.export({ parentSpanId })` | `turn.export(parent_span_id=...)` |
-| Record in the child | `attachTurn(token)` / `lemma.attach(token)` | `attach_turn(token)` / `Lemma.attach(token)` |
+| Record in the child | `attachTurn(token)` | `attach_turn(token)` / `Lemma.attach(token)` |
 | Child dump | `local.records()` | `local.records()` |
 | Hydrate the tree | `turn.apply(journal)` / `applyTurnJournal(context, journal)` | `turn.apply(journal)` / `apply_turn_journal(context, journal)` |
 | Assemble without a live handle | `assembleTurn(token, journal)` | `assemble_turn(token, journal)` |

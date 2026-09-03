@@ -1,4 +1,4 @@
-import { Lemma, attachTurn } from "@uselemma/tracing";
+import { Lemma, attachTurn, startTurn } from "@uselemma/tracing";
 
 /**
  * Host + child (E2B-style) as two functions with no shared memory.
@@ -26,7 +26,7 @@ function runInSandbox(tokenJson: string, userMessage: string) {
 }
 
 export async function runHostAndSandbox(userMessage: string) {
-  const turn = lemma.startTurn({
+  const turn = startTurn(lemma, {
     name: "agent-turn",
     input: userMessage,
     threadId: "thread-123",

@@ -200,3 +200,68 @@ def test_parse_turn_context_token_rejects_invalid():
     assert token["traceId"] == "trace-1"
     with pytest.raises(ValueError, match="invalid turn context token"):
         parse_turn_context_token("{}")
+
+
+def test_apply_start_end_preserves_llm_and_tool_journal_fields():
+    calls = []
+    host = _host(calls)
+    turn = host.start_turn("agent-turn", id="trace-1")
+    turn.apply(
+        {
+            "version": 1,
+            "token": {
+                "version": 1,
+                "traceId": "trace-1",
+                "parentSpanId": "sandbox-1",
+                "startedAt": "2026-09-03T00:00:00.000Z",
+            },
+            "records": [
+                {
+                    "op": "start",
+                    "id": "gen-1",
+                    "parentId": "sandbox-1",
+                    "name": "answer",
+                    "type": "generation",
+                    "model": "gpt-4o",
+                    "llmModelName": "gpt-4o-mini",
+                    "llmSystem": "openai",
+                    "llmPromptTemplate": "Say {x}",
+                    "llmPromptTemplateVariables": {"x": "hi"},
+                    "llmPromptTemplateVersion": "1",
+                    "startedAt": "2026-09-03T00:00:01.000Z",
+                },
+                {
+                    "op": "end",
+                    "id": "gen-1",
+                    "output": "hello",
+                    "llmModelName": "gpt-4o-mini",
+                    "endedAt": "2026-09-03T00:00:02.000Z",
+                },
+                {
+                    "op": "start",
+                    "id": "tool-1",
+                    "parentId": "sandbox-1",
+                    "name": "search",
+                    "type": "tool",
+                    "userFacingMessage": "Looking it up",
+                    "startedAt": "2026-09-03T00:00:02.000Z",
+                },
+                {
+                    "op": "end",
+                    "id": "tool-1",
+                    "output": {"hits": 1},
+                    "userFacingMessage": "Looking it up",
+                    "endedAt": "2026-09-03T00:00:03.000Z",
+                },
+            ],
+        }
+    )
+    turn.end(output="ok")
+    by_id = {span["id"]: span for span in calls[0]["trace"]["spans"]}
+    gen_attrs = by_id["gen-1"]["attributes"]
+    assert gen_attrs["llm.model_name"] == "gpt-4o-mini"
+    assert gen_attrs["llm.system"] == "openai"
+    assert gen_attrs["llm.prompt_template.template"] == "Say {x}"
+    assert gen_attrs["llm.prompt_template.version"] == "1"
+    assert by_id["tool-1"]["attributes"]["lemma.tool.message"] == "Looking it up"
+    assert by_id["gen-1"]["output"] == "hello"

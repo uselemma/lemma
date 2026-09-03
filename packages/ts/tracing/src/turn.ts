@@ -45,10 +45,18 @@ export type TurnJournalSpan = {
   userFacingMessage?: string;
   llmProvider?: string;
   llmModelName?: string;
+  llmSystem?: string;
   llmInputMessages?: unknown[];
   llmOutputMessages?: unknown[];
   llmInvocationParameters?: unknown;
   llmTools?: unknown;
+  llmPromptTemplate?: string;
+  llmPromptTemplateVariables?: unknown;
+  llmPromptTemplateVersion?: string;
+  toolDescription?: string;
+  toolParameters?: unknown;
+  inputMimeType?: string;
+  outputMimeType?: string;
 };
 
 export type TurnJournalRecord = TurnJournalSpan & {
@@ -159,10 +167,18 @@ function toSpanOptions(
     userFacingMessage: record.userFacingMessage,
     llmProvider: record.llmProvider,
     llmModelName: record.llmModelName,
+    llmSystem: record.llmSystem,
     llmInputMessages: record.llmInputMessages,
     llmOutputMessages: record.llmOutputMessages,
     llmInvocationParameters: record.llmInvocationParameters,
     llmTools: record.llmTools,
+    llmPromptTemplate: record.llmPromptTemplate,
+    llmPromptTemplateVariables: record.llmPromptTemplateVariables,
+    llmPromptTemplateVersion: record.llmPromptTemplateVersion,
+    toolDescription: record.toolDescription,
+    toolParameters: record.toolParameters,
+    inputMimeType: record.inputMimeType,
+    outputMimeType: record.outputMimeType,
   });
 }
 
@@ -214,27 +230,33 @@ export function applyTurnJournal(
     if (record.op === "end") {
       const handle = context.spanHandle(record.id);
       if (handle) {
-        const endOptions: Omit<SpanOptions, "id" | "name" | "type" | "startedAt"> & {
-          userFacingMessage?: string;
-        } = {
-          output: record.output,
-          metadata: record.metadata,
-          attributes: record.attributes,
-          endedAt: record.endedAt ?? undefined,
-          durationMs: record.durationMs,
-          status: record.status,
-          error: record.error,
-          model: record.model,
-          toolName: record.toolName,
-          usage: record.usage,
-          userFacingMessage: record.userFacingMessage,
-          llmProvider: record.llmProvider,
-          llmModelName: record.llmModelName,
-          llmOutputMessages: record.llmOutputMessages,
-          llmInvocationParameters: record.llmInvocationParameters,
-          llmTools: record.llmTools,
-        };
-        handle.end(endOptions);
+        handle.end(
+          compact({
+            output: record.output,
+            metadata: record.metadata,
+            attributes: record.attributes,
+            endedAt: record.endedAt ?? undefined,
+            durationMs: record.durationMs,
+            status: record.status,
+            error: record.error,
+            model: record.model,
+            toolName: record.toolName,
+            usage: record.usage,
+            userFacingMessage: record.userFacingMessage,
+            llmProvider: record.llmProvider,
+            llmModelName: record.llmModelName,
+            llmSystem: record.llmSystem,
+            llmInputMessages: record.llmInputMessages,
+            llmOutputMessages: record.llmOutputMessages,
+            llmInvocationParameters: record.llmInvocationParameters,
+            llmTools: record.llmTools,
+            llmPromptTemplate: record.llmPromptTemplate,
+            llmPromptTemplateVariables: record.llmPromptTemplateVariables,
+            llmPromptTemplateVersion: record.llmPromptTemplateVersion,
+            toolDescription: record.toolDescription,
+            toolParameters: record.toolParameters,
+          }),
+        );
         continue;
       }
       if (context.hasSpan(record.id)) continue;
@@ -297,10 +319,18 @@ function spanFields(
     userFacingMessage: toolOptions.userFacingMessage,
     llmProvider: options.llmProvider,
     llmModelName: options.llmModelName,
+    llmSystem: options.llmSystem,
     llmInputMessages: options.llmInputMessages,
     llmOutputMessages: options.llmOutputMessages,
     llmInvocationParameters: options.llmInvocationParameters,
     llmTools: options.llmTools,
+    llmPromptTemplate: options.llmPromptTemplate,
+    llmPromptTemplateVariables: options.llmPromptTemplateVariables,
+    llmPromptTemplateVersion: options.llmPromptTemplateVersion,
+    toolDescription: options.toolDescription,
+    toolParameters: options.toolParameters,
+    inputMimeType: options.inputMimeType,
+    outputMimeType: options.outputMimeType,
   });
 }
 

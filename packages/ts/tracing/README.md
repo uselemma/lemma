@@ -193,10 +193,10 @@ Automatic delivery (`trace(options, fn)` and `TraceHandle.end()`) fails open: a 
 `threadId` correlates **turns** of a conversation. It is not how you glue a host process and an E2B-style sandbox into one turn. For that, the host mints a versioned context token, the child records a serializable journal without a Lemma API key, and the host applies the journal then `ingest()`s once.
 
 ```typescript
-import { Lemma, attachTurn } from "@uselemma/tracing";
+import { Lemma, attachTurn, startTurn } from "@uselemma/tracing";
 
 const lemma = new Lemma();
-const turn = lemma.startTurn({
+const turn = startTurn(lemma, {
   name: "agent-turn",
   input: userMessage,
   threadId: conversationId,
