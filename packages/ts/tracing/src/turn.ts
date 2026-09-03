@@ -6,7 +6,6 @@ import {
   type GenerationOptions,
   type SpanOptions,
   type SpanType,
-  type TokenUsage,
   type ToolOptions,
   type TraceEndOptions,
   type TraceOptions,
@@ -25,38 +24,11 @@ export type TurnContextToken = {
   name?: string;
 };
 
-export type TurnJournalSpan = {
+/** Journal span fields are {@link SpanOptions} in camelCase (plus required `id`). */
+export type TurnJournalSpan = Omit<SpanOptions, "parentSpanId" | "id" | "name"> & {
   id: string;
-  parentId?: string | null;
   name?: string;
-  type?: SpanType;
-  input?: unknown;
-  output?: unknown;
-  metadata?: Record<string, unknown>;
-  attributes?: Record<string, unknown>;
-  startedAt?: string | null;
-  endedAt?: string | null;
-  durationMs?: number;
-  status?: "OK" | "ERROR";
-  error?: unknown;
-  model?: string;
-  toolName?: string;
-  usage?: TokenUsage;
-  userFacingMessage?: string;
-  llmProvider?: string;
-  llmModelName?: string;
-  llmSystem?: string;
-  llmInputMessages?: unknown[];
-  llmOutputMessages?: unknown[];
-  llmInvocationParameters?: unknown;
-  llmTools?: unknown;
-  llmPromptTemplate?: string;
-  llmPromptTemplateVariables?: unknown;
-  llmPromptTemplateVersion?: string;
-  toolDescription?: string;
-  toolParameters?: unknown;
-  inputMimeType?: string;
-  outputMimeType?: string;
+  parentId?: string | null;
 };
 
 export type TurnJournalRecord = TurnJournalSpan & {
@@ -143,43 +115,39 @@ function parseJournal(input: TurnJournalInput): {
   throw new Error("@uselemma/tracing: invalid turn journal");
 }
 
+const END_IDENTITY_KEYS = {
+  id: true,
+  parentId: true,
+  parentSpanId: true,
+  name: true,
+  type: true,
+  startedAt: true,
+} as const;
+
 function toSpanOptions(
   record: TurnJournalRecord,
   fallbackParentId?: string | null,
 ): SpanOptions {
+  const { op: _op, ...fields } = record;
   return compact({
-    id: record.id,
+    ...fields,
     parentId: record.parentId ?? fallbackParentId,
     name: record.name ?? "span",
-    type: record.type,
-    input: record.input,
-    output: record.output,
-    metadata: record.metadata,
-    attributes: record.attributes,
-    startedAt: record.startedAt,
-    endedAt: record.endedAt,
-    durationMs: record.durationMs,
-    status: record.status,
-    error: record.error,
-    model: record.model,
-    toolName: record.toolName,
-    usage: record.usage,
-    userFacingMessage: record.userFacingMessage,
-    llmProvider: record.llmProvider,
-    llmModelName: record.llmModelName,
-    llmSystem: record.llmSystem,
-    llmInputMessages: record.llmInputMessages,
-    llmOutputMessages: record.llmOutputMessages,
-    llmInvocationParameters: record.llmInvocationParameters,
-    llmTools: record.llmTools,
-    llmPromptTemplate: record.llmPromptTemplate,
-    llmPromptTemplateVariables: record.llmPromptTemplateVariables,
-    llmPromptTemplateVersion: record.llmPromptTemplateVersion,
-    toolDescription: record.toolDescription,
-    toolParameters: record.toolParameters,
-    inputMimeType: record.inputMimeType,
-    outputMimeType: record.outputMimeType,
-  });
+  }) as SpanOptions;
+}
+
+function endOptionsFromRecord(
+  record: TurnJournalRecord,
+  fallbackParentId?: string | null,
+): Omit<SpanOptions, "id" | "name" | "type" | "startedAt"> {
+  const options = toSpanOptions(record, fallbackParentId);
+  return compact(
+    Object.fromEntries(
+      Object.entries(options).filter(
+        ([key]) => !Object.prototype.hasOwnProperty.call(END_IDENTITY_KEYS, key),
+      ),
+    ),
+  ) as Omit<SpanOptions, "id" | "name" | "type" | "startedAt">;
 }
 
 function startFromRecord(
@@ -230,33 +198,7 @@ export function applyTurnJournal(
     if (record.op === "end") {
       const handle = context.spanHandle(record.id);
       if (handle) {
-        handle.end(
-          compact({
-            output: record.output,
-            metadata: record.metadata,
-            attributes: record.attributes,
-            endedAt: record.endedAt ?? undefined,
-            durationMs: record.durationMs,
-            status: record.status,
-            error: record.error,
-            model: record.model,
-            toolName: record.toolName,
-            usage: record.usage,
-            userFacingMessage: record.userFacingMessage,
-            llmProvider: record.llmProvider,
-            llmModelName: record.llmModelName,
-            llmSystem: record.llmSystem,
-            llmInputMessages: record.llmInputMessages,
-            llmOutputMessages: record.llmOutputMessages,
-            llmInvocationParameters: record.llmInvocationParameters,
-            llmTools: record.llmTools,
-            llmPromptTemplate: record.llmPromptTemplate,
-            llmPromptTemplateVariables: record.llmPromptTemplateVariables,
-            llmPromptTemplateVersion: record.llmPromptTemplateVersion,
-            toolDescription: record.toolDescription,
-            toolParameters: record.toolParameters,
-          }),
-        );
+        handle.end(endOptionsFromRecord(record, fallbackParentId));
         continue;
       }
       if (context.hasSpan(record.id)) continue;
@@ -297,41 +239,14 @@ function spanFields(
   options: SpanOptions & ToolOptions & { type?: SpanType },
   fallbackParentId?: string | null,
 ): TurnJournalSpan {
-  const toolOptions = options as ToolOptions;
+  const { parentSpanId, ...fields } = options;
   return compact({
+    ...fields,
     id: options.id ?? crypto.randomUUID(),
-    parentId:
-      options.parentId ?? options.parentSpanId ?? fallbackParentId ?? null,
-    name: options.name,
-    type: options.type,
-    input: options.input,
-    output: options.output,
-    metadata: options.metadata,
-    attributes: options.attributes,
+    parentId: options.parentId ?? parentSpanId ?? fallbackParentId ?? null,
     startedAt: asIso(options.startedAt),
     endedAt: asIso(options.endedAt),
-    durationMs: options.durationMs,
-    status: options.status,
-    error: options.error,
-    model: options.model,
-    toolName: toolOptions.toolName,
-    usage: options.usage,
-    userFacingMessage: toolOptions.userFacingMessage,
-    llmProvider: options.llmProvider,
-    llmModelName: options.llmModelName,
-    llmSystem: options.llmSystem,
-    llmInputMessages: options.llmInputMessages,
-    llmOutputMessages: options.llmOutputMessages,
-    llmInvocationParameters: options.llmInvocationParameters,
-    llmTools: options.llmTools,
-    llmPromptTemplate: options.llmPromptTemplate,
-    llmPromptTemplateVariables: options.llmPromptTemplateVariables,
-    llmPromptTemplateVersion: options.llmPromptTemplateVersion,
-    toolDescription: options.toolDescription,
-    toolParameters: options.toolParameters,
-    inputMimeType: options.inputMimeType,
-    outputMimeType: options.outputMimeType,
-  });
+  }) as TurnJournalSpan;
 }
 
 export class AttachedSpanHandle {

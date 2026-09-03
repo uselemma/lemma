@@ -233,6 +233,8 @@ def test_apply_start_end_preserves_llm_and_tool_journal_fields():
                 {
                     "op": "end",
                     "id": "gen-1",
+                    "input": "Say hi",
+                    "inputMimeType": "text/plain",
                     "output": "hello",
                     "llmModelName": "gpt-4o-mini",
                     "endedAt": "2026-09-03T00:00:02.000Z",
@@ -263,5 +265,7 @@ def test_apply_start_end_preserves_llm_and_tool_journal_fields():
     assert gen_attrs["llm.system"] == "openai"
     assert gen_attrs["llm.prompt_template.template"] == "Say {x}"
     assert gen_attrs["llm.prompt_template.version"] == "1"
+    assert gen_attrs["input.mime_type"] == "text/plain"
     assert by_id["tool-1"]["attributes"]["lemma.tool.message"] == "Looking it up"
+    assert by_id["gen-1"]["input"] == "Say hi"
     assert by_id["gen-1"]["output"] == "hello"

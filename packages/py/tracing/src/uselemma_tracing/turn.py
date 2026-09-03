@@ -10,39 +10,45 @@ from .client import Lemma, TraceContext, TraceHandle, _datetime_or_now, _iso, _n
 TURN_CONTEXT_VERSION = 1
 TURN_JOURNAL_VERSION = 1
 
-_RECORD_KEYS = (
-    "id",
-    "parentId",
-    "name",
-    "type",
-    "input",
-    "output",
-    "metadata",
-    "attributes",
-    "startedAt",
-    "endedAt",
-    "durationMs",
-    "status",
-    "error",
-    "model",
-    "toolName",
-    "usage",
-    "userFacingMessage",
-    "llmProvider",
-    "llmModelName",
-    "llmSystem",
-    "llmInputMessages",
-    "llmOutputMessages",
-    "llmInvocationParameters",
-    "llmTools",
-    "llmPromptTemplate",
-    "llmPromptTemplateVariables",
-    "llmPromptTemplateVersion",
-    "toolDescription",
-    "toolParameters",
-    "inputMimeType",
-    "outputMimeType",
+# Journal camelCase key -> TraceContext.span() kwargs. One map drives record,
+# replay, and emit so new span fields cannot drift across converters.
+_JOURNAL_SPAN_FIELDS = (
+    ("id", "id"),
+    ("parentId", "parent_id"),
+    ("name", "name"),
+    ("type", "type"),
+    ("input", "input"),
+    ("output", "output"),
+    ("metadata", "metadata"),
+    ("attributes", "attributes"),
+    ("startedAt", "started_at"),
+    ("endedAt", "ended_at"),
+    ("durationMs", "duration_ms"),
+    ("status", "status"),
+    ("error", "error"),
+    ("model", "model"),
+    ("toolName", "tool_name"),
+    ("usage", "usage"),
+    ("userFacingMessage", "user_facing_message"),
+    ("llmProvider", "llm_provider"),
+    ("llmModelName", "llm_model_name"),
+    ("llmSystem", "llm_system"),
+    ("llmInputMessages", "llm_input_messages"),
+    ("llmOutputMessages", "llm_output_messages"),
+    ("llmInvocationParameters", "llm_invocation_parameters"),
+    ("llmTools", "llm_tools"),
+    ("llmPromptTemplate", "llm_prompt_template"),
+    ("llmPromptTemplateVariables", "llm_prompt_template_variables"),
+    ("llmPromptTemplateVersion", "llm_prompt_template_version"),
+    ("toolDescription", "tool_description"),
+    ("toolParameters", "tool_parameters"),
+    ("inputMimeType", "input_mime_type"),
+    ("outputMimeType", "output_mime_type"),
 )
+_RECORD_KEYS = tuple(journal_key for journal_key, _span_key in _JOURNAL_SPAN_FIELDS)
+_SPAN_TO_JOURNAL = {
+    span_key: journal_key for journal_key, span_key in _JOURNAL_SPAN_FIELDS
+}
 
 
 def _compact(payload: dict[str, Any]) -> dict[str, Any]:
@@ -83,43 +89,18 @@ def _parse_journal(value: Any) -> tuple[dict[str, Any] | None, list[dict[str, An
 
 
 def _span_kwargs(record: dict[str, Any], fallback_parent_id: str | None) -> dict[str, Any]:
-    return _compact(
-        {
-            "id": record.get("id"),
-            "parent_id": record.get("parentId", fallback_parent_id),
-            "name": record.get("name") or "span",
-            "type": record.get("type") or "span",
-            "input": record.get("input"),
-            "output": record.get("output"),
-            "metadata": record.get("metadata"),
-            "attributes": record.get("attributes"),
-            "started_at": record.get("startedAt"),
-            "ended_at": record.get("endedAt"),
-            "duration_ms": record.get("durationMs"),
-            "status": record.get("status"),
-            "error": record.get("error"),
-            "model": record.get("model"),
-            "tool_name": record.get("toolName"),
-            "usage": record.get("usage"),
-            "user_facing_message": record.get("userFacingMessage"),
-            "llm_provider": record.get("llmProvider"),
-            "llm_model_name": record.get("llmModelName"),
-            "llm_system": record.get("llmSystem"),
-            "llm_input_messages": record.get("llmInputMessages"),
-            "llm_output_messages": record.get("llmOutputMessages"),
-            "llm_invocation_parameters": record.get("llmInvocationParameters"),
-            "llm_tools": record.get("llmTools"),
-            "llm_prompt_template": record.get("llmPromptTemplate"),
-            "llm_prompt_template_variables": record.get(
-                "llmPromptTemplateVariables"
-            ),
-            "llm_prompt_template_version": record.get("llmPromptTemplateVersion"),
-            "tool_description": record.get("toolDescription"),
-            "tool_parameters": record.get("toolParameters"),
-            "input_mime_type": record.get("inputMimeType"),
-            "output_mime_type": record.get("outputMimeType"),
-        }
-    )
+    kwargs: dict[str, Any] = {}
+    for journal_key, span_key in _JOURNAL_SPAN_FIELDS:
+        if journal_key == "parentId":
+            kwargs[span_key] = record.get("parentId", fallback_parent_id)
+            continue
+        if journal_key in record:
+            kwargs[span_key] = record[journal_key]
+    if not kwargs.get("name"):
+        kwargs["name"] = "span"
+    if not kwargs.get("type"):
+        kwargs["type"] = "span"
+    return _compact(kwargs)
 
 
 _END_IDENTITY_KEYS = {"id", "name", "type", "started_at", "parent_id"}
@@ -206,45 +187,17 @@ def _record_fields(
 ) -> dict[str, Any]:
     started = kwargs.get("started_at")
     ended = kwargs.get("ended_at")
-    record = _compact(
-        {
-            "op": op,
-            "id": kwargs.get("id") or str(uuid.uuid4()),
-            "parentId": kwargs.get("parent_id", fallback_parent_id),
-            "name": kwargs.get("name"),
-            "type": span_type,
-            "input": kwargs.get("input"),
-            "output": kwargs.get("output"),
-            "metadata": kwargs.get("metadata"),
-            "attributes": kwargs.get("attributes"),
-            "startedAt": _iso(started) if started is not None else None,
-            "endedAt": _iso(ended) if ended is not None else None,
-            "durationMs": kwargs.get("duration_ms"),
-            "status": kwargs.get("status"),
-            "error": kwargs.get("error"),
-            "model": kwargs.get("model"),
-            "toolName": kwargs.get("tool_name"),
-            "usage": kwargs.get("usage"),
-            "userFacingMessage": kwargs.get("user_facing_message"),
-            "llmProvider": kwargs.get("llm_provider"),
-            "llmModelName": kwargs.get("llm_model_name"),
-            "llmSystem": kwargs.get("llm_system"),
-            "llmInputMessages": kwargs.get("llm_input_messages"),
-            "llmOutputMessages": kwargs.get("llm_output_messages"),
-            "llmInvocationParameters": kwargs.get("llm_invocation_parameters"),
-            "llmTools": kwargs.get("llm_tools"),
-            "llmPromptTemplate": kwargs.get("llm_prompt_template"),
-            "llmPromptTemplateVariables": kwargs.get(
-                "llm_prompt_template_variables"
-            ),
-            "llmPromptTemplateVersion": kwargs.get("llm_prompt_template_version"),
-            "toolDescription": kwargs.get("tool_description"),
-            "toolParameters": kwargs.get("tool_parameters"),
-            "inputMimeType": kwargs.get("input_mime_type"),
-            "outputMimeType": kwargs.get("output_mime_type"),
-        }
-    )
-    return {key: record[key] for key in ("op", *_RECORD_KEYS) if key in record}
+    values = dict(kwargs)
+    values["id"] = kwargs.get("id") or str(uuid.uuid4())
+    values["parent_id"] = kwargs.get("parent_id", fallback_parent_id)
+    values["type"] = span_type
+    values["started_at"] = _iso(started) if started is not None else None
+    values["ended_at"] = _iso(ended) if ended is not None else None
+    record: dict[str, Any] = {"op": op}
+    for span_key, journal_key in _SPAN_TO_JOURNAL.items():
+        if span_key in values and values[span_key] is not None:
+            record[journal_key] = values[span_key]
+    return record
 
 
 class AttachedSpanHandle:

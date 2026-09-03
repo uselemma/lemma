@@ -386,6 +386,8 @@ describe("cross-process turn journal", () => {
         {
           op: "end",
           id: "gen-1",
+          input: "Say hi",
+          inputMimeType: "text/plain",
           output: "hello",
           llmModelName: "gpt-4o-mini",
           endedAt: "2026-09-03T00:00:02.000Z",
@@ -411,11 +413,16 @@ describe("cross-process turn journal", () => {
     await turn.end({ output: "ok" });
     const spans = jsonBody(fetchMock.mock.calls[0]).trace.spans;
     const byId = Object.fromEntries(spans.map((span) => [span.id, span]));
+    expect(byId["gen-1"]).toMatchObject({
+      input: "Say hi",
+      output: "hello",
+    });
     expect(byId["gen-1"]?.attributes).toMatchObject({
       "llm.model_name": "gpt-4o-mini",
       "llm.system": "openai",
       "llm.prompt_template.template": "Say {x}",
       "llm.prompt_template.version": "1",
+      "input.mime_type": "text/plain",
     });
     expect(byId["tool-1"]?.attributes).toMatchObject({
       "lemma.tool.message": "Looking it up",
