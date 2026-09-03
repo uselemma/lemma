@@ -1,8 +1,6 @@
 # Mastra
 
-Lemma exporter on Mastra observability. Do **not** wrap `agent.generate()` in `lemma.trace()` — `LemmaMastraExporter` creates one root per Mastra run.
-
-Pass `threadId` / `userId` on `tracingOptions.metadata`.
+Add `LemmaMastraExporter` to Mastra observability, then run the agent.
 
 ## Run
 
@@ -24,18 +22,16 @@ npm install @uselemma/tracing @mastra/core @mastra/observability
 const lemmaExporter = new LemmaMastraExporter({ agentName: "lemma-docs-agent" });
 
 new Mastra({
+  agents: { docsAgent },
   observability: new Observability({
     configs: {
       default: { serviceName: "lemma-docs-agent", exporters: [lemmaExporter] },
     },
   }),
 });
-
-await agent.generate(messages, {
-  tracingOptions: { metadata: { threadId, userId } },
-});
-await lemmaExporter.flush();
 ```
+
+Optional: pass `tracingOptions: { metadata: { threadId, userId } }` on `generate`. Call `lemmaExporter.flush()` in short-lived CLIs.
 
 ## Trace shape
 

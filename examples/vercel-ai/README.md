@@ -1,6 +1,6 @@
 # Vercel AI SDK
 
-Lemma telemetry on `generateText`. Do **not** wrap the run in `lemma.trace()` — `vercelAI()` owns the root trace.
+Pass `vercelAI()` on `generateText` telemetry.
 
 ## Run
 
@@ -19,21 +19,19 @@ npm install @uselemma/tracing ai @ai-sdk/openai zod
 ## Instrumentation
 
 ```ts
-const lemmaTelemetry = vercelAI({
-  metadata: { threadId, userId },
-});
+const lemmaTelemetry = vercelAI({ metadata: { threadId, userId } });
 
 await generateText({
-  // ...
+  model,
+  tools,
   telemetry: {
     functionId: "lemma-docs-agent",
     integrations: [lemmaTelemetry],
   },
 });
-await lemmaTelemetry.flush();
 ```
 
-Create a new `vercelAI()` object for every operation. Concurrent reuse is unsafe.
+Create one `vercelAI()` per `generateText` call. Call `flush()` in short-lived CLIs.
 
 ## Trace shape
 

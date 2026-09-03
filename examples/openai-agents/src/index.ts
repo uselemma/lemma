@@ -19,7 +19,6 @@ import { z } from "zod";
 loadExampleEnv();
 requireOpenAIKey();
 
-// Register once. Do not wrap run() in lemma.trace() — the processor owns the root.
 const processor = openAIAgents();
 addTraceProcessor(processor);
 

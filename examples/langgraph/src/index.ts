@@ -62,11 +62,7 @@ const graph = new StateGraph(MessagesAnnotation)
   .addEdge("tools", "agent")
   .compile();
 
-const lemmaHandler = langGraph({
-  agentName: AGENT_NAME,
-  threadIdKey: "threadId",
-  userIdKey: "userId",
-});
+const lemmaHandler = langGraph({ agentName: AGENT_NAME });
 
 async function runTurn(turn: ChatTurn): Promise<string> {
   const result = await graph.invoke(

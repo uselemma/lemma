@@ -44,11 +44,7 @@ agent = create_agent(
     system_prompt=SYSTEM_PROMPT,
 )
 
-lemma_handler = langchain(
-    agent_name=AGENT_NAME,
-    thread_id_key="thread_id",
-    user_id_key="user_id",
-)
+lemma_handler = langchain(agent_name=AGENT_NAME)
 
 
 async def run_turn(turn: ChatTurn) -> str:

@@ -67,11 +67,7 @@ graph = (
     .compile()
 )
 
-lemma_handler = langgraph(
-    agent_name=AGENT_NAME,
-    thread_id_key="thread_id",
-    user_id_key="user_id",
-)
+lemma_handler = langgraph(agent_name=AGENT_NAME)
 
 
 async def run_turn(turn: ChatTurn) -> str:

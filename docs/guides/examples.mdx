@@ -13,7 +13,7 @@ The agent answers questions about Lemma by calling two tools against the live do
 
 ## Pick a stack
 
-Do **not** wrap Vercel AI, OpenAI Agents, LangChain, LangGraph, or Mastra runs in `lemma.trace()`. Those adapters create the root from framework lifecycle events. Use the direct SDK only when you are not on one of those frameworks.
+Pass the framework adapter (callback, processor, exporter, or telemetry helper). Use `lemma.trace()` only when you are not on one of those frameworks.
 
 ### TypeScript
 

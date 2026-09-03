@@ -1,6 +1,6 @@
 # LangChain (Python)
 
-Lemma callback handler on a LangChain `create_agent` invoke. Do **not** wrap the run in `lemma.trace()` — `langchain()` owns the root trace. One `agent.ainvoke()` is one root.
+Callback handler on a LangChain `create_agent` invoke. One `agent.ainvoke()` is one root.
 
 ## Run
 
@@ -20,25 +20,15 @@ pip install "uselemma-tracing[langchain]" langchain langchain-openai
 ## Instrumentation
 
 ```python
-lemma_handler = langchain(
-    agent_name="lemma-docs-agent",
-    thread_id_key="thread_id",
-    user_id_key="user_id",
-)
-
-agent = create_agent(model=ChatOpenAI(model="gpt-4o-mini"), tools=tools, system_prompt=system_prompt)
+lemma_handler = langchain(agent_name="lemma-docs-agent")
 
 await agent.ainvoke(
     {"messages": messages},
-    {
-        "callbacks": [lemma_handler],
-        "metadata": {"thread_id": thread_id, "user_id": user_id},
-    },
+    {"callbacks": [lemma_handler], "metadata": {"thread_id": thread_id, "user_id": user_id}},
 )
-lemma_handler.flush()
 ```
 
-Use `create_agent` (one invoke per turn) so LangChain callbacks nest under a single root. A manual `model.ainvoke` / `tool.ainvoke` loop creates one owned trace per call.
+`thread_id` / `user_id` are read from invoke metadata by default. Call `lemma_handler.flush()` in short-lived CLIs so the last ingest finishes.
 
 ## Trace shape
 

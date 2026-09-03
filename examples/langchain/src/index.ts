@@ -40,11 +40,7 @@ const agent = createAgent({
   systemPrompt: SYSTEM_PROMPT,
 });
 
-const lemmaHandler = langChain({
-  agentName: AGENT_NAME,
-  threadIdKey: "threadId",
-  userIdKey: "userId",
-});
+const lemmaHandler = langChain({ agentName: AGENT_NAME });
 
 async function runTurn(turn: ChatTurn): Promise<string> {
   const result = await agent.invoke(

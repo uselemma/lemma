@@ -1,8 +1,6 @@
 # OpenAI Agents SDK
 
-Lemma trace processor on OpenAI Agents. Do **not** wrap `run()` in `lemma.trace()` — `openAIAgents()` creates the root from Agents SDK events.
-
-`groupId` on `withTrace(...)` becomes Lemma `threadId`.
+Register the Lemma processor once, then run the agent.
 
 ## Run
 
@@ -24,12 +22,10 @@ npm install @uselemma/tracing @openai/agents
 const processor = openAIAgents();
 addTraceProcessor(processor);
 
-await withTrace(AGENT_NAME, () => run(agent, input), {
-  groupId: threadId,
-  metadata: { userId },
-});
-await processor.forceFlush();
+const result = await run(agent, input);
 ```
+
+Optional: wrap with `withTrace(..., { groupId })` so the Agents SDK session id becomes Lemma `threadId` (same grouping API Langfuse uses). Call `processor.forceFlush()` in short-lived CLIs.
 
 ## Trace shape
 

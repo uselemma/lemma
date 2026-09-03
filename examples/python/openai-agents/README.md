@@ -1,8 +1,6 @@
 # OpenAI Agents SDK (Python)
 
-Lemma processor on OpenAI Agents. Do **not** wrap `Runner.run` in `lemma.trace()` — `instrument_openai_agents()` creates the root from Agents SDK events.
-
-`group_id` on `trace(...)` becomes Lemma `thread_id`.
+Register the Lemma processor once, then run the agent.
 
 ## Run
 
@@ -22,12 +20,12 @@ pip install "uselemma-tracing[openai-agents]" openai-agents
 ## Instrumentation
 
 ```python
-processor = instrument_openai_agents()
+instrument_openai_agents()
 
-with trace("lemma-docs-agent", group_id=thread_id, metadata={"user_id": user_id}):
-    result = await Runner.run(agent, message)
-processor.force_flush()
+result = await Runner.run(agent, message)
 ```
+
+Optional: wrap with `trace(..., group_id=thread_id)` so the Agents SDK session id becomes Lemma `thread_id` (same grouping API Langfuse uses). Call `processor.force_flush()` in short-lived CLIs.
 
 ## Trace shape
 

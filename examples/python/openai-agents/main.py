@@ -22,7 +22,6 @@ from uselemma_tracing import instrument_openai_agents
 load_example_env()
 require_openai_key()
 
-# Register once. Do not wrap Runner.run in lemma.trace() — the processor owns the root.
 processor = instrument_openai_agents()
 
 

@@ -32,7 +32,7 @@ pnpm --filter @lemma/example-direct-sdk start "How do I instrument a Vercel AI a
 pnpm --filter @lemma/example-direct-sdk start   # REPL
 ```
 
-Do **not** wrap Vercel AI, OpenAI Agents, LangChain, LangGraph, or Mastra runs in `lemma.trace()`. The adapter creates the root.
+Adapters own the root — pass the handler, processor, exporter, or telemetry helper. Use `lemma.trace()` only in the no-framework folders.
 
 ## Python
 

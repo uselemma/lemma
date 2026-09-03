@@ -1,8 +1,6 @@
 # LangGraph
 
-Lemma callback handler on a LangGraph tool-calling graph. Do **not** wrap `graph.invoke()` in `lemma.trace()` — `langGraph()` owns the root trace.
-
-Graph nodes show up as nested spans; model calls are generations; tools are tool spans.
+Callback handler on `graph.invoke()`. Same pattern as LangChain.
 
 ## Run
 
@@ -21,17 +19,12 @@ npm install @uselemma/tracing @langchain/langgraph @langchain/openai
 ## Instrumentation
 
 ```ts
-const lemmaHandler = langGraph({
-  agentName: "lemma-docs-agent",
-  threadIdKey: "threadId",
-  userIdKey: "userId",
-});
+const lemmaHandler = langGraph({ agentName: "lemma-docs-agent" });
 
 await graph.invoke(state, {
   callbacks: [lemmaHandler],
   metadata: { threadId, userId },
 });
-await lemmaHandler.flush();
 ```
 
 ## Trace shape
