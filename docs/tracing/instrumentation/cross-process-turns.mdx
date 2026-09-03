@@ -97,7 +97,7 @@ This example runs all three steps in one process so you can copy it. Split `expo
 - **One record**: a single event
 - **Array of records**: streamed events
 
-Stream events as they arrive, or apply the full journal once.
+`apply` only updates the in-memory tree on the host or coordinator. It does not call `/traces/ingest`. Stream journal events into `apply` as they arrive, or apply the full journal once. Send to Lemma once with `turn.end()` or `ingest()` after the sandbox finishes.
 
 ## Assemble a trace from a stored journal
 
@@ -163,7 +163,7 @@ If the sandbox dies before a complete journal, apply whatever records arrived. E
 | Start the host root | `startTurn(lemma, ...)` | `lemma.start_turn(...)` / `start_turn(lemma, ...)` |
 | Export the child token | `turn.export({ parentSpanId })` | `turn.export(parent_span_id=...)` |
 | Record in the child | `attachTurn(token)` | `attach_turn(token)` / `Lemma.attach(token)` |
-| Export the journal | `local.records()` | `local.records()` |
+| Collect journal records | `local.records()` | `local.records()` |
 | Apply the journal | `turn.apply(journal)` / `applyTurnJournal(context, journal)` | `turn.apply(journal)` / `apply_turn_journal(context, journal)` |
 | Assemble without a live handle | `assembleTurn(token, journal)` | `assemble_turn(token, journal)` |
 | Send once | `await turn.end(...)` or `lemma.ingest(...)` | `turn.end(...)` or `lemma.ingest(...)` |
