@@ -46,6 +46,3 @@ jobs:
 
       - name: Test
         run: pnpm --filter @uselemma/openclaw test
-
-      - name: Verify committed bundles
-        run: git diff --exit-code -- plugins/lemma-openclaw/dist/index.js plugins/lemma-openclaw/runtime/flush.mjs plugins/lemma-openclaw/scripts/setup.mjs

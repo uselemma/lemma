@@ -50,9 +50,10 @@ notes or into this skill.
 2. `https://docs.uselemma.ai/reference/trace-contract.md`
 3. `https://docs.uselemma.ai/guides/building-high-quality-traces.md`
 4. `https://docs.uselemma.ai/guides/instrumenting-multi-turn-agents.md`
-5. `https://docs.uselemma.ai/tracing/troubleshooting/common-issues.md`
+5. `https://docs.uselemma.ai/tracing/instrumentation/cross-process-turns.md`
+6. `https://docs.uselemma.ai/tracing/troubleshooting/common-issues.md`
    (shape and quality symptoms only)
-6. The matching first-wave integration page, plus setup / traces /
+7. The matching first-wave integration page, plus setup / traces /
    generations / tool-calls / spans / context as needed:
    - Vercel AI SDK: `https://docs.uselemma.ai/integrations/vercel-ai.md`
    - OpenAI Agents SDK: `https://docs.uselemma.ai/integrations/openai-agents.md`

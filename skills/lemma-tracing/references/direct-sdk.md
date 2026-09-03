@@ -213,6 +213,54 @@ await trace.end({ output });
 
 Detached child records require `traceId`. Pass `parentSpanId` when the record belongs under a span; otherwise the SDK cannot safely preserve nesting.
 
+## Cross-process turns
+
+Export a context token on the host. Call `attachTurn` / `attach_turn` in the child and record a journal with no API key. Apply on the host and `ingest()` once. Docs: [Cross-process turns](https://docs.uselemma.ai/tracing/instrumentation/cross-process-turns).
+
+```typescript
+import { Lemma, attachTurn, startTurn } from "@uselemma/tracing";
+
+const lemma = new Lemma();
+const turn = startTurn(lemma, {
+  name: "agent-turn",
+  input: userMessage,
+  threadId,
+});
+const sandbox = turn.startSpan({ name: "e2b-sandbox" });
+
+const local = attachTurn(turn.export({ parentSpanId: sandbox.id }));
+local.recordTool({
+  name: "lookup_order",
+  input: { orderId: "1843" },
+  output: { status: "shipped" },
+});
+turn.apply(local.records());
+
+sandbox.end();
+await turn.end({ output: answer });
+```
+
+```python
+from uselemma_tracing import Lemma, attach_turn
+
+lemma = Lemma()
+turn = lemma.start_turn("agent-turn", input=user_message, thread_id=thread_id)
+sandbox = turn.start_span(name="e2b-sandbox")
+
+local = attach_turn(turn.export(parent_span_id=sandbox.id))
+local.record_tool(
+    name="lookup_order",
+    input={"orderId": "1843"},
+    output={"status": "shipped"},
+)
+turn.apply(local.records())
+
+sandbox.end()
+turn.end(output=answer)
+```
+
+`assembleTurn(token, journal)` / `assemble_turn(token, journal)` builds a `TraceContext` when you already have a journal and no live handle. Then `ingest()` once. `turn.end()` is strict so a failed send can be retried.
+
 ## Native Contract Props
 
 Prefer SDK props over hand-built attribute names:

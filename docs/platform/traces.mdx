@@ -1,59 +1,65 @@
 ---
 title: "Traces"
-description: "Search, filter, and inspect ready traces in the dashboard"
+description: "Search, filter, and inspect ready traces in the Lemma dashboard"
+meta:
+  contentType: "Conceptual"
 ---
 
-This page is how you **search, filter, and inspect traces in the dashboard** after they are ready.
+This page covers searching, filtering, and inspecting traces in the dashboard once they’re ready. To create traces in the SDK, see [Agent traces](/tracing/instrumentation/traces).
 
-It is not how you create traces. Recording roots, generations, and tools belongs in [Quickstart](/tracing/instrumentation/setup) and [Traces (instrumentation)](/tracing/instrumentation/traces).
+Open **Traces** in a project in the [Lemma dashboard](https://platform.uselemma.ai). This page is where you go once traces exist and you need to find a specific execution, not where you instrument one.
+
+<Frame>
+  <img src="/images/platform/traces-table.png" alt="Traces table showing rows with input previews, span counts, durations, and error marks" />
+</Frame>
 
 ## What a row is
 
-Each row is one **ready** agent execution (one turn). Columns typically include time, agent, duration, span count, input preview, and marks for **errors** vs **issues** (different glyphs). Traces stay on this list for **14 days** of retention.
+Each row is one **ready** agent execution, meaning one conversation turn. Columns include time, agent, duration, span count, an input preview, and separate marks for errors and issues. Traces stay on this list for 14 days before they age out.
 
-Agents, releases, users, and threads are attributes on the trace (from SDK context), not separate dashboards. Filter or search those fields; see [Threads and context](/tracing/instrumentation/context). SDK `metadata` and `attributes` both land as searchable span attributes after ingest.
+Agent, release, user, and thread aren’t separate dashboards; they’re attributes on the trace that come from your SDK context. Filter or search on those fields directly, and see [Threads and context](/tracing/instrumentation/context) for how to set them. SDK `metadata` and `attributes` both land as searchable span attributes after ingest.
 
 ## Search and filters
 
-- Full-text / structured search with saved searches.
-- Time range (absolute or relative).
-- Agent name.
-- Duration, span count, token, error, and issue filters.
-- Attribute filters (for example `user.uid` if you recorded it).
+You can combine several filters at once:
 
-Live updates can pause while you work a snapshot; refresh to include newly arrived traces. Batch **export** and **delete** apply to the current selection (delete is a dashboard action; it does not un-send the original payload from your agent).
+- Full-text or structured search, with saved searches
+- Time range, absolute or relative
+- Agent name
+- Duration, span count, token count, error state, and issue state
+- Attribute filters, for example `user.uid` if you recorded it
 
-Empty list: no ready traces in the project and window. Confirm ingest with the project get-started flow or ingest-status for a specific trace id before assuming the UI is wrong. An API key or SDK install alone is not a ready trace.
+Live updates can pause while you work a snapshot; refresh the page to pull in newly arrived traces. Batch **export** and **delete** apply to your current selection. Delete only removes the trace from the dashboard; it doesn’t un-send the original payload your agent already sent.
+
+An empty list usually means no ready traces exist in this project and window. Confirm ingest through the project get-started flow, or check ingest status for a specific trace ID, before assuming the dashboard is wrong. An API key or SDK install alone is not a ready trace.
 
 ## Opening a trace
 
-The detail view (drawer or dedicated page) has two complementary panels:
+The detail view, whether a drawer or a dedicated page, has two panels that answer different questions. **Conversation** shows the user and assistant turns as a readable thread, and if traces share a thread ID, stitches multiple turns into one conversation. **Execution tree** shows the nested spans, generations, tool calls, and other work, each with timing, input and output, and any errors.
 
-- **Conversation** — user/assistant turns for a readable thread. If traces share a thread id, you get a **thread conversation** across turns.
-- **Execution tree** — nested spans: generations, tool calls, and other work, with timing, I/O, and errors.
+Read the conversation to see what the person using the agent experienced, and the tree to find which tool or model call actually failed. Issues Lemma observed in that run appear on the trace so you can open them.
 
-Use conversation to understand what the user saw. Use the tree to see which tool or model call failed. Issues Lemma observed in that run appear on the trace so you can open them.
+<Frame>
+  <img src="/images/platform/trace-detail-drawer.png" alt="Trace detail view with the conversation and linked issues on the left, and the execution tree with span timings on the right" />
+</Frame>
 
 ## From traces to the rest of the product
 
-- An **issue** mark means extraction grouped this run into a failure pattern — open [Issues](/platform/issues) for status and all supporting traces.
-- An **error** mark is a failed span/root, which may or may not become an issue.
-- **[Inspect](/platform/inspect)** on a trace: "Tell me about the issue with this trace" / "Find other traces with this issue."
-- **[Analytics](/platform/analytics)** aggregates many traces; this page is the executions you can still open.
+An issue mark means extraction grouped this run into a failure pattern; open **[Issues](/platform/issues)** to see its status and every other supporting trace. An error mark means a span or the root failed, which may or may not turn into an issue. From an open trace, ask **[Inspect](/platform/inspect)** to explain the flagged issue or find other traces like it. When you need the aggregate view across many traces rather than one execution, that’s **[Analytics](/platform/analytics)**.
 
-## Related
+## Related pages
 
 <CardGroup cols={2}>
-  <Card title="Concepts" icon="/icons/book.svg" href="/getting-started/concepts">
-    What a trace is, versus a span or thread.
+  <Card title="Overview" href="/platform/overview">
+    How traces become issues after they arrive.
   </Card>
-  <Card title="Trace contract" icon="/icons/file-check.svg" href="/reference/trace-contract">
-    The shape Lemma reads at ingest.
+  <Card title="Issues" href="/platform/issues">
+    Grouped failure patterns across many traces.
   </Card>
-  <Card title="Issues" icon="/icons/bug.svg" href="/platform/issues">
-    Recurring patterns observed in these runs.
+  <Card title="Inspect" href="/platform/inspect">
+    Ask questions about the trace you have open.
   </Card>
-  <Card title="Platform overview" icon="/icons/stack-line.svg" href="/platform/overview">
-    How ready traces move through the product.
+  <Card title="Agent traces" href="/tracing/instrumentation/traces">
+    How to create a root trace in the SDK.
   </Card>
 </CardGroup>

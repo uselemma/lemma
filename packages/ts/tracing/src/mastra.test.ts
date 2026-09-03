@@ -1141,4 +1141,91 @@ describe("mastra / LemmaMastraExporter", () => {
 
     expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
   });
+
+  it("copies model_name from attributes onto the generation span", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "gen_model_name",
+        name: "model-generation",
+        type: "model_generation",
+        parentSpanId: "root_model_name",
+        input: [{ role: "user", content: "hi" }],
+        output: { role: "assistant", content: "hello" },
+        attributes: { model_name: "gpt-4o-mini", provider: "openai" },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "root_model_name",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        input: "hi",
+        output: "hello",
+      }),
+    );
+
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).toMatchObject({
+      type: "generation",
+      model: "gpt-4o-mini",
+      attributes: {
+        "llm.model_name": "gpt-4o-mini",
+        "gen_ai.request.model": "gpt-4o-mini",
+        "ai.model.id": "gpt-4o-mini",
+      },
+    });
+  });
+
+  it("does not treat string generation output as a model id", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const exporter = mastra({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "gen_string_output",
+        name: "model-generation",
+        type: "model_generation",
+        parentSpanId: "root_string_output",
+        input: [{ role: "user", content: "hi" }],
+        output: "It arrives Friday.",
+        attributes: { provider: "openai" },
+      }),
+    );
+    await emit(
+      exporter,
+      "span_ended",
+      span({
+        id: "root_string_output",
+        name: "agent-run",
+        type: "agent_run",
+        isRootSpan: true,
+        input: "hi",
+        output: "It arrives Friday.",
+      }),
+    );
+
+    const generation = jsonBody(fetchMock.mock.calls[0]).trace.spans[0];
+    expect(generation.type).toBe("generation");
+    expect(generation).not.toHaveProperty("model");
+    expect(generation.attributes).not.toHaveProperty("llm.model_name");
+    expect(generation.attributes).not.toHaveProperty("gen_ai.request.model");
+    expect(generation.attributes).not.toHaveProperty("ai.model.id");
+  });
 });

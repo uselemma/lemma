@@ -1,72 +1,79 @@
 ---
 title: "Issues"
-description: "Durable grouped failure patterns inferred from production traces"
+description: "Recurring failure patterns Lemma detects from trace evidence"
+meta:
+  contentType: "Conceptual"
 ---
 
-An **issue** is a durable, grouped failure pattern inferred from trace evidence. Lemma observed the issue in one or more traces.
+An **issue** is a durable grouped failure pattern that Lemma infers from trace evidence. Say the issue was observed in a trace. Open **Issues** in a project in the [Lemma dashboard](https://platform.uselemma.ai) to triage them. See [Concepts](/platform/concepts) for how these nouns relate.
 
-Lemma does not require you to write assertions. After a conversation goes quiet (or immediately if there is no thread id), it analyzes traces for behavior that materially hurt the agent's task, then groups repeated evidence. **Detection and grouping are probabilistic.** Always open supporting traces before you treat a title as a confirmed bug.
+<Frame>
+  <img src="/images/platform/issues-workspace.png" alt="Issues table grouped by agent, showing signals, supporting-trace counts, assignee, status, and last seen" />
+</Frame>
 
-Lemma does not currently ship standalone monitors or incidents. Alerting follows this issue lifecycle ([Slack](/connections/slack) and [webhooks](/connections/webhooks)).
+You don’t write assertions for this to work. Lemma analyzes traces and groups repeated evidence into issues on its own. Detection and grouping are probabilistic: always open supporting traces before you treat a title as a confirmed bug. Alerting follows this issue lifecycle through [Slack](/connections/slack) and [webhooks](/connections/webhooks).
+
+Lemma does not currently ship standalone monitors or incidents.
 
 ## Issues and supporting traces
 
-- One issue, many supporting traces.
-- Opening an issue shows rationale, category, priority signals, linked traces, and actions.
-- Opening a trace shows whether Lemma observed one or more issues in that run.
+One issue can have many supporting traces. Opening an issue shows the rationale behind it, its category, priority signals, linked traces, and available actions. Opening a trace instead shows you whether Lemma observed one or more issues in that run.
 
 ## Status
 
 | Status | Meaning |
 | -- | -- |
-| `open` | Active; not being worked |
+| `open` | Active; nobody is working it yet |
 | `in_progress` | Active; someone is working it |
 | `resolved` | Terminal: you believe the underlying defect is fixed |
 | `dismissed` | Terminal: not a real problem, or not worth tracking |
 
-`resolved` and `dismissed` are mutually exclusive. The transition that commits first wins if two people act at once.
+`resolved` and `dismissed` are mutually exclusive. If two people act on the same issue at once, whichever transition commits first wins.
 
-**Reopen:** matching evidence may reopen a **resolved** issue. Matching evidence **does not** reopen a **dismissed** issue. Manual reopen does not by itself change a linked Linear ticket (see [Linear](/connections/linear)).
-
-You can flag for review, assign a Lemma member, and add tags. Assignment in Lemma does not write to Linear unless you create a ticket and choose combined assignment.
+Matching evidence can reopen a resolved issue, but never reopens a dismissed one. Reopening an issue manually doesn’t by itself change a linked Linear ticket; see [Linear](/connections/linear) for how those stay in sync. You can also flag an issue for review, assign it to a Lemma member, and add tags. Assignment inside Lemma doesn’t write to Linear unless you create a ticket and choose combined assignment.
 
 ## Priority and grouping
 
-Priority is derived from recurrence and impact across the population of issues (for example volume and spikes), not from a monitor threshold you configure. Treat it as a triage hint.
+Priority comes from recurrence and impact measured across your whole population of issues, things like volume and spikes, not from a threshold you configure on a monitor. Treat it as a triage hint rather than a guarantee.
 
-Grouping aims at one issue per underlying defect. If two issues look like the same bug, inspect the supporting traces rather than assuming a missed merge; grouping can be revised as more traces arrive.
+Grouping aims for one issue per underlying defect, but it isn’t perfect. If two issues look like the same bug, check their supporting traces rather than assuming Lemma missed an obvious merge. Grouping gets revised as more traces arrive.
 
-## Investigating
+## Investigating an issue
 
-1. Filter the issues table (status, agent, assignee, flagged, search).
-2. Open the issue and read why it was flagged.
-3. Open supporting traces (conversation + execution tree).
-4. Ask [Inspect](/platform/inspect) on the issue: why it fired, scenarios, likely cause, how to fix.
-5. Export markdown (`GET /issues/{id}/markdown` or the UI equivalent) for a ticket or coding agent.
-6. Resolve or dismiss, optionally with feedback so future extraction can learn from false positives.
+1. Filter the issues table by status, agent, assignee, flagged state, or search term.
+2. Open the issue and read why Lemma flagged it.
+3. Open the supporting traces and review both the conversation and the execution tree.
+4. Ask **[Inspect](/platform/inspect)** why it fired, what scenarios triggered it, and how to fix it.
+5. Export it as markdown through `GET /issues/{id}/markdown` or the UI equivalent, to paste into a ticket or hand to a coding agent.
+6. Resolve or dismiss it, and add feedback if the finding was wrong so future extraction can learn from it.
 
 ## Workflow connections
 
-- **[Slack](/connections/slack)** — issue alerts and Issue Briefs to a project channel.
-- **[Linear](/connections/linear)** — optional one-to-one ticket link; create, exact-link, or unlink explicitly.
-- **[Lemma MCP](/connections/mcp)** — coding agents list and act on issues with an organization API key.
-- **[Webhooks](/connections/webhooks)** — `issue.created`, `issue.resolved`, `issue.dismissed`, `issue.reopened`.
+Each connection reports on the issue lifecycle in a different way:
 
-Connecting Slack or Linear never auto-creates tickets. Recurrence does not create a new Linear ticket.
+- **[Slack](/connections/slack)**: issue alerts and Issue Briefs sent to a project channel
+- **[Linear](/connections/linear)**: an optional one-to-one ticket link that you create, exact-link, or unlink explicitly
+- **[Lemma MCP server](/connections/mcp)**: lets coding agents list and act on issues with an organization API key
+- **[Webhooks](/connections/webhooks)**: `issue.created`, `issue.resolved`, `issue.dismissed`, and `issue.reopened` events
 
-## Related
+Connecting Slack or Linear never auto-creates a ticket, and recurrence never creates a new one either.
+
+## Related pages
 
 <CardGroup cols={2}>
-  <Card title="Traces" icon="/icons/workflow.svg" href="/platform/traces">
-    Open the supporting executions behind an issue.
+  <Card title="Concepts" href="/platform/concepts">
+    How traces and issues relate.
   </Card>
-  <Card title="Inspect" icon="/icons/sparkles.svg" href="/platform/inspect">
-    Ask why an issue fired and how to fix it.
+  <Card title="Traces" href="/platform/traces">
+    Open the supporting executions for an issue.
   </Card>
-  <Card title="Artifacts" icon="/icons/box.svg" href="/platform/artifacts">
-    Context that can sharpen detection for one agent.
+  <Card title="Inspect" href="/platform/inspect">
+    Ask why an issue was flagged and how to fix it.
   </Card>
-  <Card title="Webhooks" icon="/icons/plug.svg" href="/connections/webhooks">
-    Signed issue lifecycle events for another system.
+  <Card title="Artifacts" href="/platform/artifacts">
+    Agent context that can sharpen detection.
+  </Card>
+  <Card title="Slack" href="/connections/slack">
+    Issue alerts and Issue Briefs in your workspace.
   </Card>
 </CardGroup>

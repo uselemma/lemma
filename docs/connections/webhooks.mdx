@@ -1,131 +1,146 @@
 ---
 title: "Webhooks"
 description: "Receive signed HTTP POST requests for issue lifecycle events"
+meta:
+  contentType: "How-to"
 ---
 
-Project webhooks send **signed HTTP POST** requests for **issue lifecycle** events. They are separate from [Slack](/connections/slack) alerts and from [Lemma MCP](/connections/mcp).
+Project webhooks send a signed HTTP POST request whenever an issue changes state. They are separate from both [Slack](/connections/slack) alerts and [Lemma MCP](/connections/mcp). Open the project’s **Settings → Webhooks** in the [Lemma dashboard](https://platform.uselemma.ai) to configure one.
 
-Lemma does not emit incident-lifecycle events. Customer alerting follows **issues**. If you still see older incident-named samples, ignore them.
+Lemma doesn’t emit `incident.*` events. Customer alerting follows issues instead. If you find incident-named events in older samples or docs, they’re stale.
 
 ## Events
 
 | Event | When it fires |
-|-------|---------------|
+| -- | -- |
 | `issue.created` | A new issue was created |
 | `issue.resolved` | The issue was marked resolved |
 | `issue.dismissed` | The issue was dismissed |
-| `issue.reopened` | A resolved issue reopened from matching evidence. Dismissed issues do not reopen this way. |
+| `issue.reopened` | A resolved issue reopened from matching evidence. Dismissed issues never reopen this way. |
 
-## Setup
+## Set up an endpoint
 
 <Steps>
-  <Step title="Add a webhook endpoint">
-    In the project, go to **Settings → Webhooks** and add an **HTTPS** endpoint. Select the issue events you need.
+  <Step title="Add an HTTPS endpoint">
+    Open the project’s **Settings → Webhooks**, add an HTTPS endpoint, and select the issue events you want.
   </Step>
-
   <Step title="Save your signing secret">
-    After creating the endpoint, Lemma shows your signing secret **once**. Copy it immediately and store it in the receiver's secret manager — you cannot retrieve the stored value again.
-
-    Regenerating a secret **replaces** it. The previous secret stops working.
+    Copy the signing secret when Lemma shows it. It won’t be shown again, and regenerating it replaces the old value, so store it in your receiver’s secret manager immediately.
   </Step>
+  <Step title="Verify signature and timestamp">
+    Every request includes an `X-Lemma-Signature` header containing `sha256=<hex>` and an `X-Lemma-Timestamp` header with the Unix delivery time in seconds. Verify the signature against the raw request body, then check the timestamp is recent, before you process anything. A 5-minute tolerance (the convention Stripe and GitHub also use) absorbs normal delivery and retry delay while still rejecting a replayed request.
 
-  <Step title="Verify signatures and freshness">
-    Every request includes:
-
-    - `X-Lemma-Signature` — `sha256=<hex>` HMAC-SHA256 of the **exact raw body**
-    - `X-Lemma-Timestamp` — validate freshness before processing
-    - `X-Lemma-Event` — route on the event type
+    The signature is a Hash-based Message Authentication Code (HMAC) with SHA-256 over the exact raw body.
 
     <Tabs>
       <Tab title="Node.js">
         ```typescript
         import { createHmac, timingSafeEqual } from "crypto";
 
+        const TOLERANCE_SECONDS = 5 * 60;
+
         function verifyLemmaSignature(
           rawBody: string,
           secret: string,
           signature: string,
+          timestamp: string,
         ): boolean {
           const expected =
             "sha256=" +
             createHmac("sha256", secret).update(rawBody).digest("hex");
           const a = Buffer.from(expected);
           const b = Buffer.from(signature);
-          return a.length === b.length && timingSafeEqual(a, b);
+          const signatureValid =
+            a.length === b.length && timingSafeEqual(a, b);
+
+          const ageSeconds = Math.abs(Date.now() / 1000 - Number(timestamp));
+          const timestampFresh =
+            Number.isFinite(ageSeconds) && ageSeconds <= TOLERANCE_SECONDS;
+
+          return signatureValid && timestampFresh;
         }
         ```
       </Tab>
-
       <Tab title="Python">
         ```python
-        import hmac, hashlib
+        import hmac, hashlib, time
+
+        TOLERANCE_SECONDS = 5 * 60
 
         def verify_lemma_signature(
-            raw_body: bytes,
-            secret: str,
-            signature: str,
+            raw_body: bytes, secret: str, signature: str, timestamp: str
         ) -> bool:
             expected = "sha256=" + hmac.new(
                 secret.encode(), raw_body, hashlib.sha256
             ).hexdigest()
-            return hmac.compare_digest(expected, signature)
+            signature_valid = hmac.compare_digest(expected, signature)
+
+            try:
+                age_seconds = abs(time.time() - float(timestamp))
+                timestamp_fresh = age_seconds <= TOLERANCE_SECONDS
+            except ValueError:
+                timestamp_fresh = False
+
+            return signature_valid and timestamp_fresh
         ```
       </Tab>
     </Tabs>
 
     <Warning>
-      Always use the **raw request body** for signature verification. Parsing and re-serializing the JSON will change whitespace and break the signature check.
+      Always verify against the raw request body. Parsing and re-serializing the JSON changes whitespace and breaks the signature check.
     </Warning>
+  </Step>
+  <Step title="Test delivery">
+    Send a test event, confirm your endpoint returns `2xx`, and leave it enabled.
   </Step>
 </Steps>
 
-## Payload
+## Headers and verification
 
-All events share a common envelope: `event`, `timestamp`, `projectId`, and an `issue` object (id, status, and related fields). Do not assume an `incident` object.
+Every request carries three headers you’ll use to verify and route it:
+
+- **`X-Lemma-Signature`**: the `sha256=<hex>` HMAC-SHA256 of the raw body
+- **`X-Lemma-Timestamp`**: Unix seconds; reject requests older than your tolerance to block replays
+- **`X-Lemma-Event`**: the event type; route on this header
+
+## Payload shape
+
+The envelope always includes `event`, `timestamp`, `projectId`, and an `issue` object with the issue’s ID, status, and related fields. Don’t expect an `incident` object; that shape doesn’t exist anymore.
 
 ```json
 {
   "event": "issue.created",
-  "timestamp": "2025-04-07T12:00:00.000Z",
+  "timestamp": "2026-08-28T12:00:00.000Z",
   "projectId": "39e9c46a-...",
   "issue": {
     "id": "abc123",
-    "status": "open",
-    "createdAt": "2025-04-07T11:58:00.000Z"
+    "status": "open"
   }
 }
 ```
 
 ## Delivery and retries
 
-Lemma treats a `2xx` response within **10 seconds** as success. Failed deliveries retry with exponential backoff.
-
-Delivery history (status and latency, not signing secrets) is in **Settings → Webhooks → Delivery log**.
-
-Offload slow work so you can return `2xx` immediately.
-
-## Testing
-
-Use the test action next to an endpoint to send a synthetic issue-lifecycle payload. Confirm the endpoint is reachable and signature verification works before you rely on real events. Keep the endpoint enabled after a successful test.
+Lemma counts a `2xx` response within 10 seconds as a successful delivery and retries failures with exponential backoff. You can review delivery history, status, and latency (not signing secrets) in **Settings → Webhooks → Delivery log**. Offload slow processing to a background job so you can return `2xx` immediately.
 
 ## Security checklist
 
-- Verify `X-Lemma-Signature` and `X-Lemma-Timestamp`
+- Verify `X-Lemma-Signature` and reject stale `X-Lemma-Timestamp` values (a 5-minute tolerance works well) on every request
 - Route on `X-Lemma-Event`
-- HTTPS endpoints only
+- Use HTTPS endpoints only
 - Store the signing secret in an environment variable, never in source control
-- Distinct from Slack alerts and from Linear's inbound webhooks to Lemma
+- Remember this is distinct from Slack alerts and from Linear’s inbound webhooks to Lemma
 
-## Related
+## Related pages
 
 <CardGroup cols={2}>
-  <Card title="Issues" icon="/icons/bug.svg" href="/platform/issues">
-    The lifecycle these events describe.
+  <Card title="Issues" href="/platform/issues">
+    The lifecycle these events report.
   </Card>
-  <Card title="Slack" icon="/icons/circle-check.svg" href="/connections/slack">
-    Human alerts for the same issues, in a channel.
+  <Card title="Slack" href="/connections/slack">
+    Human-readable issue alerts in Slack instead of HTTP.
   </Card>
-  <Card title="Connect your workflow" icon="/icons/plug.svg" href="/connections/overview">
-    When to use Slack, Linear, MCP, or webhooks.
+  <Card title="Connect your workflow" href="/connections/overview">
+    When to use webhooks versus Slack, Linear, or MCP.
   </Card>
 </CardGroup>

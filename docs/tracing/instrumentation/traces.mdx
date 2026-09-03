@@ -1,9 +1,11 @@
 ---
-title: "Traces"
+title: "Agent traces"
 description: "Wrap one agent execution in one trace with input and output"
 ---
 
 A **trace** is one end-to-end agent execution, from the user's input to the final response. Everything your agent does inside that execution (LLM calls, tool calls, retrieval, app logic) is recorded as child work inside the trace.
+
+This page is how you **create** traces in the SDK. To search, filter, and inspect ready traces in the dashboard, see [Traces](/platform/traces).
 
 <Note>
   **One agent execution = one trace.** Use `lemma.trace()` as the boundary around the run.
@@ -142,7 +144,7 @@ Detached handle calls require `traceId`. If a detached span, generation, or tool
 
 ## Send a trace you built yourself
 
-`lemma.trace()` assumes the client owns the trace lifecycle within a single process. When the producer lives elsewhere — a cross-process buffer, a queue worker, a batch backfill — build a `TraceContext` yourself and deliver it with `ingest()`. Give it a stable `id` so retries address the same trace.
+`lemma.trace()` assumes the client owns the trace lifecycle within a single process. When the producer lives elsewhere (a cross-process buffer, a queue worker, a batch backfill), build a `TraceContext` yourself and deliver it with `ingest()`. Give it a stable `id` so retries address the same trace.
 
 <Tabs>
   <Tab title="TypeScript">
@@ -193,6 +195,8 @@ Detached handle calls require `traceId`. If a detached span, generation, or tool
   Across queues and workers, assemble the full tree in a coordinator and `ingest()` once when the turn is done. Do not stream partial deliveries under one `trace.id`.
 </Warning>
 
+When one user turn spans a host and a sandbox, use `startTurn` / `attachTurn` / `apply` (Python `start_turn` / `attach_turn`) so they become one root. See [Cross-process turns](/tracing/instrumentation/cross-process-turns).
+
 ## Override output or record errors
 
 Return values are captured automatically. Use `trace.output()` only when the recorded output should differ from the return value.
@@ -228,7 +232,7 @@ Return values are captured automatically. Use `trace.output()` only when the rec
   </Tab>
 </Tabs>
 
-If the callback throws, the SDK records the trace as failed, sends it to Lemma, and rethrows the original error.
+If the callback throws, the SDK records the trace as failed, sends it to Lemma, and rethrows the original error. Automatic delivery (`trace` / `async_trace` / `TraceHandle.end()`) fails open: a Lemma ingest 4xx/5xx or network error is logged in debug mode and dropped, so it cannot fail the caller's application or replace the original error. A transport failure on a successful run is not recorded as an agent failure. Use `ingest()` when you need a failed send to raise so you can retry.
 
 ## Pass trace context to helpers
 
@@ -278,16 +282,16 @@ support-agent              <- trace root (input, output)
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Generations" icon="/icons/sparkles.svg" href="/tracing/instrumentation/generations">
+  <Card title="Generations" href="/tracing/instrumentation/generations">
     Capture LLM calls with model, prompt, completion, and timing.
   </Card>
-  <Card title="Tool calls" icon="/icons/wrench.svg" href="/tracing/instrumentation/tool-calls">
+  <Card title="Tool calls" href="/tracing/instrumentation/tool-calls">
     Record tool arguments and results.
   </Card>
-  <Card title="Threads & context" icon="/icons/users.svg" href="/tracing/instrumentation/context">
-    Group conversations and attach users.
+  <Card title="Traces in the dashboard" href="/platform/traces">
+    Search and inspect the traces you send.
   </Card>
-  <Card title="Trace contract" icon="/icons/file-check.svg" href="/reference/trace-contract">
+  <Card title="Trace contract" href="/reference/trace-contract">
     The exact shape Lemma reads.
   </Card>
 </CardGroup>

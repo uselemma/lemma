@@ -1,6 +1,6 @@
 {
   "name": "@uselemma/openclaw",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lemma SDK tracing for OpenClaw agent sessions",
   "license": "MIT",
   "type": "module",
@@ -39,7 +39,8 @@
   "scripts": {
     "build": "node build.mjs",
     "type-check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run type-check && pnpm run build"
   },
   "dependencies": {
     "@uselemma/tracing": "workspace:^"

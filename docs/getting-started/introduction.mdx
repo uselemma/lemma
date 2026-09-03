@@ -5,35 +5,39 @@ meta:
   contentType: "Landing"
 ---
 
-Lemma is an observability and evaluation platform for AI agents. It records what each agent did in production, finds recurring problems, and gives humans and coding agents the evidence to investigate.
+Lemma is an observability and evaluation platform for AI agents. It records what each agent did in production, finds recurring problems, and gives you the evidence to investigate.
 
 Traditional monitoring catches explicit errors. It misses agents that return incorrect answers, forget earlier messages, or choose the wrong tool.
 
 How Lemma works:
 
-1. **Instrument** the production agent so each execution becomes a ready, inspectable [trace](/getting-started/concepts#trace).
-2. **Analyze** completed traces for behavior that materially hurt the agent's task.
-3. **Group** repeated evidence into an [issue](/getting-started/concepts#issue).
+1. **Instrument** the production agent so each execution becomes a ready, inspectable [trace](/tracing/instrumentation/concepts#trace).
+2. **Analyze** completed traces for behavior that materially hurt the agent’s task.
+3. **Group** repeated evidence into an [issue](/platform/concepts#issue).
 4. **Investigate** in the dashboard, [Inspect](/platform/inspect), Slack, Linear, or a coding agent, then follow recurrence.
 
-Lemma evaluates **production usage** from real users. It does not offer offline evaluation. If someone says "online eval," they mean evaluating actual production usage. Standalone monitors, incidents, and a standalone metrics product are not current surfaces. Failure alerting follows the **issue** lifecycle through [Slack](/connections/slack) and [webhooks](/connections/webhooks).
+Lemma evaluates **production usage** from real users. It does not offer offline evaluation. If someone says “online eval,” they mean evaluating actual production usage. Standalone monitors, incidents, and a standalone metrics product are not current surfaces. Failure alerting follows the **issue** lifecycle through [Slack](/connections/slack) and [webhooks](/connections/webhooks).
+
+<Frame>
+  <img src="/images/platform/dashboard-home.png" alt="Project dashboard showing to-do items, headline stats, and resolved-versus-dismissed and traces-per-month charts" />
+</Frame>
 
 ## Start sending traces
 
 Choose how you’ll send agent data to Lemma.
 
 <CardGroup cols={2}>
-  <Card title="Quickstart" icon="/icons/rocket.svg" href="/tracing/instrumentation/setup">
+  <Card title="Quickstart" href="/tracing/instrumentation/setup">
     Send your first complete agent trace to Lemma.
   </Card>
-  <Card title="Integrations" icon="/icons/plug-zap.svg" href="/integrations/openai-agents">
+  <Card title="Integrations" href="/integrations/openai-agents">
     Trace agents built with OpenAI Agents, Vercel AI SDK, LangChain, LangGraph, or Mastra.
   </Card>
-  <Card title="Core concepts" icon="/icons/book.svg" href="/getting-started/concepts">
-    Learn how Lemma defines traces, spans, issues, and artifacts.
+  <Card title="Core concepts" href="/tracing/instrumentation/concepts">
+    Learn how Lemma defines traces, spans, generations, and threads.
   </Card>
-  <Card title="Platform overview" icon="/icons/stack-line.svg" href="/platform/overview">
-    How traces move through the product after they arrive.
+  <Card title="Overview" href="/platform/overview">
+    What to do after the first trace arrives.
   </Card>
 </CardGroup>
 
@@ -42,16 +46,16 @@ Choose how you’ll send agent data to Lemma.
 Use Lemma to review detected failures, receive alerts, and investigate from your editor.
 
 <CardGroup cols={2}>
-  <Card title="Issues" icon="/icons/bug.svg" href="/platform/issues">
+  <Card title="Issues" href="/platform/issues">
     Review recurring failures that Lemma detects across your agent traces.
   </Card>
-  <Card title="Slack" icon="/icons/circle-check.svg" href="/connections/slack">
-    Receive issue alerts and optional Issue Briefs in your Slack workspace.
+  <Card title="Inspect" href="/platform/inspect">
+    Ask questions about the trace, issue, or page you are on.
   </Card>
-  <Card title="Webhooks" icon="/icons/plug.svg" href="/connections/webhooks">
-    Send signed issue lifecycle events to another system.
+  <Card title="Slack" href="/connections/slack">
+    Receive issue alerts and optional Issue Briefs in Slack.
   </Card>
-  <Card title="Lemma MCP" icon="/icons/plug.svg" href="/connections/mcp">
+  <Card title="Lemma MCP server" href="/connections/mcp">
     Give your coding agent the traces and issues it needs to investigate a failure.
   </Card>
 </CardGroup>

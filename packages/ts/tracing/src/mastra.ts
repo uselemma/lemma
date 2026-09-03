@@ -6,6 +6,7 @@ import {
 } from "./client";
 import { describeError } from "./error-message";
 import { scheduleMacrotask } from "./schedule";
+import { pickModelIdentity } from "./model";
 import { toolResultError } from "./tool-result";
 import { normalizeTokenUsage, type TokenUsage } from "./usage";
 
@@ -402,7 +403,7 @@ export class LemmaMastraExporter {
       trace.recordGeneration({
         ...base,
         name: this.options.generationName ?? span.name,
-        model: attributeString(attrs, "model"),
+        model: pickModelIdentity(attrs) ?? pickModelIdentity(span.output),
         llmProvider: attributeString(attrs, "provider"),
         llmInvocationParameters: attrs?.parameters,
         llmInputMessages,

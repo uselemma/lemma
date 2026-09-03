@@ -9,6 +9,7 @@ from typing import Any
 from .client import Lemma, SpanHandle, TraceContext, _datetime_or_now, _duration_ms, _now
 from .debug_mode import _lemma_debug
 from .error_message import describe_error
+from .model import pick_model_identity
 from .tool_result import tool_result_error
 from .usage import normalize_token_usage
 
@@ -431,13 +432,13 @@ class LemmaOpenAIAgentsProcessor:
 
         if stored.root_error:
             stored.context.fail(stored.root_error)
-            self.lemma._send(stored.context, started_at, ended_at)
+            self.lemma._deliver_automatic(stored.context, started_at, ended_at)
             return
 
         if stored.root_output is not None:
             stored.context.output(stored.root_output)
 
-        self.lemma._send(stored.context, started_at, ended_at)
+        self.lemma._deliver_automatic(stored.context, started_at, ended_at)
 
     def _ensure_trace(self, trace: Any) -> _StoredTrace:
         trace_id = _get(trace, "trace_id")
@@ -501,7 +502,7 @@ class LemmaOpenAIAgentsProcessor:
         if _is_generation_type(span_type):
             return stored.context.start_generation(
                 **common,
-                model=data.get("model") if isinstance(data.get("model"), str) else None,
+                model=pick_model_identity(data),
                 llm_provider="openai",
                 llm_invocation_parameters=data.get("model_config"),
                 llm_input_messages=(
@@ -567,7 +568,7 @@ class LemmaOpenAIAgentsProcessor:
             output=output,
             error=error_message,
             status="ERROR" if error_message else None,
-            model=data.get("model") if isinstance(data.get("model"), str) else None,
+            model=pick_model_identity(data),
             ended_at=ended_at_value,
             duration_ms=_duration_ms(raw_started_at, ended_at_value),
             llm_output_messages=(

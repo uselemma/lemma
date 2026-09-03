@@ -1,11 +1,13 @@
 ---
 title: "Quickstart"
 description: "Install the Lemma SDK and send your first complete agent trace"
+meta:
+  contentType: "Tutorial"
 ---
 
 Send one complete agent trace to Lemma. The software development kit (SDK) sends JSON to the Lemma API.
 
-One agent execution is one [trace](/getting-started/concepts). Record model calls, tool calls, retrieval, and app logic inside that trace.
+One agent execution is one [trace](/tracing/instrumentation/concepts). Record model calls, tool calls, retrieval, and app logic inside that trace.
 
 ## Preferred path: coding agent
 
@@ -13,9 +15,8 @@ Use a coding agent to instrument the production agent. Creating an API key, addi
 
 <Steps>
   <Step title="Open the project get-started flow">
-    In the [Lemma dashboard](https://platform.uselemma.ai), select or create the organization and project, then open that project's get-started flow.
+    In the [Lemma dashboard](https://platform.uselemma.ai), select or create the organization and project, then open that project’s get-started flow.
   </Step>
-
   <Step title="Set server-side credentials">
     Generate an API key and copy the project ID.
 
@@ -26,7 +27,6 @@ Use a coding agent to instrument the production agent. Creating an API key, addi
 
     Keep `LEMMA_API_KEY` **server-side**. Never commit it. Never put it in browser or client-side code.
   </Step>
-
   <Step title="Install the tracing skill">
     ```bash
     npx skills add uselemma/lemma --skill "lemma-tracing"
@@ -34,11 +34,10 @@ Use a coding agent to instrument the production agent. Creating an API key, addi
 
     Ask the coding agent to use that skill to instrument the production agent.
   </Step>
-
   <Step title="Exercise a real path and wait for a ready trace">
-    Run a production-like request through the instrumented agent. Then open **Traces** in the project and wait until that execution is **ready** — inspectable, with a root, nested work, and input/output you recognize.
+    Run a production-like request through the instrumented agent. Then open **Traces** in the project and wait until that execution is **ready**: inspectable, with a root, nested work, and input and output you recognize.
 
-    A key, an SDK install, or a failed/empty ingest is not a ready trace.
+    A key, an SDK install, or a failed or empty ingest is not a ready trace.
   </Step>
 </Steps>
 
@@ -46,7 +45,7 @@ Manual fallback examples for [Vercel AI SDK](/integrations/vercel-ai), [OpenAI A
 
 ## What you are building
 
-You will send one support-agent trace with a nested generation and tool call.
+You send one support-agent trace with a nested generation and tool call.
 
 ```text
 support-agent              <- trace root (input, output)
@@ -71,7 +70,6 @@ support-agent              <- trace root (input, output)
       </Tab>
     </Tabs>
   </Step>
-
   <Step title="Set environment variables">
     Find these in [Lemma project settings](https://platform.uselemma.ai).
 
@@ -83,7 +81,6 @@ support-agent              <- trace root (input, output)
 
     The SDK sends to `https://api.uselemma.ai` by default. Pass `baseUrl` / `base_url` only for a custom endpoint.
   </Step>
-
   <Step title="Trace one agent execution">
     Create a client, open a trace, then record one generation and one tool call inside the trace callback.
 
@@ -157,14 +154,15 @@ support-agent              <- trace root (input, output)
       </Tab>
     </Tabs>
   </Step>
-
   <Step title="Verify in Lemma">
-    Open the [Lemma dashboard](https://platform.uselemma.ai) and go to **Traces**. You should see:
+    Open **[Traces](/platform/traces)** in the [Lemma dashboard](https://platform.uselemma.ai). You should see:
 
     - One trace for the whole execution
     - The root trace with input and output
     - A nested generation with model metadata
     - A nested tool call with arguments and result
+
+    After the trace looks complete, see [Overview](/platform/overview) for issues, Inspect, and workflow connections.
   </Step>
 </Steps>
 
@@ -198,16 +196,16 @@ Adapters (`vercelAI`, `openAIAgents`, `langChain`, `langGraph`, `mastra`) accept
 Use these pages after the first trace lands.
 
 <CardGroup cols={2}>
-  <Card title="Instrument an agent" icon="/icons/workflow.svg" href="/tracing/instrumentation/instrument-an-agent">
+  <Card title="Instrument an agent" href="/tracing/instrumentation/instrument-an-agent">
     Add spans, tools, generations, and errors to a real agent.
   </Card>
-  <Card title="Concepts" icon="/icons/book.svg" href="/getting-started/concepts">
-    Traces, spans, generations, and threads.
+  <Card title="Traces in the dashboard" href="/platform/traces">
+    Search and inspect the trace you sent.
   </Card>
-  <Card title="Trace contract" icon="/icons/file-check.svg" href="/reference/trace-contract">
+  <Card title="Overview" href="/platform/overview">
+    Issues, Inspect, Artifacts, and Analytics after ingest.
+  </Card>
+  <Card title="Trace contract" href="/reference/trace-contract">
     The exact shape Lemma reads.
-  </Card>
-  <Card title="Platform overview" icon="/icons/stack-line.svg" href="/platform/overview">
-    What to do after the first ready trace.
   </Card>
 </CardGroup>

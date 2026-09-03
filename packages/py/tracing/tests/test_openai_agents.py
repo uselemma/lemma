@@ -801,3 +801,50 @@ def test_openai_agents_stamps_lemma_release_on_ingest():
     processor.on_trace_start(FakeTrace(trace_id="trace_release", name="support-agent"))
     processor.on_trace_end(FakeTrace(trace_id="trace_release", name="support-agent"))
     assert calls[0]["trace"]["release"] == "1.8.3"
+
+
+def test_openai_agents_copies_model_from_response_when_span_data_omits_it():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+
+    processor.on_trace_start(FakeTrace(trace_id="trace_model", name="agent"))
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_model",
+            span_id="span_gen",
+            started_at="2026-06-29T12:00:00Z",
+            ended_at="2026-06-29T12:00:00.010Z",
+            span_data={
+                "type": "generation",
+                "input": [{"role": "user", "content": "hi"}],
+                "output": [{"role": "assistant", "content": "hello"}],
+                "response": {"model": "o3-mini"},
+            },
+        )
+    )
+    processor.on_trace_end(FakeTrace(trace_id="trace_model", name="agent"))
+
+    span = calls[0]["trace"]["spans"][0]
+    assert span["type"] == "generation"
+    assert span["model"] == "o3-mini"
+    assert span["attributes"]["llm.model_name"] == "o3-mini"
+    assert span["attributes"]["gen_ai.request.model"] == "o3-mini"
+    assert span["attributes"]["ai.model.id"] == "o3-mini"
+
+
+def test_openai_agents_force_flush_does_not_raise_on_ingest_503():
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda _url, _headers, _body: (503, "nope"),
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_503", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_503", name="agent"))
+    processor.force_flush()

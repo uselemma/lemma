@@ -1,4 +1,13 @@
-from .client import Lemma, SpanHandle, TraceContext
+from .client import Lemma, SpanHandle, TraceContext, TraceHandle
+from .turn import (
+    apply_turn_journal,
+    assemble_turn,
+    attach_turn,
+    parse_turn_context_token,
+    start_turn,
+    AttachedTurn,
+    TurnHandle,
+)
 from .experiment_mode import (
     disable_experiment_mode,
     enable_experiment_mode,
@@ -23,6 +32,14 @@ __all__ = [
     "Lemma",
     "SpanHandle",
     "TraceContext",
+    "TraceHandle",
+    "TurnHandle",
+    "AttachedTurn",
+    "apply_turn_journal",
+    "assemble_turn",
+    "attach_turn",
+    "parse_turn_context_token",
+    "start_turn",
     "normalize_token_usage",
     "normalize_release",
     # Mode flags
