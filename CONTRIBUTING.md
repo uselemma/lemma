@@ -1,66 +1,38 @@
-# Contributing
+# Contribute to Lemma
 
-## Merge bar
+Thank you for contributing.
 
-The pull request author owns these until merge:
+## How to contribute
 
-1. **Keep the PR current with `main`.**
-2. **Resolve every review comment.**
-3. **Keep every CI check green.**
+Check [open and closed issues](https://github.com/uselemma/lemma/issues?q=is%3Aissue) for anything similar. Comment on an existing issue if you have more context. Open a new issue for a bug or a change that needs discussion.
 
-A PR that fails any of these is not ready to merge.
+To contribute code: fork the repo, develop locally, and open a pull request against `main`.
 
-### Keep the PR current with `main`
+### Pull requests
 
-Whenever `main` moves, update your branch before you ask for merge.
+Ready (non-draft) pull requests get a Thermo-Nuclear Review. Until the PR merges, the author:
 
-```bash
-git fetch origin
-git merge origin/main
-git push
-```
+1. **Keeps the branch up to date with `main`.** Merge `origin/main` (or `upstream/main` from a fork), or use GitHub's **Update branch** button. Do not leave merge conflicts.
+2. **Resolves every review comment.** Address Thermo-Nuclear Review and human review by pushing a fix or replying on the thread. Leave no unresolved conversations.
+3. **Keeps CI green.** Every check on the PR must pass. Push a fix for failures. Re-run only when the failure is infrastructure.
 
-If you work from a fork, add this repository as `upstream` and merge `upstream/main`. GitHub's **Update branch** button is equivalent.
+Mark the PR **Ready for review** when you want it reviewed. Drafts skip Thermo-Nuclear Review.
 
-Do not leave the PR behind `main`. Review and CI only count on a current branch.
+On a fork PR, enable **Allow edits from maintainers** so maintainers can update the branch.
 
-### Resolve every review comment
+If the change ships in an SDK or harness plugin, bump that package's version in the same PR:
 
-Ready (non-draft) pull requests get a Thermo-Nuclear Review. That review and any human review comments are blocking.
+| Package | Version field |
+| --- | --- |
+| `@uselemma/tracing` | `packages/ts/tracing/package.json` |
+| `uselemma-tracing` | `packages/py/tracing/pyproject.toml` and `uv.lock` |
+| `@uselemma/opencode`, `@uselemma/pi`, `@uselemma/hermes`, `@uselemma/openclaw` | `plugins/<name>/package.json` |
 
-For each comment, either:
-
-- Push a fix that addresses it, or
-- Reply on the thread with why the code should stay as it is.
-
-Do not leave comments unanswered. Resolve the GitHub thread after you have addressed it.
-
-### Keep CI green
-
-Every check shown on the pull request must pass. If a check fails, fix it on the branch and push. Re-run a check only when the failure is infrastructure, not when the test is right.
-
-Plugin workflows are path-filtered. Checks that do not run for your paths are fine. Checks that do run must stay green.
-
-## Open a pull request
-
-1. Branch from current `main`. A fork is fine.
-2. Add tests for behavior changes.
-3. If the change ships in an SDK or harness plugin, bump that package's version in the same PR:
-
-   | Package | Version field |
-   | --- | --- |
-   | `@uselemma/tracing` | `packages/ts/tracing/package.json` |
-   | `uselemma-tracing` | `packages/py/tracing/pyproject.toml` and `uv.lock` |
-   | `@uselemma/opencode`, `@uselemma/pi`, `@uselemma/hermes`, `@uselemma/openclaw` | `plugins/<name>/package.json` |
-
-   A merge that does not bump the version does not publish.
-
-4. Open a pull request against `main` and mark it **Ready for review**. Drafts do not get Thermo-Nuclear Review.
-5. Hold the merge bar above until merge.
+A merge that does not bump the version does not publish.
 
 Do not commit generated plugin `runtime/` or `scripts/` bundles. CI builds them.
 
-## Local checks
+## Development
 
 Install:
 

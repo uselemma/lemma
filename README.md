@@ -114,7 +114,7 @@ python3 -m json.tool docs/docs.json >/dev/null
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). The pull request author keeps the branch current with `main`, resolves every review comment, and keeps CI green.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Check existing issues, then open a pull request against `main`.
 
 ## Releases
 
