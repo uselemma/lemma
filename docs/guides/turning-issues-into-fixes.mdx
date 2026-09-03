@@ -7,7 +7,9 @@ meta:
 
 After Lemma groups repeated trace evidence into an [issue](/platform/concepts#issue), this guide takes you from that finding to a code change you can prove. You triage first, then investigate the mechanism, then remediate. Do not start a patch until you can point at the supporting traces that show the defect.
 
-You need a project with [ready traces](/platform/traces) and at least one issue. Optional but useful: [Inspect](/platform/inspect) in the dashboard, and a coding agent connected to the [Lemma MCP server](/connections/mcp).
+<Note>
+  You need a project with [ready traces](/platform/traces) and at least one issue. Optional: [Inspect](/platform/inspect) in the dashboard, and a coding agent connected to the [Lemma MCP server](/connections/mcp).
+</Note>
 
 <CardGroup cols={2}>
   <Card title="Open Issues" href="https://platform.uselemma.ai">
@@ -22,135 +24,206 @@ You need a project with [ready traces](/platform/traces) and at least one issue.
 
 Closing the loop is three separate jobs. Mixing them is how teams ship a guess.
 
-| Job | Question you answer | You are done when |
-| -- | -- | -- |
-| **Triage** | Is this a real defect worth tracking? | You dismiss it, or you accept it and set status to `in_progress` |
-| **Root-cause analysis** | What mechanism produced the bad behavior, and where in code? | You can name the span, the code path, and the change you intend |
-| **Remediation** | Did the change stop that mechanism? | New traces no longer show the same pattern, and you resolve the issue |
+<CardGroup cols={3}>
+  <Card title="Triage">
+    Is this a real defect worth tracking? Done when you dismiss it, or accept it and set status to `in_progress`.
+  </Card>
+  <Card title="Root-cause analysis">
+    What mechanism produced the bad behavior, and where in code? Done when you can name the span, the path, and the change.
+  </Card>
+  <Card title="Remediation">
+    Did the change stop that mechanism? Done when new traces no longer show the same pattern and you resolve the issue.
+  </Card>
+</CardGroup>
 
-Lemma’s detection is probabilistic. An issue title is a hypothesis backed by traces, not a confirmed bug. Open the evidence before you treat the title as ground truth. See [Issues](/platform/issues) and [Product boundaries](/platform/concepts#product-boundaries).
+<Info>
+  Lemma’s detection is probabilistic. An issue title is a hypothesis backed by traces, not a confirmed bug. Open the evidence before you treat the title as ground truth. See [Issues](/platform/issues) and [Product boundaries](/platform/concepts#product-boundaries).
+</Info>
 
-## 1. Review the issue
+## Close the loop
 
-Triage decides whether the finding is a real defect. You do not write code in this step.
+<Steps>
+  <Step title="Review the issue">
+    Triage decides whether the finding is a real defect. You do not write code in this step.
 
-**Input:** An open issue, from the Issues table, a [Slack](/connections/slack) alert, or an Issue Brief.
+    <Info>
+      **Input:** An open issue, from the Issues table, a [Slack](/connections/slack) alert, or an Issue Brief.
+    </Info>
 
-**Action:**
+    <Frame>
+      <img src="/images/platform/issues-workspace.png" alt="Issues table grouped by agent, showing signals, supporting-trace counts, assignee, status, and last seen" />
+    </Frame>
 
-1. Open **Issues** in the project in the [Lemma dashboard](https://platform.uselemma.ai).
-2. Filter by status, agent, assignee, or search if you are choosing what to work next.
-3. Open the issue and read why Lemma flagged it: rationale, category, priority, first seen, last seen, and how many supporting traces it has.
-4. Decide: dismiss, or accept and work it.
+    1. Open **Issues** in the project in the [Lemma dashboard](https://platform.uselemma.ai).
+    2. Filter by status, agent, assignee, or search if you are choosing what to work next.
+    3. Open the issue and read why Lemma flagged it: rationale, category, priority, first seen, last seen, and how many supporting traces it has.
+    4. Decide: dismiss, or accept and work it.
 
-**Outcome:** The issue is `dismissed` with a reason if it is not a real problem, or `in_progress` if you accept it as a defect. Assignment inside Lemma does not create a Linear ticket. Create that link later only if your team files tickets; see [Linear](/connections/linear).
+    <Check>
+      **Outcome:** The issue is `dismissed` with a reason if it is not a real problem, or `in_progress` if you accept it as a defect.
+    </Check>
 
-Dismiss when the behavior is working as intended, synthetic traffic, or a false grouping. Add feedback so later extraction can learn. Do not dismiss a real defect because you plan to fix it; that is `resolved` after the change ships.
+    <Warning>
+      Assignment inside Lemma does not create a Linear ticket. Create that link later only if your team files tickets; see [Linear](/connections/linear). Dismiss when the behavior is working as intended, synthetic traffic, or a false grouping. Do not dismiss a real defect because you plan to fix it; that is `resolved` after the change ships.
+    </Warning>
+  </Step>
 
-## 2. Inspect the supporting traces
+  <Step title="Inspect the supporting traces">
+    Root-cause analysis starts with the runs Lemma grouped, not with the issue title.
 
-Root-cause analysis starts with the runs Lemma grouped, not with the issue title.
+    <Info>
+      **Input:** An accepted issue with at least one supporting trace.
+    </Info>
 
-**Input:** An accepted issue with at least one supporting trace.
+    <Tabs>
+      <Tab title="Dashboard">
+        1. Open several supporting traces from the issue, not only the newest one.
+        2. Read **Conversation** for what the person using the agent saw.
+        3. Read **Execution tree** for which generation, tool call, or span produced that outcome.
+        4. Compare the assistant text to the tool results and span outputs in the same run. A mismatch between those two panels is the defect you are looking for.
 
-**Action:**
+        <Frame>
+          <img src="/images/platform/trace-detail-drawer.png" alt="Trace detail view with the conversation and linked issues on the left, and the execution tree with span timings on the right" />
+        </Frame>
 
-1. Open several supporting traces from the issue, not only the newest one.
-2. Read **Conversation** for what the person using the agent saw.
-3. Read **Execution tree** for which generation, tool call, or span produced that outcome.
-4. Compare the assistant text to the tool results and span outputs in the same run. A mismatch between those two panels is the defect you are looking for.
-5. Ask [Inspect](/platform/inspect) on the issue page: why this fired, which scenarios triggered it, and what the supporting traces share.
+        <Prompt description="Ask Inspect why this issue fired.">
+          Why did this issue fire, which scenarios triggered it, and what do the supporting traces share? How should I fix the underlying defect?
+        </Prompt>
+      </Tab>
+      <Tab title="Coding agent">
+        Export the issue as markdown (`GET /issues/{id}/markdown`, or the UI equivalent), or connect a coding agent to [Lemma MCP](/connections/mcp) and pull the same evidence in the editor.
 
-**Outcome:** You can describe the failure as “in these traces, span X did Y, and the user-visible result was Z.” If the traces do not support the title, return to triage and dismiss with that evidence.
+        <Prompt description="Inspect this issue from a coding agent.">
+          Use the Lemma MCP to inspect this issue. Cite the supporting traces, name the failing span, and do not propose a patch until you can describe the mechanism.
+        </Prompt>
+      </Tab>
+    </Tabs>
 
-Export the issue as markdown (`GET /issues/{id}/markdown`, or the UI equivalent) when you want to paste the same evidence into a ticket or a coding agent. A coding agent connected to [Lemma MCP](/connections/mcp) can pull that evidence without leaving the editor.
+    <Check>
+      **Outcome:** You can describe the failure as “in these traces, span X did Y, and the user-visible result was Z.” If the traces do not support the title, return to triage and dismiss with that evidence.
+    </Check>
+  </Step>
 
-## 3. Name the root cause and the code path
+  <Step title="Name the root cause and the code path">
+    You are looking for the mechanism, not a one-line restatement of the title.
 
-You are looking for the mechanism, not a one-line restatement of the title.
+    <Info>
+      **Input:** The span-level mismatch you wrote down in the previous step.
+    </Info>
 
-**Input:** The span-level mismatch you wrote down in step 2.
+    1. Map the failing span to a function, prompt, tool wrapper, or policy in your repo. Use the span name, tool name, and timestamps on the execution tree.
+    2. Decide whether the fix lives in prompt or policy, in tool or retrieval code, or in a guard after the model responds. A defect can need more than one of those.
+    3. Write the intended change in one sentence: “When `lookup_order` returns `processing`, the assistant must not claim the order shipped.”
 
-**Action:**
+    <Check>
+      **Outcome:** A named code path and a falsifiable claim about the new behavior. If you cannot name the path, you are still inspecting traces.
+    </Check>
 
-1. Map the failing span to a function, prompt, tool wrapper, or policy in your repo. Use the span name, tool name, and timestamps on the execution tree.
-2. Decide whether the fix lives in prompt or policy, in tool or retrieval code, or in a guard after the model responds. A defect can need more than one of those.
-3. Write the intended change in one sentence: “When `lookup_order` returns `processing`, the assistant must not claim the order shipped.”
+    <Tip>
+      Inspect can propose a fix. Treat that proposal as a draft against the traces, not as permission to skip the execution tree.
+    </Tip>
+  </Step>
 
-**Outcome:** A named code path and a falsifiable claim about the new behavior. If you cannot name the path, you are still in step 2.
+  <Step title="Implement the fix">
+    Use your team’s normal development workflow. Lemma does not apply the patch.
 
-Inspect can propose a fix. Treat that proposal as a draft against the traces, not as permission to skip the execution tree.
+    <Info>
+      **Input:** The one-sentence claim from the previous step, plus the exported issue or MCP evidence.
+    </Info>
 
-## 4. Implement the fix
+    <Tabs>
+      <Tab title="You edit">
+        1. Make the smallest change that addresses the mechanism in those traces.
+        2. Keep the original user prompt, tool arguments, and tool result from a supporting trace as the fixture you will replay.
+        3. If your team files tickets, [create or link a Linear ticket](/connections/linear) from the issue. Connecting Linear never files one on its own.
+      </Tab>
+      <Tab title="Coding agent edits">
+        Point the agent at the issue markdown or the Lemma MCP tools. Require it to cite the supporting traces in the pull request.
 
-Use your team’s normal development workflow. Lemma does not apply the patch.
+        <Prompt description="Draft the smallest fix from Lemma evidence.">
+          Pull this Lemma issue from the MCP. Make the smallest change that addresses the failure mechanism in the supporting traces. Open a pull request that links the issue id and quotes the cited span evidence.
+        </Prompt>
+      </Tab>
+    </Tabs>
 
-**Input:** The one-sentence claim from step 3, plus the exported issue or MCP evidence.
+    <Check>
+      **Outcome:** A reviewable change whose description links the Lemma issue and quotes the evidence you used. Set the issue to `in_progress` if it is not already.
+    </Check>
 
-**Action:**
+    <Warning>
+      Do not resolve the issue because a pull request exists. Resolution waits on verification.
+    </Warning>
+  </Step>
 
-1. Make the smallest change that addresses the mechanism in those traces.
-2. Keep the original user prompt, tool arguments, and tool result from a supporting trace as the fixture you will replay.
-3. If your team files tickets, [create or link a Linear ticket](/connections/linear) from the issue. Connecting Linear never files one on its own.
-4. If a coding agent is doing the edit, point it at the issue markdown or the Lemma MCP tools, and require it to cite the supporting traces in the pull request.
+  <Step title="Verify against the original evidence">
+    A passing unit test is not enough. Replay the scenario the traces recorded.
 
-**Outcome:** A reviewable change whose description links the Lemma issue and quotes the evidence you used. Set the issue to `in_progress` if it is not already.
+    <Info>
+      **Input:** The fixture from a supporting trace (user message, tool arguments, tool result) and a build that includes your change.
+    </Info>
 
-Do not resolve the issue because a pull request exists. Resolution waits on verification.
+    1. Replay the same user turn against the same tool result, in staging or a local harness.
+    2. Confirm the new conversation no longer produces the bad assistant text.
+    3. Confirm the execution tree still records the tool or span you relied on. A “fix” that skips the lookup hides the defect instead of addressing it.
+    4. Send that run to Lemma and open the new [ready trace](/platform/traces).
+    5. Check that Lemma does not group the new run into the same issue.
 
-## 5. Verify against the original evidence
+    <Check>
+      **Outcome:** At least one new ready trace for the same scenario that does not match the original failure. If it still matches, the mechanism is not fixed; return to naming the root cause.
+    </Check>
+  </Step>
 
-A passing unit test is not enough. Replay the scenario the traces recorded.
+  <Step title="Watch for recurrence and close the loop">
+    Resolve only after production, or a production-like replay, stops reproducing the pattern.
 
-**Input:** The fixture from a supporting trace (user message, tool arguments, tool result) and a build that includes your change.
+    <Info>
+      **Input:** The verified change, shipped or ready to ship, and the original issue.
+    </Info>
 
-**Action:**
+    1. Ship through your usual release path.
+    2. Keep the issue `in_progress` until new production traces for that agent and scenario look clean.
+    3. Resolve the issue and note the fix, including a pull request link when you have one.
+    4. Watch the issue. Matching evidence can reopen a `resolved` issue. It never reopens a `dismissed` one.
+    5. If it reopens, treat that as a failed verification, not as noise. Repeat from inspecting traces on the new supporting traces.
 
-1. Replay the same user turn against the same tool result, in staging or a local harness.
-2. Confirm the new conversation no longer produces the bad assistant text.
-3. Confirm the execution tree still records the tool or span you relied on. A “fix” that skips the lookup hides the defect instead of addressing it.
-4. Send that run to Lemma and open the new [ready trace](/platform/traces).
-5. Check that Lemma does not group the new run into the same issue.
+    <Check>
+      **Outcome:** The issue is `resolved`, or it reopened and you are investigating again with fresh traces. Slack and [webhooks](/connections/webhooks) follow this lifecycle (`issue.resolved`, `issue.reopened`). Recurrence does not create a new Linear ticket.
+    </Check>
 
-**Outcome:** At least one new ready trace for the same scenario that does not match the original failure. If it still matches, the mechanism is not fixed; return to step 3.
-
-## 6. Watch for recurrence and close the loop
-
-Resolve only after production (or a production-like replay) stops reproducing the pattern.
-
-**Input:** The verified change, shipped or ready to ship, and the original issue.
-
-**Action:**
-
-1. Ship through your usual release path.
-2. Keep the issue `in_progress` until new production traces for that agent and scenario look clean.
-3. Resolve the issue and note the fix, including a pull request link when you have one.
-4. Watch the issue. Matching evidence can reopen a `resolved` issue. It never reopens a `dismissed` one.
-5. If it reopens, treat that as a failed verification, not as noise. Repeat from step 2 on the new supporting traces.
-
-**Outcome:** The issue is `resolved`, or it reopened and you are investigating again with fresh traces. Slack and [webhooks](/connections/webhooks) follow this lifecycle (`issue.resolved`, `issue.reopened`). Recurrence does not create a new Linear ticket.
-
-<Note>
-  Dismiss and resolve are different terminal states. Dismiss means “not a real problem.” Resolve means “the defect is fixed.” Pick resolve after a verified change.
-</Note>
+    <Note>
+      Dismiss and resolve are different terminal states. Dismiss means “not a real problem.” Resolve means “the defect is fixed.” Pick resolve after a verified change.
+    </Note>
+  </Step>
+</Steps>
 
 ## Worked example: shipped claim on a processing order
 
 This example uses the `support-agent` from [Building high-quality traces](/guides/building-high-quality-traces). Substitute your agent name and tool names.
 
-**Issue:** “Agent tells the customer an order shipped while `lookup_order` still returns processing.”
+<Note>
+  **Issue:** “Agent tells the customer an order shipped while `lookup_order` still returns processing.”
+</Note>
 
-**Triage.** The issue is `open`, assigned to `support-agent`, with supporting traces across several hours. You open three of them. Each user asks “Where is my order #1843?” and the assistant says the order shipped. You set the issue to `in_progress`. You do not dismiss it as a one-off hallucination: the same mismatch repeats.
-
-**Evidence.** In each trace, **Conversation** shows “It shipped yesterday and arrives Friday.” **Execution tree** shows `lookup_order` returning `{ "status": "processing" }` with no tracking number. The generation that produced the assistant turn ran after that tool result. The defect is the answer ignoring the tool output, not a failed HTTP call.
-
-**Root cause.** The answer path has no rule that the ship-status sentence must match the last `lookup_order` result. When the lookup has no tracking, the model invents a shipping story.
-
-**Fix.** You add a grounded-answer rule: if `lookup_order.status` is not `shipped`, the assistant reports the current status and does not name a ship date or tracking number. Optionally, a post-generation check rejects a “shipped” claim when the last lookup disagrees, then retries or falls back to a template. The pull request cites the issue and quotes `{ "status": "processing" }` next to the invented “shipped yesterday” line.
-
-**Verify.** You replay “Where is my order #1843?” with `lookup_order` stubbed to `processing`. The new conversation says the order is still processing. The execution tree still includes `lookup_order`. You send the run to Lemma. The new ready trace does not join the original issue.
-
-**Close the loop.** After that build is in production, you resolve the issue with the pull request link. The next day, matching evidence does not reopen it. If a later trace claims shipped against a `processing` lookup, the issue reopens and you inspect that new tree instead of assuming the first patch covered every path.
+<AccordionGroup>
+  <Accordion title="Triage" defaultOpen>
+    The issue is `open`, assigned to `support-agent`, with supporting traces across several hours. You open three of them. Each user asks “Where is my order #1843?” and the assistant says the order shipped. You set the issue to `in_progress`. You do not dismiss it as a one-off hallucination: the same mismatch repeats.
+  </Accordion>
+  <Accordion title="Evidence">
+    In each trace, **Conversation** shows “It shipped yesterday and arrives Friday.” **Execution tree** shows `lookup_order` returning `{ "status": "processing" }` with no tracking number. The generation that produced the assistant turn ran after that tool result. The defect is the answer ignoring the tool output, not a failed HTTP call.
+  </Accordion>
+  <Accordion title="Root cause">
+    The answer path has no rule that the ship-status sentence must match the last `lookup_order` result. When the lookup has no tracking, the model invents a shipping story.
+  </Accordion>
+  <Accordion title="Fix">
+    You add a grounded-answer rule: if `lookup_order.status` is not `shipped`, the assistant reports the current status and does not name a ship date or tracking number. A post-generation check can reject a “shipped” claim when the last lookup disagrees, then retry or fall back to a template. The pull request cites the issue and quotes `{ "status": "processing" }` next to the invented “shipped yesterday” line.
+  </Accordion>
+  <Accordion title="Verify">
+    You replay “Where is my order #1843?” with `lookup_order` stubbed to `processing`. The new conversation says the order is still processing. The execution tree still includes `lookup_order`. You send the run to Lemma. The new ready trace does not join the original issue.
+  </Accordion>
+  <Accordion title="Close the loop">
+    After that build is in production, you resolve the issue with the pull request link. Matching evidence does not reopen it. If a later trace claims shipped against a `processing` lookup, the issue reopens and you inspect that new tree instead of assuming the first patch covered every path.
+  </Accordion>
+</AccordionGroup>
 
 ## Related pages
 
