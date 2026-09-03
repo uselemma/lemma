@@ -45,6 +45,8 @@
     "options": [
       "copy",
       "view",
+      "mcp",
+      "cursor",
       {
         "title": "Open in Claude Code",
         "description": "Ask questions about this page.",
@@ -58,9 +60,7 @@
             }
           ]
         }
-      },
-      "mcp",
-      "cursor"
+      }
     ]
   },
   "navigation": {
