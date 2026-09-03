@@ -708,3 +708,19 @@ def test_langgraph_forwards_release_onto_ingest_payload():
     handler.on_chain_start({"name": "StateGraph"}, {"topic": "docs"}, run_id="graph-1")
     handler.on_chain_end({"answer": "done"}, run_id="graph-1")
     assert calls[0]["body"]["trace"]["release"] == "1.8.3"
+
+
+def test_handler_exposes_langchain_callback_flags():
+    handler = langchain(
+        api_key="key",
+        project_id="10000000-0000-0000-0000-000000000001",
+    )
+    assert handler.run_inline is False
+    assert handler.raise_error is False
+    assert handler.ignore_llm is False
+    assert handler.ignore_chain is False
+    assert handler.ignore_agent is False
+    assert handler.ignore_retriever is False
+    assert handler.ignore_chat_model is False
+    assert handler.ignore_retry is False
+    assert handler.ignore_custom_event is False

@@ -560,6 +560,17 @@ class LemmaLangChainCallbackHandler:
     """LangChain callback handler that owns one Lemma trace per root run."""
 
     name = "lemma"
+    # LangChain 1.x reads these as attributes (not getattr). Missing
+    # `run_inline` crashes ainvoke/ainvoke graphs before any span is recorded.
+    raise_error = False
+    run_inline = False
+    ignore_llm = False
+    ignore_retry = False
+    ignore_chain = False
+    ignore_agent = False
+    ignore_retriever = False
+    ignore_chat_model = False
+    ignore_custom_event = False
 
     def __init__(
         self,
