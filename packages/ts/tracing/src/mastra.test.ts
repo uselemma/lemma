@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { jsonBody } from "../test-helpers";
 import { disableDebugMode } from "./debug-mode";
 import {
   LemmaMastraExporter,
@@ -6,10 +7,6 @@ import {
   type MastraExportedSpan,
   type MastraTracingEvent,
 } from "./mastra";
-
-function jsonBody(call: unknown[]) {
-  return JSON.parse(String((call[1] as RequestInit).body));
-}
 
 function span(partial: Partial<MastraExportedSpan> & Pick<MastraExportedSpan, "id" | "name" | "type">): MastraExportedSpan {
   return {

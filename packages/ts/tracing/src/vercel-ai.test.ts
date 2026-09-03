@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { jsonBody } from "../test-helpers";
 import { Lemma } from "./client";
 import { vercelAI } from "./vercel-ai";
-
-function jsonBody(call: unknown[]) {
-  return JSON.parse(String((call[1] as RequestInit).body));
-}
 
 describe("vercelAI", () => {
   it("creates and ends an AI SDK v7 trace without lemma.trace", async () => {

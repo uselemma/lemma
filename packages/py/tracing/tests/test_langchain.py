@@ -1,27 +1,14 @@
 import json
 
+from helpers import PROJECT_ID, make_transport
 from uselemma_tracing import langchain, langgraph
-
-
-def make_transport(calls):
-    def transport(url, headers, body):
-        calls.append(
-            {
-                "url": url,
-                "headers": headers,
-                "body": json.loads(body.decode()),
-            }
-        )
-        return 201, "{}"
-
-    return transport
 
 
 def test_langchain_records_generation_retriever_and_tool_children():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
 
@@ -93,7 +80,7 @@ def test_llm_end_emits_usage_from_llm_output_token_usage():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
 
@@ -129,7 +116,7 @@ def test_chat_model_end_stamps_response_metadata_model_name():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
 
@@ -172,7 +159,7 @@ def test_standalone_chat_model_finalizes_one_owned_trace():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
 
@@ -234,7 +221,7 @@ def test_configurable_conversation_and_user_keys():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
         thread_id_key="conversation_id",
         user_id_key="customer_id",
@@ -262,7 +249,7 @@ def test_concurrent_roots_and_missing_parent_isolation():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
 
@@ -300,7 +287,7 @@ def test_langchain_records_errors():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
 
@@ -323,7 +310,7 @@ def test_langchain_fails_root_for_message_less_exceptions():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
 
@@ -345,7 +332,7 @@ def test_langchain_records_is_error_tool_end_as_error_without_output():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
 
@@ -376,7 +363,7 @@ def test_langchain_records_payload_encoded_tool_failure_as_error():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
 
@@ -413,7 +400,7 @@ def test_records_inputs_outputs_and_errors():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
 
@@ -463,7 +450,7 @@ def test_message_normalization_and_provider_from_class():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
 
@@ -555,7 +542,7 @@ def test_flush_finalizes_once_and_shutdown_does_not_resend():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
 
@@ -586,7 +573,7 @@ def test_langgraph_uses_default_agent_name_and_nested_node_spans():
     calls = []
     handler = langgraph(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
 
@@ -635,7 +622,7 @@ def test_langgraph_extracts_current_turn_from_message_state():
     calls = []
     handler = langgraph(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
         thread_id_key="thread_id",
     )
@@ -673,7 +660,7 @@ def test_langchain_forwards_release_onto_ingest_payload():
     calls = []
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
         release="1.8.3",
     )
@@ -689,7 +676,7 @@ def test_langchain_forwards_release_onto_ingest_payload():
 def test_langchain_flush_does_not_raise_on_ingest_503():
     handler = langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=lambda _url, _headers, _body: (503, "nope"),
     )
     handler.on_chain_start({"name": "support-agent"}, "hi", run_id="chain-1")
@@ -701,10 +688,36 @@ def test_langgraph_forwards_release_onto_ingest_payload():
     calls = []
     handler = langgraph(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
         release="1.8.3",
     )
     handler.on_chain_start({"name": "StateGraph"}, {"topic": "docs"}, run_id="graph-1")
     handler.on_chain_end({"answer": "done"}, run_id="graph-1")
     assert calls[0]["body"]["trace"]["release"] == "1.8.3"
+
+
+def test_handler_exposes_langchain_callback_flags():
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+    )
+    assert handler.run_inline is False
+    assert handler.raise_error is False
+    assert handler.ignore_llm is False
+    assert handler.ignore_chain is False
+    assert handler.ignore_agent is False
+    assert handler.ignore_retriever is False
+    assert handler.ignore_chat_model is False
+    assert handler.ignore_retry is False
+    assert handler.ignore_custom_event is False
+
+
+def test_handler_is_langchain_base_callback_handler():
+    from langchain_core.callbacks.base import BaseCallbackHandler
+
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+    )
+    assert isinstance(handler, BaseCallbackHandler)
