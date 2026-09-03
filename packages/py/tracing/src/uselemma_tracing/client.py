@@ -396,12 +396,19 @@ class TraceContext:
     output_value: Any = None
     error: str | None = None
     spans: list[dict[str, Any]] = field(default_factory=list)
+    _handles: dict[str, SpanHandle] = field(default_factory=dict, repr=False, compare=False)
 
     def output(self, value: Any) -> None:
         self.output_value = value
 
     def fail(self, error: Any) -> None:
         self.error = _failure_message(error)
+
+    def has_span(self, span_id: str) -> bool:
+        return any(span.get("id") == span_id for span in self.spans)
+
+    def span_handle(self, span_id: str) -> SpanHandle | None:
+        return self._handles.get(span_id)
 
     def _debug_span(self, event: str, span: dict[str, Any]) -> None:
         _lemma_debug(
@@ -740,6 +747,7 @@ class TraceContext:
             }
         )
         self.spans.append(handle.payload)
+        self._handles[handle.id] = handle
         self._debug_span(
             "span started",
             handle.payload,
@@ -800,6 +808,7 @@ class TraceContext:
             }
         )
         self.spans.append(handle.payload)
+        self._handles[handle.id] = handle
         self._debug_span(
             "span started",
             handle.payload,
@@ -849,6 +858,7 @@ class TraceContext:
             }
         )
         self.spans.append(handle.payload)
+        self._handles[handle.id] = handle
         self._debug_span(
             "span started",
             handle.payload,
@@ -1105,6 +1115,38 @@ class Lemma:
         status, so a failed send can be retried as-is.
         """
         self._send(context, started_at, ended_at or _now())
+
+    def start_turn(
+        self,
+        name: str = "trace",
+        *,
+        id: str | None = None,
+        input: Any = None,
+        thread_id: str | None = None,
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        duration_ms: int | None = None,
+        started_at: datetime | str | None = None,
+    ) -> Any:
+        from .turn import start_turn as _start_turn
+
+        return _start_turn(
+            self,
+            name=name,
+            id=id,
+            input=input,
+            thread_id=thread_id,
+            user_id=user_id,
+            metadata=metadata,
+            duration_ms=duration_ms,
+            started_at=started_at,
+        )
+
+    @staticmethod
+    def attach(token: str | dict[str, Any]) -> Any:
+        from .turn import attach_turn
+
+        return attach_turn(token)
 
     def _stamp_release(self, payload: dict[str, Any]) -> dict[str, Any]:
         if self.release:

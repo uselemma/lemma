@@ -213,6 +213,40 @@ await trace.end({ output });
 
 Detached child records require `traceId`. Pass `parentSpanId` when the record belongs under a span; otherwise the SDK cannot safely preserve nesting.
 
+## Host + sandbox (one turn across processes)
+
+`threadId` / `thread_id` is the multi-**turn** conversation key. Do not start one root per process and share `threadId` when the processes are really one user turn (host orchestrator + E2B-style sandbox). The sandbox must not hold `LEMMA_API_KEY` or call `/traces/ingest`.
+
+Host:
+
+```typescript
+const turn = lemma.startTurn({
+  name: "agent-turn",
+  input: userMessage,
+  threadId,
+  userId,
+});
+const sandbox = turn.startSpan({ name: "e2b-sandbox" });
+await runChild({ LEMMA_TURN: JSON.stringify(turn.export({ parentSpanId: sandbox.id })) });
+for (const event of childEvents) turn.apply(event);
+sandbox.end();
+await turn.end({ output });
+```
+
+Child:
+
+```typescript
+import { attachTurn } from "@uselemma/tracing";
+
+const local = attachTurn(process.env.LEMMA_TURN);
+local.recordTool({ name: "search_docs", input: query, output: docs });
+emit(local.records()); // existing stdout / RPC / E2B event channel
+```
+
+`turn.end()` / coordinator `ingest()` stays strict so a failed send can be retried. Re-applying the same journal does not duplicate spans (stable ids). If the child exits uncleanly, end the sandbox span as ERROR; incomplete tools are allowed.
+
+Python mirrors this with `start_turn`, `attach_turn`, `apply`, and `end`.
+
 ## Native Contract Props
 
 Prefer SDK props over hand-built attribute names:

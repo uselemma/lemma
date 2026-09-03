@@ -33,7 +33,7 @@ Every integration must satisfy this product contract:
 - Retrieval, ranking, planning, routing, and app logic are spans: `recordSpan(...)` / `record_span(...)` or `startSpan(...)` / `start_span(...)`.
 - Nested work is recorded on the parent span handle when it should appear under that parent.
 
-If the app cannot produce this shape at the exact call site, pass IDs and record from the coordinator that knows the full trace, or start one top-level trace per process and carry the same `threadId`.
+If the app cannot produce this shape at the exact call site, pass IDs and record from the coordinator that knows the full trace. For a host + sandbox (E2B-style) that is **one turn**, use `startTurn` / `attachTurn` / `apply` so the child records a journal and the host ingests one root. Do not start a second root with the same `threadId` — `threadId` correlates turns of a conversation, not processes of one turn. See [references/direct-sdk.md](references/direct-sdk.md).
 
 When you assemble a trace yourself and deliver it with `ingest()` (queues, workers, backfills), send one complete payload — root input/output, thread/user, and all child spans — when the turn finishes. This is required; patching a trace over time is not currently supported. Retries of the same payload are safe (stable span IDs are skipped). `ingest()` is not an incremental merge API: omitted root fields do not preserve prior values, and analysis runs once after an idle debounce.
 
@@ -48,7 +48,7 @@ When you assemble a trace yourself and deliver it with `ingest()` (queues, worke
 | LangChain | Use the built-in Lemma LangChain callback handler. |
 | LangGraph | Use the built-in Lemma LangGraph callback handler; it follows LangChain callback semantics with LangGraph defaults. |
 | Mastra | Use the built-in Lemma Mastra exporter (`LemmaMastraExporter` / `mastra()`). Do not wrap normal Mastra agent/workflow runs in `lemma.trace(...)`; register the exporter in Mastra `Observability` and let it create one Lemma trace per run. See [Mastra](https://docs.uselemma.ai/integrations/mastra). |
-| Streaming or callbacks where one function does not own the whole run | In TypeScript, use a trace handle and call/await `trace.end(...)` from the terminal callback or finalization path. In Python, prefer a callback trace around the owned run and record `start_*` handles inside that callback. |
+| Host orchestrator + sandbox/worker (E2B-style) that is one user turn | TypeScript `startTurn` / `attachTurn` / `apply` (Python `start_turn` / `attach_turn`). Child records a journal; host `ingest()`s one root. Do not start one root per process with the same `threadId`. See [references/direct-sdk.md](references/direct-sdk.md). |
 | App already has Langfuse | Keep Langfuse only if the customer still needs it, and add Lemma SDK tracing alongside it. Langfuse instrumentation is not sufficient for Lemma because it usually does not produce the Lemma trace contract. Do not route new Lemma work through Langfuse. |
 | Existing OpenTelemetry only | Do not tear it out. Keep it if the user needs it, but use the Lemma SDK for the product trace contract unless the user explicitly asks for OTel export compatibility work. |
 
@@ -172,6 +172,7 @@ Validation checklist before considering an integration complete:
 - Tool calls are typed tool children with input arguments and output/error.
 - App work is recorded as spans, nested under the correct parent when relevant.
 - Related conversation turns share `threadId` / `thread_id`.
+- Host + sandbox work that is one user turn is one root via `startTurn` / `attachTurn` / `apply`, not a second root with the same `threadId`.
 - TypeScript trace handles are ended from the terminal callback, `finally` block, or job completion path.
 - Debug logs show `trace sent` and a final `spanCount` / `span_count` that matches the expected child records.
 - The dashboard trace shape matches the code path: root, generations, tools, spans, parent/child nesting, and thread/user context when expected.

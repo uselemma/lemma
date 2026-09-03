@@ -162,6 +162,46 @@ Automatic delivery (`trace` / `async_trace`) fails open: a Lemma ingest
 the caller's application. LangChain and OpenAI Agents flush through this path.
 Use `ingest()` when you need a failed send to raise so you can retry.
 
+## One turn across processes
+
+`thread_id` correlates **turns** of a conversation. It is not how you glue a
+host process and an E2B-style sandbox into one turn. The host mints a versioned
+context token, the child records a serializable journal without a Lemma API key,
+and the host applies the journal then `ingest()`s once.
+
+```python
+import json
+from uselemma_tracing import Lemma, attach_turn
+
+lemma = Lemma()
+turn = lemma.start_turn(
+    "agent-turn",
+    input=user_message,
+    thread_id=conversation_id,
+)
+sandbox = turn.start_span(name="e2b-sandbox")
+token = json.dumps(turn.export(parent_span_id=sandbox.id))
+# pass token to the child on the existing channel, then:
+turn.apply(child_journal)
+sandbox.end()
+turn.end(output=answer)  # strict ingest
+```
+
+In the child, do not construct `Lemma` and do not call `/traces/ingest`:
+
+```python
+import json
+import os
+from uselemma_tracing import attach_turn
+
+local = attach_turn(os.environ["LEMMA_TURN"])
+local.record_tool(name="search_docs", input=query, output=docs)
+print(json.dumps(local.records()))
+```
+
+The journal uses the same camelCase schema as the TypeScript SDK so a TS host
+can apply a Python child's dump (and the reverse).
+
 ## OpenAI Agents SDK
 
 Install the OpenAI Agents extra and register the Lemma processor:
