@@ -57,4 +57,4 @@ Once installed, the agent will automatically use these skills when relevant — 
 
 ## Versioning
 
-Skills are versioned alongside Lemma's tracing docs. When the recommended instrumentation or export path changes, the skill is updated in the same PR so agents generate up-to-date code.
+Skills follow [SemVer](https://semver.org/). Bump `metadata.version` in each changed skill's `SKILL.md` in the same PR. See [CONTRIBUTING.md](../CONTRIBUTING.md).

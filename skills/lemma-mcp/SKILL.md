@@ -8,6 +8,8 @@ description: >-
   through all urgent issues and validate each", or "dismiss everything under X
   impact." Also use when browsing, ranking, or acting on Lemma detections over
   MCP.
+metadata:
+  version: 1.0.0
 ---
 
 # Lemma MCP
