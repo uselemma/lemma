@@ -9,10 +9,6 @@ Lemma turns each agent execution into a trace, finds the executions that went wr
 
 For the SDK vocabulary (trace, span, generation, tool call, thread, project), see [SDK concepts](/tracing/instrumentation/concepts). For the dashboard vocabulary (issues, occurrences, artifacts, agents), see [Platform concepts](/platform/concepts). To send your first trace, see [Quickstart](/tracing/instrumentation/setup).
 
-<Frame>
-  <img src="/images/platform/dashboard-home.png" alt="Project dashboard showing to-do items, headline stats, and resolved-versus-dismissed and traces-per-month charts" />
-</Frame>
-
 ## How a trace becomes an issue
 
 An instrumented agent emits one trace per execution, or per conversation turn when you set a thread ID. See [Concepts](/platform/concepts) for how Lemma turns that trace into an issue — the detection timing, the probabilistic grouping, and the vocabulary for both.
