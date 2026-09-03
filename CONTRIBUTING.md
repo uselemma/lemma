@@ -10,11 +10,11 @@ To contribute code: fork the repo, develop locally, and open a pull request agai
 
 ### Pull requests
 
-Ready (non-draft) pull requests get a Thermo-Nuclear Review. Until the PR merges, the author:
+Until the PR merges, the author:
 
 1. **Keeps the branch up to date with `main`.** Merge `origin/main` (or `upstream/main` from a fork), or use GitHub's **Update branch** button. Do not leave merge conflicts.
-2. **Resolves every review comment.** Address Thermo-Nuclear Review and human review by pushing a fix or replying on the thread. Leave no unresolved conversations.
-3. **Keeps CI green.** Every check on the PR must pass. Push a fix for failures. Re-run only when the failure is infrastructure.
+2. **Resolves every review comment.** Thermo-Nuclear Review runs on ready PRs, plus human review. Fix it or reply on the thread; do not leave comments unanswered.
+3. **Keeps every CI check green.** Path-filtered plugin workflows that do not run are fine; anything that does run must pass. Push a fix for failures. Re-run only when the failure is infrastructure.
 
 Mark the PR **Ready for review** when you want it reviewed. Drafts skip Thermo-Nuclear Review.
 
