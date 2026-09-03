@@ -33,7 +33,7 @@ Every integration must satisfy this product contract:
 - Retrieval, ranking, planning, routing, and app logic are spans: `recordSpan(...)` / `record_span(...)` or `startSpan(...)` / `start_span(...)`.
 - Nested work is recorded on the parent span handle when it should appear under that parent.
 
-If the app cannot produce this shape at the exact call site, pass IDs and record from the coordinator that knows the full trace. For a host + sandbox that is one turn, use `startTurn` / `attachTurn` / `apply` — see [references/direct-sdk.md](references/direct-sdk.md) and [One turn across processes](https://docs.uselemma.ai/tracing/instrumentation/cross-process-turns).
+If the app cannot produce this shape at the exact call site, pass IDs and record from the coordinator that knows the full trace. For a host + sandbox that is one turn, use `startTurn` / `attachTurn` / `apply` — see [references/direct-sdk.md](references/direct-sdk.md) and [Cross-process turns](https://docs.uselemma.ai/tracing/instrumentation/cross-process-turns).
 
 When you assemble a trace yourself and deliver it with `ingest()` (queues, workers, backfills), send one complete payload — root input/output, thread/user, and all child spans — when the turn finishes. This is required; patching a trace over time is not currently supported. Retries of the same payload are safe (stable span IDs are skipped). `ingest()` is not an incremental merge API: omitted root fields do not preserve prior values, and analysis runs once after an idle debounce.
 
@@ -49,7 +49,7 @@ When you assemble a trace yourself and deliver it with `ingest()` (queues, worke
 | LangGraph | Use the built-in Lemma LangGraph callback handler; it follows LangChain callback semantics with LangGraph defaults. |
 | Mastra | Use the built-in Lemma Mastra exporter (`LemmaMastraExporter` / `mastra()`). Do not wrap normal Mastra agent/workflow runs in `lemma.trace(...)`; register the exporter in Mastra `Observability` and let it create one Lemma trace per run. See [Mastra](https://docs.uselemma.ai/integrations/mastra). |
 | Streaming or callbacks where one function does not own the whole run | In TypeScript, use a trace handle and call/await `trace.end(...)` from the terminal callback or finalization path. In Python, prefer a callback trace around the owned run and record `start_*` handles inside that callback. |
-| Host orchestrator + sandbox/worker (E2B-style) that is one user turn | TypeScript `startTurn` / `attachTurn` / `apply` (Python `start_turn` / `attach_turn`). Child records a journal; host `ingest()`s one root. See [references/direct-sdk.md](references/direct-sdk.md) and [One turn across processes](https://docs.uselemma.ai/tracing/instrumentation/cross-process-turns). |
+| Host orchestrator + sandbox/worker (E2B-style) that is one user turn | TypeScript `startTurn` / `attachTurn` / `apply` (Python `start_turn` / `attach_turn`). Child records a journal; host `ingest()`s one root. See [references/direct-sdk.md](references/direct-sdk.md) and [Cross-process turns](https://docs.uselemma.ai/tracing/instrumentation/cross-process-turns). |
 | App already has Langfuse | Keep Langfuse only if the customer still needs it, and add Lemma SDK tracing alongside it. Langfuse instrumentation is not sufficient for Lemma because it usually does not produce the Lemma trace contract. Do not route new Lemma work through Langfuse. |
 | Existing OpenTelemetry only | Do not tear it out. Keep it if the user needs it, but use the Lemma SDK for the product trace contract unless the user explicitly asks for OTel export compatibility work. |
 
@@ -64,7 +64,7 @@ Use docs in this order:
    - Quickstart: `https://docs.uselemma.ai/tracing/instrumentation/setup.md`
    - Step-by-step agent instrumentation: `https://docs.uselemma.ai/tracing/instrumentation/instrument-an-agent.md`
    - Traces and handles: `https://docs.uselemma.ai/tracing/instrumentation/traces.md`
-   - One turn across processes: `https://docs.uselemma.ai/tracing/instrumentation/cross-process-turns.md`
+   - Cross-process turns: `https://docs.uselemma.ai/tracing/instrumentation/cross-process-turns.md`
    - Generations: `https://docs.uselemma.ai/tracing/instrumentation/generations.md`
    - Tool calls: `https://docs.uselemma.ai/tracing/instrumentation/tool-calls.md`
    - Spans: `https://docs.uselemma.ai/tracing/instrumentation/spans.md`

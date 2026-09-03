@@ -162,7 +162,7 @@ Automatic delivery (`trace` / `async_trace`) fails open: a Lemma ingest
 the caller's application. LangChain and OpenAI Agents flush through this path.
 Use `ingest()` when you need a failed send to raise so you can retry.
 
-## One turn across processes
+## Cross-process turns
 
 `thread_id` correlates **turns** of a conversation. It is not how you glue a
 host process and an E2B-style sandbox into one turn. The host mints a versioned

@@ -188,7 +188,7 @@ await lemma.ingest(context, { startedAt });
 
 Automatic delivery (`trace(options, fn)` and `TraceHandle.end()`) fails open: a Lemma ingest 4xx/5xx or network error is logged in debug mode and dropped so it cannot fail the caller's application. Framework integrations that close through `end()` inherit this. Use `ingest()` when you need a failed send to throw so you can retry.
 
-## One turn across processes
+## Cross-process turns
 
 `threadId` correlates **turns** of a conversation. It is not how you glue a host process and an E2B-style sandbox into one turn. For that, the host mints a versioned context token, the child records a serializable journal without a Lemma API key, and the host applies the journal then `ingest()`s once.
 
