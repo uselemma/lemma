@@ -1,4 +1,4 @@
-from .client import Lemma, SpanHandle, TraceContext
+from .client import Lemma, SpanHandle, TraceContext, TraceHandle
 from .turn import (
     apply_turn_journal,
     assemble_turn,
@@ -32,6 +32,7 @@ __all__ = [
     "Lemma",
     "SpanHandle",
     "TraceContext",
+    "TraceHandle",
     "TurnHandle",
     "AttachedTurn",
     "apply_turn_journal",

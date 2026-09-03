@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from .client import Lemma, TraceContext, _datetime_or_now, _iso, _now
+from .client import Lemma, TraceContext, TraceHandle, _datetime_or_now, _iso, _now
 
 TURN_CONTEXT_VERSION = 1
 TURN_JOURNAL_VERSION = 1
@@ -403,75 +403,22 @@ class AttachedTurn:
         )
 
 
-class TurnHandle:
-    def __init__(
-        self,
-        lemma: Lemma,
-        *,
-        name: str = "trace",
-        id: str | None = None,
-        input: Any = None,
-        thread_id: str | None = None,
-        user_id: str | None = None,
-        metadata: dict[str, Any] | None = None,
-        duration_ms: int | None = None,
-        started_at: datetime | str | None = None,
-    ) -> None:
-        self._lemma = lemma
-        self.context = TraceContext(
-            name=name,
-            id=id or str(uuid.uuid4()),
-            input=input,
-            metadata=metadata,
-            thread_id=thread_id,
-            user_id=user_id,
-            duration_ms=duration_ms,
-        )
-        self.started_at = _datetime_or_now(started_at)
-        self._ended = False
-
-    @property
-    def id(self) -> str:
-        return self.context.id
-
+class TurnHandle(TraceHandle):
     def export(self, parent_span_id: str | None = None) -> dict[str, Any]:
         return _compact(
             {
                 "version": TURN_CONTEXT_VERSION,
                 "traceId": self.id,
                 "parentSpanId": parent_span_id,
-                "threadId": self.context.thread_id,
-                "userId": self.context.user_id,
+                "threadId": self.thread_id,
+                "userId": self.user_id,
                 "startedAt": _iso(self.started_at),
-                "name": self.context.name,
+                "name": self.name,
             }
         )
 
     def apply(self, journal: Any) -> None:
-        apply_turn_journal(self.context, journal)
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self.context, name)
-
-    def end(
-        self,
-        output: Any = None,
-        *,
-        ended_at: datetime | str | None = None,
-        duration_ms: int | None = None,
-    ) -> None:
-        if self._ended:
-            return
-        self._ended = True
-        if output is not None:
-            self.context.output(output)
-        if duration_ms is not None:
-            self.context.duration_ms = duration_ms
-        self._lemma.ingest(
-            self.context,
-            started_at=self.started_at,
-            ended_at=_datetime_or_now(ended_at),
-        )
+        apply_turn_journal(self, journal)
 
 
 def start_turn(lemma: Lemma, **kwargs: Any) -> TurnHandle:

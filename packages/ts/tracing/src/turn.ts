@@ -557,24 +557,3 @@ export function attachTurn(
 ): AttachedTurn {
   return new AttachedTurn(token);
 }
-
-declare module "./client" {
-  interface Lemma {
-    startTurn(options?: TraceOptions): TurnHandle;
-    attach(token: string | TurnContextToken): AttachedTurn;
-  }
-}
-
-Lemma.prototype.startTurn = function startTurnMethod(
-  this: Lemma,
-  options: TraceOptions = {},
-) {
-  return startTurn(this, options);
-};
-
-Lemma.prototype.attach = function attachMethod(
-  token: string | TurnContextToken,
-) {
-  // Factory: the Lemma instance is unused, matching Python `Lemma.attach`.
-  return attachTurn(token);
-};

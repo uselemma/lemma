@@ -20,6 +20,7 @@ import {
 } from "./debug-mode";
 import { failureMessage } from "./error-message";
 import { normalizeRelease } from "./release";
+import type { AttachedTurn, TurnContextToken, TurnHandle } from "./turn";
 import {
   attachResultUsage,
   normalizeTokenUsage,
@@ -1198,6 +1199,17 @@ export class Lemma {
       options.startedAt,
       options.endedAt ?? new Date(),
     );
+  }
+
+  startTurn(options: TraceOptions = {}): TurnHandle {
+    // Lazy require avoids a runtime cycle with turn.ts.
+    const { startTurn } = require("./turn") as typeof import("./turn");
+    return startTurn(this, options);
+  }
+
+  static attach(token: string | TurnContextToken): AttachedTurn {
+    const { attachTurn } = require("./turn") as typeof import("./turn");
+    return attachTurn(token);
   }
 
   recordSpan(options: DetachedSpanOptions): SpanHandle | NoopSpanHandle {

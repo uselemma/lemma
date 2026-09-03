@@ -915,6 +915,56 @@ class TraceContext:
         }
 
 
+class TraceHandle(TraceContext):
+    """Host-side handle: span APIs inherited from TraceContext; end() ingests strictly."""
+
+    def __init__(
+        self,
+        lemma: Lemma,
+        *,
+        name: str = "trace",
+        id: str | None = None,
+        input: Any = None,
+        thread_id: str | None = None,
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        duration_ms: int | None = None,
+        started_at: datetime | str | None = None,
+    ) -> None:
+        super().__init__(
+            name=name,
+            id=id or str(uuid.uuid4()),
+            input=input,
+            metadata=metadata,
+            thread_id=thread_id,
+            user_id=user_id,
+            duration_ms=duration_ms,
+        )
+        self._lemma = lemma
+        self.started_at = _datetime_or_now(started_at)
+        self._ended = False
+
+    def end(
+        self,
+        output: Any = None,
+        *,
+        ended_at: datetime | str | None = None,
+        duration_ms: int | None = None,
+    ) -> None:
+        if self._ended:
+            return
+        self._ended = True
+        if output is not None:
+            self.output(output)
+        if duration_ms is not None:
+            self.duration_ms = duration_ms
+        self._lemma.ingest(
+            self,
+            started_at=self.started_at,
+            ended_at=_datetime_or_now(ended_at),
+        )
+
+
 class Lemma:
     def __init__(
         self,

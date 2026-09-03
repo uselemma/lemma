@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from uselemma_tracing import Lemma, attach_turn, assemble_turn, parse_turn_context_token
+from uselemma_tracing import Lemma, attach_turn, assemble_turn, parse_turn_context_token, TraceHandle
 from uselemma_tracing.turn import apply_turn_journal
 
 PROJECT_ID = "10000000-0000-0000-0000-000000000001"
@@ -181,6 +181,11 @@ def test_turn_end_stays_strict():
     turn = host.start_turn("agent-turn")
     with pytest.raises(RuntimeError, match="failed to ingest trace"):
         turn.end(output="ok")
+
+
+def test_turn_handle_extends_trace_handle():
+    turn = _host([]).start_turn("agent-turn")
+    assert isinstance(turn, TraceHandle)
 
 
 def test_parse_turn_context_token_rejects_invalid():
