@@ -112,6 +112,10 @@ Validate the docs config:
 python3 -m json.tool docs/docs.json >/dev/null
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). The pull request author keeps the branch current with `main`, resolves every review comment, and keeps CI green.
+
 ## Releases
 
 Package publishing is driven by package version changes on `main`.
