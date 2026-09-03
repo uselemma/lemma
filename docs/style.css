@@ -116,11 +116,11 @@ img[src*="/icons/"] {
   filter: brightness(0) saturate(100%) invert(1);
 }
 
-/* Keep the navbar wordmark close to uselemma.ai (mark is 16px there). */
+/* Keep the navbar wordmark smaller than Mintlify’s 28px default, larger than the 16px marketing mark. */
 header .nav-logo {
-  height: 16px !important;
+  height: 22px !important;
   width: auto !important;
-  max-height: 16px !important;
+  max-height: 22px !important;
 }
 
 /* Typography: body text + headings letter-spacing */
