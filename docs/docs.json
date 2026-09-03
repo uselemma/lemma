@@ -160,6 +160,7 @@
           {
             "group": "Guides",
             "pages": [
+              "guides/turning-issues-into-fixes",
               "guides/building-high-quality-traces",
               "guides/instrumenting-multi-turn-agents",
               "guides/examples",

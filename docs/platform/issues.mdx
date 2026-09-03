@@ -38,12 +38,9 @@ Grouping aims for one issue per underlying defect, but it isn’t perfect. If tw
 
 ## Investigating an issue
 
-1. Filter the issues table by status, agent, assignee, flagged state, or search term.
-2. Open the issue and read why Lemma flagged it.
-3. Open the supporting traces and review both the conversation and the execution tree.
-4. Ask **[Inspect](/platform/inspect)** why it fired, what scenarios triggered it, and how to fix it.
-5. Export it as markdown through `GET /issues/{id}/markdown` or the UI equivalent, to paste into a ticket or hand to a coding agent.
-6. Resolve or dismiss it, and add feedback if the finding was wrong so future extraction can learn from it.
+Use this page for status, priority, grouping, and the connections below. For the procedure, see [Turn a Lemma issue into a verified fix](/guides/turning-issues-into-fixes).
+
+Do not resolve from the issue title, an Inspect answer, or an open pull request. Dismiss here only when the finding is not a real defect. Add feedback so later extraction can learn.
 
 ## Workflow connections
 
@@ -67,6 +64,9 @@ Connecting Slack or Linear never auto-creates a ticket, and recurrence never cre
   </Card>
   <Card title="Inspect" href="/platform/inspect">
     Ask why an issue was flagged and how to fix it.
+  </Card>
+  <Card title="Turn an issue into a fix" href="/guides/turning-issues-into-fixes">
+    Triage, inspect evidence, ship a change, and confirm it does not recur.
   </Card>
   <Card title="Artifacts" href="/platform/artifacts">
     Agent context that can sharpen detection.

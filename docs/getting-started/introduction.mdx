@@ -18,7 +18,7 @@ How Lemma works:
 1. **Instrument** the production agent so each execution becomes a ready, inspectable [trace](/tracing/instrumentation/concepts#trace).
 2. **Analyze** completed traces for behavior that materially hurt the agent’s task.
 3. **Group** repeated evidence into an [issue](/platform/concepts#issue).
-4. **Investigate** in the dashboard, [Inspect](/platform/inspect), Slack, Linear, or a coding agent, then follow recurrence.
+4. **Investigate** in the dashboard, [Inspect](/platform/inspect), Slack, Linear, or a coding agent. See [Turn a Lemma issue into a verified fix](/guides/turning-issues-into-fixes).
 
 See [Product boundaries](/platform/concepts#product-boundaries) for what Lemma evaluates and which surfaces are not shipped.
 
@@ -46,6 +46,9 @@ Choose how you’ll send agent data to Lemma.
 Use Lemma to review detected failures, receive alerts, and investigate from your editor.
 
 <CardGroup cols={2}>
+  <Card title="Turn an issue into a fix" href="/guides/turning-issues-into-fixes">
+    Triage a production issue, inspect the evidence, ship a change, and confirm it does not recur.
+  </Card>
   <Card title="Issues" href="/platform/issues">
     Review recurring failures that Lemma detects across your agent traces.
   </Card>

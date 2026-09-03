@@ -15,7 +15,7 @@ For software development kit (SDK) vocabulary, see [SDK concepts](/tracing/instr
 2. Lemma stores the spans and marks the trace **ready** when you can open it in the dashboard. An API key, an SDK dependency, or an ingest attempt alone does not prove observability.
 3. Lemma analyzes completed traces for behavior that materially hurt the agent’s task. Detection is probabilistic: review the supporting traces before you treat a finding as ground truth.
 4. Repeated evidence is grouped into an **issue**. Say the issue was observed in a trace.
-5. You investigate in the dashboard or through [Inspect](/platform/inspect), then resolve, dismiss, or send the work into Slack, Linear, the Model Context Protocol (MCP), or webhooks.
+5. You investigate in the dashboard or through [Inspect](/platform/inspect), Slack, Linear, or the Model Context Protocol (MCP). See [Turn a Lemma issue into a verified fix](/guides/turning-issues-into-fixes).
 
 ## Projects, agents, and scope
 
@@ -55,7 +55,7 @@ Each surface answers a different question about the same traces:
 | **[Artifacts](/platform/artifacts)** | Per-agent context you provide, plus Lemma’s generated understanding document and decision-flow diagram. |
 | **[Analytics](/platform/analytics)** | Project-level volume, latency, errors, tools, models, and cost over a timeframe. Feature-gated; it may not appear in your workspace yet. |
 
-A typical investigation starts on Analytics or Issues, where you spot a trend. From there you open the supporting traces, ask Inspect what’s going on, add Artifacts context if detection missed the mark, and alert or ticket the finding through [Connections](/connections/overview).
+A typical investigation starts on Analytics or Issues, where you spot a trend. From there you open the supporting traces, ask Inspect what’s going on, and add Artifacts context if detection missed the mark. Alert or ticket the finding through [Connections](/connections/overview). Close the issue only after [Turn a Lemma issue into a verified fix](/guides/turning-issues-into-fixes).
 
 ## Related pages
 
@@ -74,6 +74,9 @@ A typical investigation starts on Analytics or Issues, where you spot a trend. F
   </Card>
   <Card title="Issues" href="/platform/issues">
     Recurring failure patterns with status and evidence.
+  </Card>
+  <Card title="Turn an issue into a fix" href="/guides/turning-issues-into-fixes">
+    Triage, inspect evidence, ship a change, and confirm it does not recur.
   </Card>
   <Card title="Artifacts" href="/platform/artifacts">
     Per-agent context, understanding document, and decision-flow diagram.
