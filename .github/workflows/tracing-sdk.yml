@@ -43,6 +43,9 @@ jobs:
       - name: Type-check
         run: pnpm --filter @uselemma/tracing type-check
 
+      - name: Build
+        run: pnpm --filter @uselemma/tracing build
+
       - name: Type-check examples
         run: pnpm --filter "./examples/*" type-check
 
