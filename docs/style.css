@@ -24,11 +24,11 @@
   font-display: swap;
 }
 
-/* Sidebar group labels + page eyebrows → same face as the rest of the docs, bold caps */
+/* Sidebar group labels + page eyebrows → same face as the rest of the docs, caps */
 .sidebar-title,
 .eyebrow {
   font-family: 'Britti Sans', sans-serif !important;
-  font-weight: 600 !important;
+  font-weight: 400 !important;
   text-transform: uppercase !important;
 }
 
