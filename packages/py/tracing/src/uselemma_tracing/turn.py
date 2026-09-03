@@ -198,21 +198,15 @@ class AttachedSpanHandle:
         if self._ended:
             return
         self._ended = True
-        fields = {
-            "id": self.id,
-            "name": self._record.get("name"),
-            "parent_id": self._record.get("parentId"),
-            "input": self._record.get("input"),
-            "model": self._record.get("model"),
-            "tool_name": self._record.get("toolName"),
-            **kwargs,
-        }
+        fields = _span_kwargs(self._record, self._record.get("parentId"))
+        fields.update(kwargs)
+        fields["id"] = self.id
         if "ended_at" not in kwargs:
             fields["ended_at"] = _now()
         self._recorder.append(
             _record_fields(
                 op="end",
-                span_type=self._record.get("type") or "span",
+                span_type=self._record.get("type") or fields.get("type") or "span",
                 fallback_parent_id=self._record.get("parentId"),
                 **fields,
             )

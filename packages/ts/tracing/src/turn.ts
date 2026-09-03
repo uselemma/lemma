@@ -249,8 +249,56 @@ function spanFields(
   }) as TurnJournalSpan;
 }
 
+function asNamedOptions<T extends { name: string }>(
+  options: string | T,
+): T {
+  return (typeof options === "string" ? { name: options } : options) as T;
+}
+
+function attachedSpanOps(
+  writeStart: (
+    type: SpanType,
+    options: Omit<SpanOptions, "endedAt">,
+  ) => AttachedSpanHandle,
+  writeRecord: (type: SpanType, options: SpanOptions) => AttachedSpanHandle,
+  defaultParentId: () => string | null | undefined,
+) {
+  const nest = <T extends { parentId?: string | null }>(options: T): T => ({
+    ...options,
+    parentId: options.parentId ?? defaultParentId() ?? null,
+  });
+  return {
+    startSpan(options: string | Omit<SpanOptions, "endedAt">) {
+      return writeStart("span", nest(asNamedOptions(options)));
+    },
+    startGeneration(
+      options: string | Omit<GenerationOptions, "endedAt" | "type">,
+    ) {
+      return writeStart("generation", nest(asNamedOptions(options)));
+    },
+    startTool(options: string | Omit<ToolOptions, "endedAt" | "type">) {
+      return writeStart("tool", nest(asNamedOptions(options)));
+    },
+    recordSpan(options: string | SpanOptions) {
+      return writeRecord("span", nest(asNamedOptions(options)));
+    },
+    recordGeneration(options: string | GenerationOptions) {
+      writeRecord("generation", nest(asNamedOptions(options)));
+    },
+    recordTool(options: string | ToolOptions) {
+      writeRecord("tool", nest(asNamedOptions(options)));
+    },
+  };
+}
+
 export class AttachedSpanHandle {
   readonly id: string;
+  readonly startSpan: ReturnType<typeof attachedSpanOps>["startSpan"];
+  readonly startGeneration: ReturnType<typeof attachedSpanOps>["startGeneration"];
+  readonly startTool: ReturnType<typeof attachedSpanOps>["startTool"];
+  readonly recordSpan: ReturnType<typeof attachedSpanOps>["recordSpan"];
+  readonly recordGeneration: ReturnType<typeof attachedSpanOps>["recordGeneration"];
+  readonly recordTool: ReturnType<typeof attachedSpanOps>["recordTool"];
 
   constructor(
     private readonly recorder: AttachedTurn,
@@ -258,6 +306,17 @@ export class AttachedSpanHandle {
     private ended = false,
   ) {
     this.id = fields.id;
+    const ops = attachedSpanOps(
+      (type, options) => this.recorder.writeStart(type, options),
+      (type, options) => this.recorder.writeRecord(type, options),
+      () => this.id,
+    );
+    this.startSpan = ops.startSpan;
+    this.startGeneration = ops.startGeneration;
+    this.startTool = ops.startTool;
+    this.recordSpan = ops.recordSpan;
+    this.recordGeneration = ops.recordGeneration;
+    this.recordTool = ops.recordTool;
   }
 
   end(
@@ -280,85 +339,32 @@ export class AttachedSpanHandle {
       startedAt: this.fields.startedAt,
     });
   }
-
-  startSpan(name: string): AttachedSpanHandle;
-  startSpan(options: Omit<SpanOptions, "endedAt">): AttachedSpanHandle;
-  startSpan(
-    options: string | Omit<SpanOptions, "endedAt">,
-  ): AttachedSpanHandle {
-    const spanOptions =
-      typeof options === "string" ? { name: options } : options;
-    return this.recorder.startSpan({
-      ...spanOptions,
-      parentId: spanOptions.parentId ?? this.id,
-    });
-  }
-
-  startGeneration(name: string): AttachedSpanHandle;
-  startGeneration(
-    options: Omit<GenerationOptions, "endedAt" | "type">,
-  ): AttachedSpanHandle;
-  startGeneration(
-    options: string | Omit<GenerationOptions, "endedAt" | "type">,
-  ): AttachedSpanHandle {
-    const generationOptions =
-      typeof options === "string" ? { name: options } : options;
-    return this.recorder.startGeneration({
-      ...generationOptions,
-      parentId: generationOptions.parentId ?? this.id,
-    });
-  }
-
-  startTool(name: string): AttachedSpanHandle;
-  startTool(options: Omit<ToolOptions, "endedAt" | "type">): AttachedSpanHandle;
-  startTool(
-    options: string | Omit<ToolOptions, "endedAt" | "type">,
-  ): AttachedSpanHandle {
-    const toolOptions =
-      typeof options === "string" ? { name: options } : options;
-    return this.recorder.startTool({
-      ...toolOptions,
-      parentId: toolOptions.parentId ?? this.id,
-    });
-  }
-
-  recordSpan(name: string): AttachedSpanHandle;
-  recordSpan(options: SpanOptions): AttachedSpanHandle;
-  recordSpan(options: string | SpanOptions): AttachedSpanHandle {
-    const spanOptions =
-      typeof options === "string" ? { name: options } : options;
-    return this.recorder.recordSpan({
-      ...spanOptions,
-      parentId: spanOptions.parentId ?? this.id,
-    });
-  }
-
-  recordGeneration(options: string | GenerationOptions) {
-    const generationOptions =
-      typeof options === "string" ? { name: options } : options;
-    this.recorder.recordGeneration({
-      ...generationOptions,
-      parentId: generationOptions.parentId ?? this.id,
-    });
-  }
-
-  recordTool(options: string | ToolOptions) {
-    const toolOptions =
-      typeof options === "string" ? { name: options } : options;
-    this.recorder.recordTool({
-      ...toolOptions,
-      parentId: toolOptions.parentId ?? this.id,
-    });
-  }
 }
 
 /** Local recorder for a worker/sandbox process. Never calls Lemma. */
 export class AttachedTurn {
   readonly token: TurnContextToken;
   private readonly journal: TurnJournalRecord[] = [];
+  readonly startSpan: ReturnType<typeof attachedSpanOps>["startSpan"];
+  readonly startGeneration: ReturnType<typeof attachedSpanOps>["startGeneration"];
+  readonly startTool: ReturnType<typeof attachedSpanOps>["startTool"];
+  readonly recordSpan: ReturnType<typeof attachedSpanOps>["recordSpan"];
+  readonly recordGeneration: ReturnType<typeof attachedSpanOps>["recordGeneration"];
+  readonly recordTool: ReturnType<typeof attachedSpanOps>["recordTool"];
 
   constructor(token: string | TurnContextToken) {
     this.token = parseTurnContextToken(token);
+    const ops = attachedSpanOps(
+      (type, options) => this.writeStart(type, options),
+      (type, options) => this.writeRecord(type, options),
+      () => this.token.parentSpanId,
+    );
+    this.startSpan = ops.startSpan;
+    this.startGeneration = ops.startGeneration;
+    this.startTool = ops.startTool;
+    this.recordSpan = ops.recordSpan;
+    this.recordGeneration = ops.recordGeneration;
+    this.recordTool = ops.recordTool;
   }
 
   get id() {
@@ -377,59 +383,7 @@ export class AttachedTurn {
     };
   }
 
-  startSpan(name: string): AttachedSpanHandle;
-  startSpan(options: Omit<SpanOptions, "endedAt">): AttachedSpanHandle;
-  startSpan(
-    options: string | Omit<SpanOptions, "endedAt">,
-  ): AttachedSpanHandle {
-    const spanOptions =
-      typeof options === "string" ? { name: options } : options;
-    return this.start("span", spanOptions);
-  }
-
-  startGeneration(name: string): AttachedSpanHandle;
-  startGeneration(
-    options: Omit<GenerationOptions, "endedAt" | "type">,
-  ): AttachedSpanHandle;
-  startGeneration(
-    options: string | Omit<GenerationOptions, "endedAt" | "type">,
-  ): AttachedSpanHandle {
-    const generationOptions =
-      typeof options === "string" ? { name: options } : options;
-    return this.start("generation", generationOptions);
-  }
-
-  startTool(name: string): AttachedSpanHandle;
-  startTool(options: Omit<ToolOptions, "endedAt" | "type">): AttachedSpanHandle;
-  startTool(
-    options: string | Omit<ToolOptions, "endedAt" | "type">,
-  ): AttachedSpanHandle {
-    const toolOptions =
-      typeof options === "string" ? { name: options } : options;
-    return this.start("tool", toolOptions);
-  }
-
-  recordSpan(name: string): AttachedSpanHandle;
-  recordSpan(options: SpanOptions): AttachedSpanHandle;
-  recordSpan(options: string | SpanOptions): AttachedSpanHandle {
-    const spanOptions =
-      typeof options === "string" ? { name: options } : options;
-    return this.record("span", spanOptions);
-  }
-
-  recordGeneration(options: string | GenerationOptions) {
-    const generationOptions =
-      typeof options === "string" ? { name: options } : options;
-    this.record("generation", generationOptions);
-  }
-
-  recordTool(options: string | ToolOptions) {
-    const toolOptions =
-      typeof options === "string" ? { name: options } : options;
-    this.record("tool", toolOptions);
-  }
-
-  private start(
+  writeStart(
     type: SpanType,
     options: Omit<SpanOptions, "endedAt">,
   ): AttachedSpanHandle {
@@ -446,7 +400,7 @@ export class AttachedTurn {
     return new AttachedSpanHandle(this, { ...fields, type });
   }
 
-  private record(
+  writeRecord(
     type: SpanType,
     options: SpanOptions,
   ): AttachedSpanHandle {

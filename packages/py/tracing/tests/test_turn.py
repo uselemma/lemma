@@ -271,3 +271,29 @@ def test_apply_start_end_preserves_llm_and_tool_journal_fields():
     assert by_id["tool-1"]["attributes"]["lemma.tool.message"] == "Looking it up"
     assert by_id["gen-1"]["input"] == "Say hi"
     assert by_id["gen-1"]["output"] == "hello"
+
+
+def test_attached_end_keeps_start_llm_fields():
+    local = attach_turn(
+        {
+            "version": 1,
+            "traceId": "trace-1",
+            "parentSpanId": "sandbox-1",
+            "startedAt": "2026-09-03T00:00:00.000Z",
+        }
+    )
+    gen = local.start_generation(
+        id="gen-1",
+        name="answer",
+        llm_model_name="gpt-4o-mini",
+        llm_system="openai",
+        llm_prompt_template="Say {x}",
+    )
+    gen.end(output="hello")
+    end_record = next(
+        record for record in local.records()["records"] if record["op"] == "end"
+    )
+    assert end_record["llmModelName"] == "gpt-4o-mini"
+    assert end_record["llmSystem"] == "openai"
+    assert end_record["llmPromptTemplate"] == "Say {x}"
+    assert end_record["output"] == "hello"
