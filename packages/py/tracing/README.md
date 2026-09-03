@@ -165,7 +165,7 @@ Use `ingest()` when you need a failed send to raise so you can retry.
 ## Cross-process turns
 
 When a user turn spans a host and a sandbox such as E2B, record one
-trace. Mint a context token on the host. The child records a journal
+trace. Export a context token on the host. The child records a journal
 with no API key. The host applies the journal and `ingest()`s once.
 
 ```python
