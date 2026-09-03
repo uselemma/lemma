@@ -45,6 +45,20 @@
     "options": [
       "copy",
       "view",
+      {
+        "title": "Open in Claude Code",
+        "description": "Ask questions about this page.",
+        "src": "/icons/sparkles.svg",
+        "href": {
+          "base": "claude-cli://open",
+          "query": [
+            {
+              "key": "q",
+              "value": "Help me understand this Lemma documentation page.\n\n$page"
+            }
+          ]
+        }
+      },
       "mcp",
       "cursor"
     ]
