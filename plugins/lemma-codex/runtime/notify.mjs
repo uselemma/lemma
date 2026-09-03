@@ -928,6 +928,7 @@ var Lemma = class {
   projectId;
   baseUrl;
   fetchImpl;
+  deliveryWarningLogged = false;
   release;
   traces = /* @__PURE__ */ new Map();
   configLogged = false;
@@ -1070,18 +1071,19 @@ var Lemma = class {
       name: traceOptions.name ?? "trace"
     });
     return (async () => {
+      let result;
       try {
-        const result = await fn(context);
-        if (traceOptions.output === void 0) {
-          context.output(result);
-        }
-        await this.flushTrace(context, startedAt, /* @__PURE__ */ new Date());
-        return result;
+        result = await fn(context);
       } catch (error) {
         context.fail(error);
-        await this.flushTrace(context, startedAt, /* @__PURE__ */ new Date());
+        await this.flushWithoutMasking(context, startedAt, /* @__PURE__ */ new Date());
         throw error;
       }
+      if (traceOptions.output === void 0) {
+        context.output(result);
+      }
+      await this.flushTrace(context, startedAt, /* @__PURE__ */ new Date());
+      return result;
     })();
   }
   /**
@@ -1331,6 +1333,24 @@ var Lemma = class {
   stampRelease(payload) {
     if (this.release) payload.trace.release = this.release;
     return payload;
+  }
+  /**
+   * Deliver a trace without letting a delivery failure replace the caller's error.
+   *
+   * Called only from a `catch` block that is about to rethrow. If `flushTrace`
+   * threw from there, the ingest error would propagate in place of the agent's
+   * error and the caller would lose the failure they are handling.
+   */
+  async flushWithoutMasking(context, startedAt, endedAt) {
+    try {
+      await this.flushTrace(context, startedAt, endedAt);
+    } catch (flushError) {
+      if (this.deliveryWarningLogged) return;
+      this.deliveryWarningLogged = true;
+      warnNoop(
+        `could not deliver the trace for a failed run (${describeError(flushError)}); rethrowing the original error. Further delivery failures on this path are not repeated.`
+      );
+    }
   }
   async flushTrace(context, startedAt, endedAt) {
     const payload = this.stampRelease(
