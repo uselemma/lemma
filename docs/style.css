@@ -104,16 +104,17 @@ header li:has(> a[href*="cal.com"]) {
   --trace-connector: #64748b;
 }
 
-/* Vendored SVG icons render as external images, so currentColor inside each
-   SVG cannot inherit Mintlify's theme-aware wrapper color. Normalize the
-   monochrome glyphs to black in light mode and white in dark mode.
-   Match anywhere in src: Mintlify rewrites /icons/... to a CDN URL. */
-img[src*="/icons/"],
+/* Vendored Remix glyphs render as external images, so currentColor inside
+   each SVG cannot inherit Mintlify's theme-aware wrapper color. Normalize
+   those monochrome glyphs to black in light mode and white in dark mode.
+   Match anywhere in src: Mintlify rewrites /icons/... to a CDN URL.
+   Brand marks under /images/icons/ keep their own colors, like E2B. */
+img[src*="/icons/"]:not([src*="/images/icons/"]),
 img[src*="claude.svg"] {
   filter: brightness(0) saturate(100%);
 }
 
-.dark img[src*="/icons/"],
+.dark img[src*="/icons/"]:not([src*="/images/icons/"]),
 .dark img[src*="claude.svg"] {
   filter: brightness(0) saturate(100%) invert(1);
 }
