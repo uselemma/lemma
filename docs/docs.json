@@ -41,6 +41,28 @@
       "href": "https://platform.uselemma.ai"
     }
   },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "mcp",
+      "cursor",
+      {
+        "title": "Open in Claude Code",
+        "description": "Ask questions about this page.",
+        "icon": "/icons/claude.svg",
+        "href": {
+          "base": "claude-cli://open",
+          "query": [
+            {
+              "key": "q",
+              "value": "Help me understand this Lemma documentation page.\n\n$page"
+            }
+          ]
+        }
+      }
+    ]
+  },
   "navigation": {
     "tabs": [
       {
@@ -70,8 +92,25 @@
             ]
           },
           {
-            "group": "Instrumentation",
-            "icon": "/icons/workflow.svg",
+            "group": "Connections",
+            "icon": "/icons/plug.svg",
+            "expanded": true,
+            "pages": [
+              "connections/overview",
+              "connections/slack",
+              "connections/linear",
+              "connections/mcp",
+              "connections/webhooks"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Instrumentation",
+        "icon": "/icons/workflow.svg",
+        "groups": [
+          {
+            "group": "Tracing",
             "expanded": true,
             "pages": [
               "tracing/instrumentation/concepts",
@@ -82,28 +121,11 @@
               "tracing/instrumentation/generations",
               "tracing/instrumentation/tool-calls",
               "tracing/instrumentation/spans",
-              "tracing/instrumentation/context",
-              {
-                "group": "Troubleshooting",
-                "expanded": false,
-                "pages": [
-                  "tracing/troubleshooting/debug-mode",
-                  "tracing/troubleshooting/common-issues"
-                ]
-              },
-              {
-                "group": "Reference",
-                "expanded": false,
-                "pages": [
-                  "reference/trace-contract",
-                  "reference/analytics-telemetry"
-                ]
-              }
+              "tracing/instrumentation/context"
             ]
           },
           {
             "group": "Integrations",
-            "icon": "/icons/plug-zap.svg",
             "expanded": true,
             "pages": [
               "integrations/openai-agents",
@@ -114,15 +136,19 @@
             ]
           },
           {
-            "group": "Connections",
-            "icon": "/icons/plug.svg",
+            "group": "Troubleshooting",
             "expanded": true,
             "pages": [
-              "connections/overview",
-              "connections/slack",
-              "connections/linear",
-              "connections/mcp",
-              "connections/webhooks"
+              "tracing/troubleshooting/debug-mode",
+              "tracing/troubleshooting/common-issues"
+            ]
+          },
+          {
+            "group": "Reference",
+            "expanded": true,
+            "pages": [
+              "reference/trace-contract",
+              "reference/analytics-telemetry"
             ]
           }
         ]
