@@ -2,10 +2,15 @@
  * Drive vercelAI() through real AI SDK generateText.
  * No network: MockLanguageModelV3 + mocked ingest.
  */
-import { generateText, type Telemetry } from "ai";
+import { generateText } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { describe, expect, it } from "vitest";
-import { ingestFetchMock, jsonBody, LEMMA_PROJECT_ID } from "../test-helpers";
+import {
+  ingestFetchMock,
+  jsonBody,
+  LEMMA_PROJECT_ID,
+  vercelTelemetry,
+} from "../test-helpers";
 import { vercelAI } from "./vercel-ai";
 
 function mockModel(text: string) {
@@ -35,7 +40,7 @@ describe("vercelAI through real AI SDK", () => {
       telemetry: {
         isEnabled: true,
         functionId: "support-agent",
-        integrations: [lemmaTelemetry as Telemetry],
+        integrations: [vercelTelemetry(lemmaTelemetry)],
       },
     });
     await lemmaTelemetry.flush();
