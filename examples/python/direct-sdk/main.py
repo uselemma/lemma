@@ -83,7 +83,23 @@ async def run_turn(turn: ChatTurn) -> str:
                     else None
                 ),
             )
-            messages.append(choice)  # type: ignore[arg-type]
+            assistant_message: ChatCompletionMessageParam = {
+                "role": "assistant",
+                "content": choice.content,
+            }
+            if choice.tool_calls:
+                assistant_message["tool_calls"] = [
+                    {
+                        "id": call.id,
+                        "type": "function",
+                        "function": {
+                            "name": call.function.name,
+                            "arguments": call.function.arguments or "{}",
+                        },
+                    }
+                    for call in choice.tool_calls
+                ]
+            messages.append(assistant_message)
             if not choice.tool_calls:
                 return choice.content or ""
             for call in choice.tool_calls:
