@@ -45,6 +45,8 @@ Grouping aims for one issue per underlying defect, but it isn’t perfect. If tw
 5. Export it as markdown through `GET /issues/{id}/markdown` or the UI equivalent, to paste into a ticket or hand to a coding agent.
 6. Resolve or dismiss it, and add feedback if the finding was wrong so future extraction can learn from it.
 
+When you accept an issue as a real defect, follow [Turn a Lemma issue into a verified fix](/guides/turning-issues-into-fixes) to inspect the evidence, ship a change, and confirm it does not recur.
+
 ## Workflow connections
 
 Each connection reports on the issue lifecycle in a different way:
@@ -67,6 +69,9 @@ Connecting Slack or Linear never auto-creates a ticket, and recurrence never cre
   </Card>
   <Card title="Inspect" href="/platform/inspect">
     Ask why an issue was flagged and how to fix it.
+  </Card>
+  <Card title="Turn an issue into a fix" href="/guides/turning-issues-into-fixes">
+    Triage, inspect evidence, ship a change, and confirm it does not recur.
   </Card>
   <Card title="Artifacts" href="/platform/artifacts">
     Agent context that can sharpen detection.
