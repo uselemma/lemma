@@ -38,14 +38,9 @@ Grouping aims for one issue per underlying defect, but it isn’t perfect. If tw
 
 ## Investigating an issue
 
-1. Filter the issues table by status, agent, assignee, flagged state, or search term.
-2. Open the issue and read why Lemma flagged it.
-3. Open the supporting traces and review both the conversation and the execution tree.
-4. Ask **[Inspect](/platform/inspect)** why it fired, what scenarios triggered it, and how to fix it.
-5. Export it as markdown through `GET /issues/{id}/markdown` or the UI equivalent, to paste into a ticket or hand to a coding agent.
-6. Resolve or dismiss it, and add feedback if the finding was wrong so future extraction can learn from it.
+This page is conceptual: status, priority, grouping, and the connections below. The procedure (triage, inspect evidence, ship a change, replay the original traces, then resolve) lives on [Turn a Lemma issue into a verified fix](/guides/turning-issues-into-fixes).
 
-When you accept an issue as a real defect, follow [Turn a Lemma issue into a verified fix](/guides/turning-issues-into-fixes) to inspect the evidence, ship a change, and confirm it does not recur.
+Do not resolve from the issue title, an Inspect answer, or an open pull request. Dismiss here only when the finding is not a real defect, and add feedback so later extraction can learn.
 
 ## Workflow connections
 
