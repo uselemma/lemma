@@ -92,8 +92,25 @@
             ]
           },
           {
+            "group": "Connections",
+            "icon": "/icons/plug.svg",
+            "expanded": true,
+            "pages": [
+              "connections/overview",
+              "connections/slack",
+              "connections/linear",
+              "connections/mcp",
+              "connections/webhooks"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Instrumentation",
+        "icon": "/icons/workflow.svg",
+        "groups": [
+          {
             "group": "Instrumentation",
-            "icon": "/icons/workflow.svg",
             "expanded": true,
             "pages": [
               "tracing/instrumentation/concepts",
@@ -123,15 +140,15 @@
             ]
           },
           {
-            "group": "Connections",
-            "icon": "/icons/plug.svg",
+            "group": "Integrations",
+            "icon": "/icons/plug-zap.svg",
             "expanded": true,
             "pages": [
-              "connections/overview",
-              "connections/slack",
-              "connections/linear",
-              "connections/mcp",
-              "connections/webhooks"
+              "integrations/openai-agents",
+              "integrations/vercel-ai",
+              "integrations/langchain",
+              "integrations/langgraph",
+              "integrations/mastra"
             ]
           }
         ]
@@ -154,18 +171,6 @@
                   "guides/migrations/opentelemetry"
                 ]
               }
-            ]
-          },
-          {
-            "group": "Integrations",
-            "icon": "/icons/plug-zap.svg",
-            "expanded": true,
-            "pages": [
-              "integrations/openai-agents",
-              "integrations/vercel-ai",
-              "integrations/langchain",
-              "integrations/langgraph",
-              "integrations/mastra"
             ]
           }
         ]
