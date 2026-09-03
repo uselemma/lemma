@@ -1,0 +1,458 @@
+import {
+  Lemma,
+  SpanHandle,
+  TraceContext,
+  TraceHandle,
+  type GenerationOptions,
+  type SpanOptions,
+  type SpanType,
+  type ToolOptions,
+  type TraceEndOptions,
+  type TraceOptions,
+} from "./client";
+
+export const TURN_CONTEXT_VERSION = 1 as const;
+export const TURN_JOURNAL_VERSION = 1 as const;
+
+export type TurnContextToken = {
+  version: typeof TURN_CONTEXT_VERSION;
+  traceId: string;
+  parentSpanId?: string | null;
+  threadId?: string;
+  userId?: string;
+  startedAt: string;
+  name?: string;
+};
+
+/** Journal span fields are {@link SpanOptions} in camelCase (plus required `id`). */
+export type TurnJournalSpan = Omit<SpanOptions, "parentSpanId" | "id" | "name"> & {
+  id: string;
+  name?: string;
+  parentId?: string | null;
+};
+
+export type TurnJournalRecord = TurnJournalSpan & {
+  op: "start" | "end" | "record";
+};
+
+export type TurnJournal = {
+  version: typeof TURN_JOURNAL_VERSION;
+  token: TurnContextToken;
+  records: TurnJournalRecord[];
+};
+
+export type TurnJournalInput =
+  | TurnJournal
+  | TurnJournalRecord
+  | TurnJournalRecord[]
+  | string;
+
+function compact<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as T;
+}
+
+function isoNow(): string {
+  return new Date().toISOString();
+}
+
+function asIso(value: Date | string | null | undefined): string | null | undefined {
+  if (value == null) return value;
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+export function parseTurnContextToken(
+  value: string | TurnContextToken,
+): TurnContextToken {
+  const token =
+    typeof value === "string"
+      ? (JSON.parse(value) as TurnContextToken)
+      : value;
+  if (
+    !token ||
+    typeof token !== "object" ||
+    token.version !== TURN_CONTEXT_VERSION ||
+    typeof token.traceId !== "string" ||
+    token.traceId.length === 0 ||
+    typeof token.startedAt !== "string" ||
+    token.startedAt.length === 0
+  ) {
+    throw new Error("@uselemma/tracing: invalid turn context token");
+  }
+  return token;
+}
+
+function parseJournal(input: TurnJournalInput): {
+  token?: TurnContextToken;
+  records: TurnJournalRecord[];
+} {
+  const value =
+    typeof input === "string" ? (JSON.parse(input) as unknown) : input;
+  if (Array.isArray(value)) {
+    return { records: value };
+  }
+  if (value && typeof value === "object" && "op" in value) {
+    return { records: [value as TurnJournalRecord] };
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    "records" in value &&
+    Array.isArray((value as TurnJournal).records)
+  ) {
+    const journal = value as TurnJournal;
+    if (
+      journal.version !== undefined &&
+      journal.version !== TURN_JOURNAL_VERSION
+    ) {
+      throw new Error(
+        `@uselemma/tracing: unsupported turn journal version ${String(journal.version)}`,
+      );
+    }
+    return { token: journal.token, records: journal.records };
+  }
+  throw new Error("@uselemma/tracing: invalid turn journal");
+}
+
+const END_IDENTITY_KEYS = {
+  id: true,
+  parentId: true,
+  parentSpanId: true,
+  name: true,
+  type: true,
+  startedAt: true,
+} as const;
+
+function toSpanOptions(
+  record: TurnJournalRecord,
+  fallbackParentId?: string | null,
+): SpanOptions {
+  const { op: _op, ...fields } = record;
+  return compact({
+    ...fields,
+    parentId: record.parentId ?? fallbackParentId,
+    name: record.name ?? "span",
+  }) as SpanOptions;
+}
+
+function endOptionsFromRecord(
+  record: TurnJournalRecord,
+  fallbackParentId?: string | null,
+): Omit<SpanOptions, "id" | "name" | "type" | "startedAt"> {
+  const options = toSpanOptions(record, fallbackParentId);
+  return compact(
+    Object.fromEntries(
+      Object.entries(options).filter(
+        ([key]) => !Object.prototype.hasOwnProperty.call(END_IDENTITY_KEYS, key),
+      ),
+    ),
+  ) as Omit<SpanOptions, "id" | "name" | "type" | "startedAt">;
+}
+
+function startFromRecord(
+  context: TraceContext,
+  options: SpanOptions,
+): SpanHandle {
+  const type = options.type ?? "span";
+  if (type === "generation") {
+    return context.startGeneration(options);
+  }
+  if (type === "tool") {
+    return context.startTool(options);
+  }
+  return context.startSpan(options);
+}
+
+function recordFromRecord(context: TraceContext, options: SpanOptions) {
+  const type = options.type ?? "span";
+  if (type === "generation") {
+    context.recordGeneration(options);
+    return;
+  }
+  if (type === "tool") {
+    context.recordTool(options);
+    return;
+  }
+  context.recordSpan(options);
+}
+
+/**
+ * Hydrate a coordinator {@link TraceContext} from a child-process journal.
+ * Re-applying the same records is a no-op for already-present span ids.
+ */
+export function applyTurnJournal(
+  context: TraceContext,
+  input: TurnJournalInput,
+): void {
+  const { token, records } = parseJournal(input);
+  const fallbackParentId = token?.parentSpanId ?? null;
+  for (const record of records) {
+    if (!record?.id || !record.op) continue;
+    const options = toSpanOptions(record, fallbackParentId);
+    if (record.op === "start") {
+      if (context.hasSpan(record.id)) continue;
+      startFromRecord(context, { ...options, endedAt: undefined });
+      continue;
+    }
+    if (record.op === "end") {
+      const handle = context.spanHandle(record.id);
+      if (handle) {
+        handle.end(endOptionsFromRecord(record, fallbackParentId));
+        continue;
+      }
+      if (context.hasSpan(record.id)) continue;
+      recordFromRecord(context, options);
+      continue;
+    }
+    if (context.hasSpan(record.id)) continue;
+    recordFromRecord(context, options);
+  }
+}
+
+/**
+ * Build a {@link TraceContext} from a context token and optional journal,
+ * ready for a single strict {@link Lemma.ingest} call.
+ */
+export function assembleTurn(
+  token: string | TurnContextToken,
+  journal?: TurnJournalInput,
+  options: Omit<TraceOptions, "id"> = {},
+): { context: TraceContext; startedAt: Date } {
+  const parsed = parseTurnContextToken(token);
+  const context = new TraceContext({
+    id: parsed.traceId,
+    name: options.name ?? parsed.name ?? "trace",
+    input: options.input,
+    output: options.output,
+    metadata: options.metadata,
+    threadId: options.threadId ?? parsed.threadId,
+    userId: options.userId ?? parsed.userId,
+    durationMs: options.durationMs,
+    startedAt: options.startedAt ?? parsed.startedAt,
+  });
+  if (journal !== undefined) applyTurnJournal(context, journal);
+  return { context, startedAt: new Date(parsed.startedAt) };
+}
+
+function spanFields(
+  options: SpanOptions & ToolOptions & { type?: SpanType },
+  fallbackParentId?: string | null,
+): TurnJournalSpan {
+  const { parentSpanId, ...fields } = options;
+  return compact({
+    ...fields,
+    id: options.id ?? crypto.randomUUID(),
+    parentId: options.parentId ?? parentSpanId ?? fallbackParentId ?? null,
+    startedAt: asIso(options.startedAt),
+    endedAt: asIso(options.endedAt),
+  }) as TurnJournalSpan;
+}
+
+function asNamedOptions<T extends { name: string }>(
+  options: string | T,
+): T {
+  return (typeof options === "string" ? { name: options } : options) as T;
+}
+
+function attachedSpanOps(
+  writeStart: (
+    type: SpanType,
+    options: Omit<SpanOptions, "endedAt">,
+  ) => AttachedSpanHandle,
+  writeRecord: (type: SpanType, options: SpanOptions) => AttachedSpanHandle,
+  defaultParentId: () => string | null | undefined,
+) {
+  const nest = <T extends { parentId?: string | null }>(options: T): T => ({
+    ...options,
+    parentId: options.parentId ?? defaultParentId() ?? null,
+  });
+  return {
+    startSpan(options: string | Omit<SpanOptions, "endedAt">) {
+      return writeStart("span", nest(asNamedOptions(options)));
+    },
+    startGeneration(
+      options: string | Omit<GenerationOptions, "endedAt" | "type">,
+    ) {
+      return writeStart("generation", nest(asNamedOptions(options)));
+    },
+    startTool(options: string | Omit<ToolOptions, "endedAt" | "type">) {
+      return writeStart("tool", nest(asNamedOptions(options)));
+    },
+    recordSpan(options: string | SpanOptions) {
+      return writeRecord("span", nest(asNamedOptions(options)));
+    },
+    recordGeneration(options: string | GenerationOptions) {
+      writeRecord("generation", nest(asNamedOptions(options)));
+    },
+    recordTool(options: string | ToolOptions) {
+      writeRecord("tool", nest(asNamedOptions(options)));
+    },
+  };
+}
+
+export class AttachedSpanHandle {
+  readonly id: string;
+  readonly startSpan: ReturnType<typeof attachedSpanOps>["startSpan"];
+  readonly startGeneration: ReturnType<typeof attachedSpanOps>["startGeneration"];
+  readonly startTool: ReturnType<typeof attachedSpanOps>["startTool"];
+  readonly recordSpan: ReturnType<typeof attachedSpanOps>["recordSpan"];
+  readonly recordGeneration: ReturnType<typeof attachedSpanOps>["recordGeneration"];
+  readonly recordTool: ReturnType<typeof attachedSpanOps>["recordTool"];
+
+  constructor(
+    private readonly recorder: AttachedTurn,
+    private readonly fields: TurnJournalSpan,
+    private ended = false,
+  ) {
+    this.id = fields.id;
+    const ops = attachedSpanOps(
+      (type, options) => this.recorder.writeStart(type, options),
+      (type, options) => this.recorder.writeRecord(type, options),
+      () => this.id,
+    );
+    this.startSpan = ops.startSpan;
+    this.startGeneration = ops.startGeneration;
+    this.startTool = ops.startTool;
+    this.recordSpan = ops.recordSpan;
+    this.recordGeneration = ops.recordGeneration;
+    this.recordTool = ops.recordTool;
+  }
+
+  end(
+    options: Omit<SpanOptions, "id" | "name" | "type" | "startedAt"> = {},
+  ) {
+    if (this.ended) return;
+    this.ended = true;
+    this.recorder.append({
+      op: "end",
+      ...spanFields(
+        {
+          ...this.fields,
+          ...options,
+          id: this.id,
+          name: this.fields.name ?? "span",
+        },
+        this.fields.parentId,
+      ),
+      id: this.id,
+      startedAt: this.fields.startedAt,
+    });
+  }
+}
+
+/** Local recorder for a worker/sandbox process. Never calls Lemma. */
+export class AttachedTurn {
+  readonly token: TurnContextToken;
+  private readonly journal: TurnJournalRecord[] = [];
+  readonly startSpan: ReturnType<typeof attachedSpanOps>["startSpan"];
+  readonly startGeneration: ReturnType<typeof attachedSpanOps>["startGeneration"];
+  readonly startTool: ReturnType<typeof attachedSpanOps>["startTool"];
+  readonly recordSpan: ReturnType<typeof attachedSpanOps>["recordSpan"];
+  readonly recordGeneration: ReturnType<typeof attachedSpanOps>["recordGeneration"];
+  readonly recordTool: ReturnType<typeof attachedSpanOps>["recordTool"];
+
+  constructor(token: string | TurnContextToken) {
+    this.token = parseTurnContextToken(token);
+    const ops = attachedSpanOps(
+      (type, options) => this.writeStart(type, options),
+      (type, options) => this.writeRecord(type, options),
+      () => this.token.parentSpanId,
+    );
+    this.startSpan = ops.startSpan;
+    this.startGeneration = ops.startGeneration;
+    this.startTool = ops.startTool;
+    this.recordSpan = ops.recordSpan;
+    this.recordGeneration = ops.recordGeneration;
+    this.recordTool = ops.recordTool;
+  }
+
+  get id() {
+    return this.token.traceId;
+  }
+
+  append(record: TurnJournalRecord) {
+    this.journal.push(record);
+  }
+
+  records(): TurnJournal {
+    return {
+      version: TURN_JOURNAL_VERSION,
+      token: this.token,
+      records: this.journal,
+    };
+  }
+
+  writeStart(
+    type: SpanType,
+    options: Omit<SpanOptions, "endedAt">,
+  ): AttachedSpanHandle {
+    const fields = spanFields(
+      {
+        ...options,
+        type,
+        id: options.id ?? crypto.randomUUID(),
+        startedAt: options.startedAt ?? isoNow(),
+      },
+      this.token.parentSpanId,
+    );
+    this.append({ op: "start", ...fields, type });
+    return new AttachedSpanHandle(this, { ...fields, type });
+  }
+
+  writeRecord(
+    type: SpanType,
+    options: SpanOptions,
+  ): AttachedSpanHandle {
+    const now = isoNow();
+    const fields = spanFields(
+      {
+        ...options,
+        type,
+        id: options.id ?? crypto.randomUUID(),
+        startedAt: options.startedAt ?? now,
+        endedAt: options.endedAt === undefined ? now : options.endedAt,
+      },
+      this.token.parentSpanId,
+    );
+    this.append({ op: "record", ...fields, type });
+    return new AttachedSpanHandle(this, { ...fields, type }, true);
+  }
+}
+
+export class TurnHandle extends TraceHandle {
+  export(options: { parentSpanId?: string | null } = {}): TurnContextToken {
+    const identity = this.identity();
+    return compact({
+      version: TURN_CONTEXT_VERSION,
+      traceId: this.id,
+      parentSpanId: options.parentSpanId ?? null,
+      threadId: identity.threadId,
+      userId: identity.userId,
+      startedAt: this.startedAt.toISOString(),
+      name: identity.name,
+    });
+  }
+
+  apply(input: TurnJournalInput) {
+    applyTurnJournal(this, input);
+  }
+}
+
+export function startTurn(
+  lemma: Lemma,
+  options: TraceOptions = {},
+): TurnHandle {
+  return new TurnHandle(
+    options,
+    async (trace, startedAt, endedAt) => {
+      await lemma.ingest(trace, { startedAt, endedAt });
+    },
+  );
+}
+
+export function attachTurn(
+  token: string | TurnContextToken,
+): AttachedTurn {
+  return new AttachedTurn(token);
+}

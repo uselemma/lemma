@@ -686,6 +686,17 @@ def test_langchain_forwards_release_onto_ingest_payload():
     assert calls[0]["body"]["trace"]["release"] == "1.8.3"
 
 
+def test_langchain_flush_does_not_raise_on_ingest_503():
+    handler = langchain(
+        api_key="key",
+        project_id="10000000-0000-0000-0000-000000000001",
+        transport=lambda _url, _headers, _body: (503, "nope"),
+    )
+    handler.on_chain_start({"name": "support-agent"}, "hi", run_id="chain-1")
+    handler.on_chain_end("done", run_id="chain-1")
+    handler.flush()
+
+
 def test_langgraph_forwards_release_onto_ingest_payload():
     calls = []
     handler = langgraph(

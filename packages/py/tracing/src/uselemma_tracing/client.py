@@ -7,11 +7,10 @@ import time
 import urllib.error
 import urllib.request
 import uuid
-import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version as package_version
-from typing import Any, Callable, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Literal, TypeVar
 
 from .debug_delivery import (
     EXPECTED_INGEST_SUCCESS_STATUS,
@@ -27,10 +26,12 @@ from .debug_delivery import (
     pick_response_headers,
 )
 from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_enabled
-from .error_message import describe_error as _describe_error
 from .error_message import failure_message as _failure_message
 from .release import normalize_release
 from .usage import normalize_token_usage, token_usage_attributes
+
+if TYPE_CHECKING:
+    from .turn import AttachedTurn, TurnHandle
 
 T = TypeVar("T")
 SpanType = Literal["span", "generation", "tool"]
@@ -238,6 +239,12 @@ def _span_attributes(
 def _resolve_usage(usage: Any = None) -> dict[str, int | float] | None:
     return normalize_token_usage(usage)
 
+
+def _span_build_kwargs(trace: "TraceContext", payload: dict[str, Any]) -> dict[str, Any]:
+    params = inspect.signature(trace._build_span).parameters
+    return {key: value for key, value in payload.items() if key in params}
+
+
 @dataclass
 class SpanHandle:
     trace: "TraceContext"
@@ -259,90 +266,66 @@ class SpanHandle:
     payload: dict[str, Any] | None = None
     ended: bool = False
     user_facing_message: str | None = None
+    open_kwargs: dict[str, Any] = field(default_factory=dict, repr=False)
 
-    def end(
-        self,
-        *,
-        output: Any = None,
-        duration_ms: int | None = None,
-        status: Status | None = None,
-        error: Any = None,
-        ended_at: datetime | str | None = None,
-        metadata: dict[str, Any] | None = None,
-        attributes: dict[str, Any] | None = None,
-        model: str | None = None,
-        tool_name: str | None = None,
-        llm_provider: str | None = None,
-        llm_invocation_parameters: Any = None,
-        llm_output_messages: list[Any] | None = None,
-        input_mime_type: str | None = None,
-        output_mime_type: str | None = None,
-        embedding_model_name: str | None = None,
-        embedding_invocation_parameters: Any = None,
-        embedding_embeddings: Any = None,
-        reranker_model_name: str | None = None,
-        reranker_input_documents: list[Any] | None = None,
-        reranker_output_documents: list[Any] | None = None,
-        usage: dict[str, int | float] | None = None,
-        input_tokens: int | float | None = None,
-        output_tokens: int | float | None = None,
-        cache_read_input_tokens: int | float | None = None,
-        cache_creation_input_tokens: int | float | None = None,
-        reasoning_output_tokens: int | float | None = None,
-    ) -> None:
+    def end(self, **kwargs: Any) -> None:
         if self.ended:
             return
         self.ended = True
+        usage = kwargs.get("usage")
         resolved_usage = _resolve_usage(
             usage
             if usage is not None
             else _compact(
                 {
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "cache_read_input_tokens": cache_read_input_tokens,
-                    "cache_creation_input_tokens": cache_creation_input_tokens,
-                    "reasoning_output_tokens": reasoning_output_tokens,
+                    "input_tokens": kwargs.get("input_tokens"),
+                    "output_tokens": kwargs.get("output_tokens"),
+                    "cache_read_input_tokens": kwargs.get("cache_read_input_tokens"),
+                    "cache_creation_input_tokens": kwargs.get(
+                        "cache_creation_input_tokens"
+                    ),
+                    "reasoning_output_tokens": kwargs.get("reasoning_output_tokens"),
                 }
             )
             or self.usage
         )
-        span = self.trace._build_span(
-            name=self.name,
-            input=self.input,
-            output=output,
-            metadata=metadata or self.metadata,
-            attributes=attributes or self.attributes,
-            model=self.model or model,
-            tool_name=tool_name or self.tool_name,
-            user_facing_message=self.user_facing_message,
-            input_mime_type=input_mime_type,
-            output_mime_type=output_mime_type,
-            llm_provider=llm_provider or self.llm_provider,
-            llm_invocation_parameters=(
-                llm_invocation_parameters
-                if llm_invocation_parameters is not None
-                else self.llm_invocation_parameters
-            ),
-            llm_input_messages=self.llm_input_messages,
-            llm_output_messages=llm_output_messages,
-            llm_tools=self.llm_tools,
-            embedding_model_name=embedding_model_name,
-            embedding_invocation_parameters=embedding_invocation_parameters,
-            embedding_embeddings=embedding_embeddings,
-            reranker_model_name=reranker_model_name,
-            reranker_input_documents=reranker_input_documents,
-            reranker_output_documents=reranker_output_documents,
-            usage=resolved_usage,
-            status=status,
-            error=error,
-            id=self.id,
-            started_at=self.started_at,
-            ended_at=ended_at or _now(),
-            duration_ms=duration_ms,
-            parent_id=self.parent_id,
-            type=self.type,
-        )
+        merged = {
+            "name": self.name,
+            "input": self.input,
+            "metadata": self.metadata,
+            "attributes": self.attributes,
+            "model": self.model,
+            "tool_name": self.tool_name,
+            "user_facing_message": self.user_facing_message,
+            "llm_provider": self.llm_provider,
+            "llm_invocation_parameters": self.llm_invocation_parameters,
+            "llm_input_messages": self.llm_input_messages,
+            "llm_tools": self.llm_tools,
+            "id": self.id,
+            "parent_id": self.parent_id,
+            "type": self.type,
+            "started_at": self.started_at,
+            **self.open_kwargs,
+            **kwargs,
+            "usage": resolved_usage,
+            "ended_at": kwargs.get("ended_at") or _now(),
+            "open_span": False,
+        }
+        if merged.get("metadata") is None:
+            merged["metadata"] = self.metadata
+        if merged.get("attributes") is None:
+            merged["attributes"] = self.attributes
+        if not merged.get("model"):
+            merged["model"] = self.model
+        if not merged.get("tool_name"):
+            merged["tool_name"] = self.tool_name
+        if merged.get("user_facing_message") is None:
+            merged["user_facing_message"] = self.user_facing_message
+        if merged.get("llm_provider") is None:
+            merged["llm_provider"] = self.llm_provider
+        if merged.get("llm_invocation_parameters") is None:
+            merged["llm_invocation_parameters"] = self.llm_invocation_parameters
+        span = self.trace._build_span(**_span_build_kwargs(self.trace, merged))
         if self.payload is None:
             self.trace.spans.append(span)
             self.payload = span
@@ -398,12 +381,19 @@ class TraceContext:
     output_value: Any = None
     error: str | None = None
     spans: list[dict[str, Any]] = field(default_factory=list)
+    _handles: dict[str, SpanHandle] = field(default_factory=dict, repr=False, compare=False)
 
     def output(self, value: Any) -> None:
         self.output_value = value
 
     def fail(self, error: Any) -> None:
         self.error = _failure_message(error)
+
+    def has_span(self, span_id: str) -> bool:
+        return any(span.get("id") == span_id for span in self.spans)
+
+    def span_handle(self, span_id: str) -> SpanHandle | None:
+        return self._handles.get(span_id)
 
     def _debug_span(self, event: str, span: dict[str, Any]) -> None:
         _lemma_debug(
@@ -426,10 +416,18 @@ class TraceContext:
         input_mime_type: str | None = None,
         output_mime_type: str | None = None,
         llm_provider: str | None = None,
+        llm_model_name: str | None = None,
+        llm_system: str | None = None,
         llm_invocation_parameters: Any = None,
         llm_input_messages: list[Any] | None = None,
         llm_output_messages: list[Any] | None = None,
         llm_tools: Any = None,
+        llm_prompt_template: str | None = None,
+        llm_prompt_template_variables: Any = None,
+        llm_prompt_template_version: str | None = None,
+        user_facing_message: str | None = None,
+        tool_description: str | None = None,
+        tool_parameters: Any = None,
         embedding_model_name: str | None = None,
         embedding_invocation_parameters: Any = None,
         embedding_embeddings: Any = None,
@@ -477,10 +475,18 @@ class TraceContext:
             input_mime_type=input_mime_type,
             output_mime_type=output_mime_type,
             llm_provider=llm_provider,
+            llm_model_name=llm_model_name,
+            llm_system=llm_system,
             llm_invocation_parameters=llm_invocation_parameters,
             llm_input_messages=llm_input_messages,
             llm_output_messages=llm_output_messages,
             llm_tools=llm_tools,
+            llm_prompt_template=llm_prompt_template,
+            llm_prompt_template_variables=llm_prompt_template_variables,
+            llm_prompt_template_version=llm_prompt_template_version,
+            user_facing_message=user_facing_message,
+            tool_description=tool_description,
+            tool_parameters=tool_parameters,
             embedding_model_name=embedding_model_name,
             embedding_invocation_parameters=embedding_invocation_parameters,
             embedding_embeddings=embedding_embeddings,
@@ -511,13 +517,20 @@ class TraceContext:
         model: str | None = None,
         tool_name: str | None = None,
         user_facing_message: str | None = None,
+        tool_description: str | None = None,
+        tool_parameters: Any = None,
         input_mime_type: str | None = None,
         output_mime_type: str | None = None,
         llm_provider: str | None = None,
+        llm_model_name: str | None = None,
+        llm_system: str | None = None,
         llm_invocation_parameters: Any = None,
         llm_input_messages: list[Any] | None = None,
         llm_output_messages: list[Any] | None = None,
         llm_tools: Any = None,
+        llm_prompt_template: str | None = None,
+        llm_prompt_template_variables: Any = None,
+        llm_prompt_template_version: str | None = None,
         embedding_model_name: str | None = None,
         embedding_invocation_parameters: Any = None,
         embedding_embeddings: Any = None,
@@ -533,9 +546,10 @@ class TraceContext:
         id: str | None = None,
         parent_id: str | None = None,
         type: SpanType = "span",
+        open_span: bool = False,
     ) -> dict[str, Any]:
         started = started_at or _now()
-        ended = ended_at or _now()
+        ended_iso = None if open_span else _iso(ended_at or _now())
         resolved_usage = _resolve_usage(usage)
         return _compact(
             {
@@ -552,10 +566,17 @@ class TraceContext:
                     input_mime_type=input_mime_type,
                     output_mime_type=output_mime_type,
                     llm_provider=llm_provider,
+                    llm_model_name=llm_model_name,
+                    llm_system=llm_system,
                     llm_invocation_parameters=llm_invocation_parameters,
                     llm_input_messages=llm_input_messages,
                     llm_output_messages=llm_output_messages,
                     llm_tools=llm_tools,
+                    llm_prompt_template=llm_prompt_template,
+                    llm_prompt_template_variables=llm_prompt_template_variables,
+                    llm_prompt_template_version=llm_prompt_template_version,
+                    tool_description=tool_description,
+                    tool_parameters=tool_parameters,
                     user_facing_message=user_facing_message,
                     embedding_model_name=embedding_model_name,
                     embedding_invocation_parameters=embedding_invocation_parameters,
@@ -566,7 +587,7 @@ class TraceContext:
                     usage=resolved_usage,
                 ),
                 "started_at": _iso(started),
-                "ended_at": _iso(ended),
+                "ended_at": ended_iso,
                 "duration_ms": duration_ms,
                 "status": status or ("ERROR" if error is not None else None),
                 "error": _failure_message(error),
@@ -608,57 +629,45 @@ class TraceContext:
         cache_read_input_tokens: int | float | None = None,
         cache_creation_input_tokens: int | float | None = None,
         reasoning_output_tokens: int | float | None = None,
+        id: str | None = None,
+        parent_id: str | None = None,
+        started_at: datetime | str | None = None,
+        ended_at: datetime | str | None = None,
     ) -> None:
-        now = _now()
-        resolved_usage = _resolve_usage(
-            usage
-            if usage is not None
-            else _compact(
-                {
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "cache_read_input_tokens": cache_read_input_tokens,
-                    "cache_creation_input_tokens": cache_creation_input_tokens,
-                    "reasoning_output_tokens": reasoning_output_tokens,
-                }
-            )
-            or None
+        self.span(
+            name=name,
+            type="generation",
+            input=input,
+            output=output,
+            model=model,
+            metadata=metadata,
+            attributes=attributes,
+            input_mime_type=input_mime_type,
+            output_mime_type=output_mime_type,
+            llm_model_name=llm_model_name,
+            llm_provider=llm_provider,
+            llm_system=llm_system,
+            llm_invocation_parameters=llm_invocation_parameters,
+            llm_input_messages=llm_input_messages,
+            llm_output_messages=llm_output_messages,
+            llm_tools=llm_tools,
+            llm_prompt_template=llm_prompt_template,
+            llm_prompt_template_variables=llm_prompt_template_variables,
+            llm_prompt_template_version=llm_prompt_template_version,
+            duration_ms=duration_ms,
+            status=status,
+            error=error,
+            usage=usage,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_input_tokens=cache_read_input_tokens,
+            cache_creation_input_tokens=cache_creation_input_tokens,
+            reasoning_output_tokens=reasoning_output_tokens,
+            id=id,
+            parent_id=parent_id,
+            started_at=started_at,
+            ended_at=ended_at,
         )
-        span = _compact(
-            {
-                "name": name,
-                "type": "generation",
-                "input": input,
-                "output": output,
-                "model": model,
-                "metadata": metadata,
-                "attributes": _span_attributes(
-                    attributes,
-                    model=model,
-                    input_mime_type=input_mime_type,
-                    output_mime_type=output_mime_type,
-                    llm_model_name=llm_model_name,
-                    llm_provider=llm_provider,
-                    llm_system=llm_system,
-                    llm_invocation_parameters=llm_invocation_parameters,
-                    llm_input_messages=llm_input_messages,
-                    llm_output_messages=llm_output_messages,
-                    llm_tools=llm_tools,
-                    llm_prompt_template=llm_prompt_template,
-                    llm_prompt_template_variables=llm_prompt_template_variables,
-                    llm_prompt_template_version=llm_prompt_template_version,
-                    usage=resolved_usage,
-                ),
-                "duration_ms": duration_ms,
-                "status": status or ("ERROR" if error is not None else None),
-                "error": _failure_message(error),
-                "started_at": _iso(now),
-                "ended_at": _iso(now),
-                "usage": resolved_usage,
-            }
-        )
-        self.spans.append(span)
-        self._debug_span("span recorded", span)
 
     record_generation = generation
 
@@ -675,37 +684,87 @@ class TraceContext:
         tool_description: str | None = None,
         tool_parameters: Any = None,
         user_facing_message: str | None = None,
+        tool_name: str | None = None,
         duration_ms: int | None = None,
         status: Status | None = None,
         error: Any = None,
+        id: str | None = None,
+        parent_id: str | None = None,
+        started_at: datetime | str | None = None,
+        ended_at: datetime | str | None = None,
     ) -> None:
-        now = _now()
-        span = _compact(
-            {
-                "name": name,
-                "type": "tool",
-                "input": input,
-                "output": output,
-                "metadata": metadata,
-                "attributes": _span_attributes(
-                    attributes,
-                    input_mime_type=input_mime_type,
-                    output_mime_type=output_mime_type,
-                    tool_description=tool_description,
-                    tool_parameters=tool_parameters,
-                    user_facing_message=user_facing_message,
-                ),
-                "duration_ms": duration_ms,
-                "status": status or ("ERROR" if error is not None else None),
-                "error": _failure_message(error),
-                "started_at": _iso(now),
-                "ended_at": _iso(now),
-            }
+        self.span(
+            name=name,
+            type="tool",
+            input=input,
+            output=output,
+            metadata=metadata,
+            attributes=attributes,
+            input_mime_type=input_mime_type,
+            output_mime_type=output_mime_type,
+            tool_description=tool_description,
+            tool_parameters=tool_parameters,
+            user_facing_message=user_facing_message,
+            tool_name=tool_name,
+            duration_ms=duration_ms,
+            status=status,
+            error=error,
+            id=id,
+            parent_id=parent_id,
+            started_at=started_at,
+            ended_at=ended_at,
         )
-        self.spans.append(span)
-        self._debug_span("span recorded", span)
 
     record_tool = tool
+
+    def _open_span(self, **kwargs: Any) -> SpanHandle:
+        """Start an open span from canonical span() kwargs (journal replay)."""
+        payload = dict(kwargs)
+        span_type = payload.pop("type", None) or "span"
+        name = payload.get("name") or "span"
+        span_id = payload.get("id") or str(uuid.uuid4())
+        parent_id = payload.get("parent_id")
+        started_at = _datetime_or_now(payload.get("started_at"))
+        open_kwargs = {
+            **payload,
+            "name": name,
+            "id": span_id,
+            "parent_id": parent_id,
+            "type": span_type,
+            "started_at": started_at,
+            "open_span": True,
+        }
+        open_kwargs.pop("output", None)
+        open_kwargs.pop("duration_ms", None)
+        open_kwargs.pop("status", None)
+        open_kwargs.pop("error", None)
+        open_kwargs.pop("ended_at", None)
+        span = self._build_span(**_span_build_kwargs(self, open_kwargs))
+        handle = SpanHandle(
+            trace=self,
+            name=name,
+            input=payload.get("input"),
+            metadata=payload.get("metadata"),
+            attributes=payload.get("attributes"),
+            type=span_type,
+            id=span_id,
+            parent_id=parent_id,
+            started_at=started_at,
+            model=payload.get("model"),
+            tool_name=payload.get("tool_name"),
+            llm_provider=payload.get("llm_provider"),
+            llm_invocation_parameters=payload.get("llm_invocation_parameters"),
+            llm_input_messages=payload.get("llm_input_messages"),
+            llm_tools=payload.get("llm_tools"),
+            usage=payload.get("usage"),
+            user_facing_message=payload.get("user_facing_message"),
+            payload=span,
+            open_kwargs=open_kwargs,
+        )
+        self.spans.append(span)
+        self._handles[handle.id] = handle
+        self._debug_span("span started", span)
+        return handle
 
     def start_span(
         self,
@@ -742,6 +801,7 @@ class TraceContext:
             }
         )
         self.spans.append(handle.payload)
+        self._handles[handle.id] = handle
         self._debug_span(
             "span started",
             handle.payload,
@@ -802,6 +862,7 @@ class TraceContext:
             }
         )
         self.spans.append(handle.payload)
+        self._handles[handle.id] = handle
         self._debug_span(
             "span started",
             handle.payload,
@@ -851,6 +912,7 @@ class TraceContext:
             }
         )
         self.spans.append(handle.payload)
+        self._handles[handle.id] = handle
         self._debug_span(
             "span started",
             handle.payload,
@@ -885,6 +947,56 @@ class TraceContext:
         }
 
 
+class TraceHandle(TraceContext):
+    """Host-side handle: span APIs inherited from TraceContext; end() ingests strictly."""
+
+    def __init__(
+        self,
+        lemma: Lemma,
+        *,
+        name: str = "trace",
+        id: str | None = None,
+        input: Any = None,
+        thread_id: str | None = None,
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        duration_ms: int | None = None,
+        started_at: datetime | str | None = None,
+    ) -> None:
+        super().__init__(
+            name=name,
+            id=id or str(uuid.uuid4()),
+            input=input,
+            metadata=metadata,
+            thread_id=thread_id,
+            user_id=user_id,
+            duration_ms=duration_ms,
+        )
+        self._lemma = lemma
+        self.started_at = _datetime_or_now(started_at)
+        self._ended = False
+
+    def end(
+        self,
+        output: Any = None,
+        *,
+        ended_at: datetime | str | None = None,
+        duration_ms: int | None = None,
+    ) -> None:
+        if self._ended:
+            return
+        self._ended = True
+        if output is not None:
+            self.output(output)
+        if duration_ms is not None:
+            self.duration_ms = duration_ms
+        self._lemma.ingest(
+            self,
+            started_at=self.started_at,
+            ended_at=_datetime_or_now(ended_at),
+        )
+
+
 class Lemma:
     def __init__(
         self,
@@ -913,7 +1025,6 @@ class Lemma:
         self.base_url = base_url.rstrip("/")
         self._last_response_headers: dict[str, str] = {}
         self._config_logged = False
-        self._delivery_warning_logged = False
         self.transport = self._wrap_transport(transport or self._urllib_transport)
         self._log_init_config_once()
 
@@ -1042,15 +1153,16 @@ class Lemma:
             # block would replace ``exc``, and the caller would lose the
             # failure they are handling.
             ctx.fail(exc)
-            self._send_without_masking(ctx, started_at, _now())
+            self._deliver_automatic(ctx, started_at, _now())
             raise
 
         if ctx.output_value is None:
             ctx.output(result)
-        # Delivery still raises on a non-2xx so the caller can retry, but it is
-        # no longer inside the agent's ``try``: a transport failure must not be
-        # recorded as an agent failure, or re-sent as one.
-        self._send(ctx, started_at, _now())
+        # Automatic delivery is outside the agent's ``try``: a transport
+        # failure must not be recorded as an agent failure. Fail-open so
+        # Lemma being down cannot fail the caller's app; ingest() stays
+        # strict for retries.
+        self._deliver_automatic(ctx, started_at, _now())
         return result
 
     async def async_trace(
@@ -1083,12 +1195,12 @@ class Lemma:
             )
         except BaseException as exc:
             ctx.fail(exc)
-            self._send_without_masking(ctx, started_at, _now())
+            self._deliver_automatic(ctx, started_at, _now())
             raise
 
         if ctx.output_value is None:
             ctx.output(result)
-        self._send(ctx, started_at, _now())
+        self._deliver_automatic(ctx, started_at, _now())
         return result
 
     def ingest(
@@ -1118,42 +1230,62 @@ class Lemma:
         """
         self._send(context, started_at, ended_at or _now())
 
+    def start_turn(
+        self,
+        name: str = "trace",
+        *,
+        id: str | None = None,
+        input: Any = None,
+        thread_id: str | None = None,
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        duration_ms: int | None = None,
+        started_at: datetime | str | None = None,
+    ) -> TurnHandle:
+        from .turn import start_turn as _start_turn
+
+        return _start_turn(
+            self,
+            name=name,
+            id=id,
+            input=input,
+            thread_id=thread_id,
+            user_id=user_id,
+            metadata=metadata,
+            duration_ms=duration_ms,
+            started_at=started_at,
+        )
+
+    @staticmethod
+    def attach(token: str | dict[str, Any]) -> AttachedTurn:
+        from .turn import attach_turn
+
+        return attach_turn(token)
+
     def _stamp_release(self, payload: dict[str, Any]) -> dict[str, Any]:
         if self.release:
             payload["trace"]["release"] = self.release
         return payload
 
-    def _send_without_masking(
+    def _deliver_automatic(
         self,
         ctx: TraceContext,
         started_at: datetime,
         ended_at: datetime,
     ) -> None:
-        """Deliver a trace without letting a delivery failure replace the caller's error.
+        """Automatic SDK delivery. Catches transport / non-2xx so Lemma being
+        down cannot fail the caller's app. ``ingest()`` uses ``_send`` (strict)
+        so queue/plugin producers can retry.
 
-        Called only from an ``except`` block that is about to re-raise. If
-        :meth:`_send` raised from there, the ingest error would propagate in place
-        of the agent's error: ``except MyAgentError`` would stop matching, and the
-        original would survive only as ``__context__``.
-
-        Only :class:`Exception` is caught. A ``BaseException`` from the transport
-        -- ``KeyboardInterrupt``, ``SystemExit``, ``CancelledError`` -- is left to
-        propagate, because suppressing an interrupt to preserve an error message
-        is the worse trade.
+        Only :class:`Exception` is caught. A ``BaseException`` from the
+        transport -- ``KeyboardInterrupt``, ``SystemExit``, ``CancelledError``
+        -- is left to propagate.
         """
         try:
             self._send(ctx, started_at, ended_at)
-        except Exception as send_error:
-            if self._delivery_warning_logged:
-                return
-            self._delivery_warning_logged = True
-            warnings.warn(
-                f"uselemma-tracing: could not deliver the trace for a failed run "
-                f"({_describe_error(send_error)}); re-raising the original error. "
-                f"Further delivery failures on this path are not repeated.",
-                RuntimeWarning,
-                stacklevel=3,
-            )
+        except Exception:
+            # ``_send`` already debug-logs "trace ingest failed".
+            return
 
     def _send(
         self,
@@ -1175,14 +1307,24 @@ class Lemma:
             requested_at=_iso(_now()),
             url=url,
         )
-        status, text = self.transport(
-            url,
-            {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            body,
-        )
+        try:
+            status, text = self.transport(
+                url,
+                {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                body,
+            )
+        except Exception as exc:
+            _lemma_debug(
+                "client",
+                "trace ingest failed",
+                trace_id=payload["trace"]["id"],
+                project_id=payload["project_id"],
+                error=_failure_message(exc),
+            )
+            raise
         response_headers = pick_response_headers(self._last_response_headers)
         if status < 200 or status >= 300:
             hint = ingest_failure_hint(status)

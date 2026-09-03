@@ -110,6 +110,7 @@ Deliver **one complete trace** when the execution (agent turn) finishes. This is
 - **Not a merge API:** omitted root fields do **not** preserve prior values. There is no field-level upsert, and patching a trace across calls is not supported.
 - **Processing:** after an idle window Lemma processes the trace once; a later successful re-delivery does not restart `processTrace` / `extractSignals`. Late new span IDs may still append for display.
 - Do not reuse one `trace.id` across conversation turns — see [Instrumenting multi-turn agents](/guides/instrumenting-multi-turn-agents).
+- One user turn split across a host and a sandbox is still one delivery: journal locally, `apply`, then `ingest()` once — see [One turn across processes](/tracing/instrumentation/cross-process-turns).
 
 ## Trace record
 
