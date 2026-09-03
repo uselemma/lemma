@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from .client import Lemma, SpanHandle, TraceContext, _datetime_or_now, _iso, _now
+from .client import Lemma, TraceContext, _datetime_or_now, _iso, _now
 
 TURN_CONTEXT_VERSION = 1
 TURN_JOURNAL_VERSION = 1
@@ -154,72 +154,7 @@ def _start_from_record(context: TraceContext, kwargs: dict[str, Any]) -> SpanHan
 
 
 def _record_from_record(context: TraceContext, kwargs: dict[str, Any]) -> None:
-    span_type = kwargs.get("type") or "span"
-    if span_type == "generation":
-        context.generation(
-            **{
-                key: value
-                for key, value in kwargs.items()
-                if key
-                not in {
-                    "id",
-                    "parent_id",
-                    "type",
-                    "tool_name",
-                    "user_facing_message",
-                    "started_at",
-                    "ended_at",
-                }
-            }
-        )
-        if context.spans:
-            span = context.spans[-1]
-            if kwargs.get("id"):
-                span["id"] = kwargs["id"]
-            if "parent_id" in kwargs:
-                span["parent_id"] = kwargs["parent_id"]
-            if kwargs.get("started_at") is not None:
-                span["started_at"] = _iso(kwargs["started_at"])
-            if kwargs.get("ended_at") is not None:
-                span["ended_at"] = _iso(kwargs["ended_at"])
-        return
-    if span_type == "tool":
-        context.tool(
-            **{
-                key: value
-                for key, value in kwargs.items()
-                if key
-                not in {
-                    "id",
-                    "parent_id",
-                    "type",
-                    "model",
-                    "usage",
-                    "llm_provider",
-                    "llm_model_name",
-                    "llm_input_messages",
-                    "llm_output_messages",
-                    "llm_invocation_parameters",
-                    "llm_tools",
-                    "started_at",
-                    "ended_at",
-                }
-            }
-        )
-        if context.spans:
-            span = context.spans[-1]
-            if kwargs.get("id"):
-                span["id"] = kwargs["id"]
-            if "parent_id" in kwargs:
-                span["parent_id"] = kwargs["parent_id"]
-            if kwargs.get("tool_name"):
-                span["tool_name"] = kwargs["tool_name"]
-            if kwargs.get("started_at") is not None:
-                span["started_at"] = _iso(kwargs["started_at"])
-            if kwargs.get("ended_at") is not None:
-                span["ended_at"] = _iso(kwargs["ended_at"])
-        return
-    context.span(**{key: value for key, value in kwargs.items() if key != "type"})
+    context.span(**kwargs)
 
 
 def apply_turn_journal(context: TraceContext, value: Any) -> None:
@@ -515,26 +450,8 @@ class TurnHandle:
     def apply(self, journal: Any) -> None:
         apply_turn_journal(self.context, journal)
 
-    def start_span(self, **kwargs: Any) -> SpanHandle:
-        return self.context.start_span(**kwargs)
-
-    def start_generation(self, **kwargs: Any) -> SpanHandle:
-        return self.context.start_generation(**kwargs)
-
-    def start_tool(self, **kwargs: Any) -> SpanHandle:
-        return self.context.start_tool(**kwargs)
-
-    def record_span(self, **kwargs: Any) -> None:
-        self.context.record_span(**kwargs)
-
-    def record_generation(self, **kwargs: Any) -> None:
-        self.context.record_generation(**kwargs)
-
-    def record_tool(self, **kwargs: Any) -> None:
-        self.context.record_tool(**kwargs)
-
-    def fail(self, error: Any) -> None:
-        self.context.fail(error)
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.context, name)
 
     def end(
         self,

@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version as package_version
-from typing import Any, Callable, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Literal, TypeVar
 
 from .debug_delivery import (
     EXPECTED_INGEST_SUCCESS_STATUS,
@@ -29,6 +29,9 @@ from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_ena
 from .error_message import failure_message as _failure_message
 from .release import normalize_release
 from .usage import normalize_token_usage, token_usage_attributes
+
+if TYPE_CHECKING:
+    from .turn import AttachedTurn, TurnHandle
 
 T = TypeVar("T")
 SpanType = Literal["span", "generation", "tool"]
@@ -431,10 +434,18 @@ class TraceContext:
         input_mime_type: str | None = None,
         output_mime_type: str | None = None,
         llm_provider: str | None = None,
+        llm_model_name: str | None = None,
+        llm_system: str | None = None,
         llm_invocation_parameters: Any = None,
         llm_input_messages: list[Any] | None = None,
         llm_output_messages: list[Any] | None = None,
         llm_tools: Any = None,
+        llm_prompt_template: str | None = None,
+        llm_prompt_template_variables: Any = None,
+        llm_prompt_template_version: str | None = None,
+        user_facing_message: str | None = None,
+        tool_description: str | None = None,
+        tool_parameters: Any = None,
         embedding_model_name: str | None = None,
         embedding_invocation_parameters: Any = None,
         embedding_embeddings: Any = None,
@@ -482,10 +493,18 @@ class TraceContext:
             input_mime_type=input_mime_type,
             output_mime_type=output_mime_type,
             llm_provider=llm_provider,
+            llm_model_name=llm_model_name,
+            llm_system=llm_system,
             llm_invocation_parameters=llm_invocation_parameters,
             llm_input_messages=llm_input_messages,
             llm_output_messages=llm_output_messages,
             llm_tools=llm_tools,
+            llm_prompt_template=llm_prompt_template,
+            llm_prompt_template_variables=llm_prompt_template_variables,
+            llm_prompt_template_version=llm_prompt_template_version,
+            user_facing_message=user_facing_message,
+            tool_description=tool_description,
+            tool_parameters=tool_parameters,
             embedding_model_name=embedding_model_name,
             embedding_invocation_parameters=embedding_invocation_parameters,
             embedding_embeddings=embedding_embeddings,
@@ -516,13 +535,20 @@ class TraceContext:
         model: str | None = None,
         tool_name: str | None = None,
         user_facing_message: str | None = None,
+        tool_description: str | None = None,
+        tool_parameters: Any = None,
         input_mime_type: str | None = None,
         output_mime_type: str | None = None,
         llm_provider: str | None = None,
+        llm_model_name: str | None = None,
+        llm_system: str | None = None,
         llm_invocation_parameters: Any = None,
         llm_input_messages: list[Any] | None = None,
         llm_output_messages: list[Any] | None = None,
         llm_tools: Any = None,
+        llm_prompt_template: str | None = None,
+        llm_prompt_template_variables: Any = None,
+        llm_prompt_template_version: str | None = None,
         embedding_model_name: str | None = None,
         embedding_invocation_parameters: Any = None,
         embedding_embeddings: Any = None,
@@ -557,10 +583,17 @@ class TraceContext:
                     input_mime_type=input_mime_type,
                     output_mime_type=output_mime_type,
                     llm_provider=llm_provider,
+                    llm_model_name=llm_model_name,
+                    llm_system=llm_system,
                     llm_invocation_parameters=llm_invocation_parameters,
                     llm_input_messages=llm_input_messages,
                     llm_output_messages=llm_output_messages,
                     llm_tools=llm_tools,
+                    llm_prompt_template=llm_prompt_template,
+                    llm_prompt_template_variables=llm_prompt_template_variables,
+                    llm_prompt_template_version=llm_prompt_template_version,
+                    tool_description=tool_description,
+                    tool_parameters=tool_parameters,
                     user_facing_message=user_facing_message,
                     embedding_model_name=embedding_model_name,
                     embedding_invocation_parameters=embedding_invocation_parameters,
@@ -613,57 +646,45 @@ class TraceContext:
         cache_read_input_tokens: int | float | None = None,
         cache_creation_input_tokens: int | float | None = None,
         reasoning_output_tokens: int | float | None = None,
+        id: str | None = None,
+        parent_id: str | None = None,
+        started_at: datetime | str | None = None,
+        ended_at: datetime | str | None = None,
     ) -> None:
-        now = _now()
-        resolved_usage = _resolve_usage(
-            usage
-            if usage is not None
-            else _compact(
-                {
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "cache_read_input_tokens": cache_read_input_tokens,
-                    "cache_creation_input_tokens": cache_creation_input_tokens,
-                    "reasoning_output_tokens": reasoning_output_tokens,
-                }
-            )
-            or None
+        self.span(
+            name=name,
+            type="generation",
+            input=input,
+            output=output,
+            model=model,
+            metadata=metadata,
+            attributes=attributes,
+            input_mime_type=input_mime_type,
+            output_mime_type=output_mime_type,
+            llm_model_name=llm_model_name,
+            llm_provider=llm_provider,
+            llm_system=llm_system,
+            llm_invocation_parameters=llm_invocation_parameters,
+            llm_input_messages=llm_input_messages,
+            llm_output_messages=llm_output_messages,
+            llm_tools=llm_tools,
+            llm_prompt_template=llm_prompt_template,
+            llm_prompt_template_variables=llm_prompt_template_variables,
+            llm_prompt_template_version=llm_prompt_template_version,
+            duration_ms=duration_ms,
+            status=status,
+            error=error,
+            usage=usage,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_input_tokens=cache_read_input_tokens,
+            cache_creation_input_tokens=cache_creation_input_tokens,
+            reasoning_output_tokens=reasoning_output_tokens,
+            id=id,
+            parent_id=parent_id,
+            started_at=started_at,
+            ended_at=ended_at,
         )
-        span = _compact(
-            {
-                "name": name,
-                "type": "generation",
-                "input": input,
-                "output": output,
-                "model": model,
-                "metadata": metadata,
-                "attributes": _span_attributes(
-                    attributes,
-                    model=model,
-                    input_mime_type=input_mime_type,
-                    output_mime_type=output_mime_type,
-                    llm_model_name=llm_model_name,
-                    llm_provider=llm_provider,
-                    llm_system=llm_system,
-                    llm_invocation_parameters=llm_invocation_parameters,
-                    llm_input_messages=llm_input_messages,
-                    llm_output_messages=llm_output_messages,
-                    llm_tools=llm_tools,
-                    llm_prompt_template=llm_prompt_template,
-                    llm_prompt_template_variables=llm_prompt_template_variables,
-                    llm_prompt_template_version=llm_prompt_template_version,
-                    usage=resolved_usage,
-                ),
-                "duration_ms": duration_ms,
-                "status": status or ("ERROR" if error is not None else None),
-                "error": _failure_message(error),
-                "started_at": _iso(now),
-                "ended_at": _iso(now),
-                "usage": resolved_usage,
-            }
-        )
-        self.spans.append(span)
-        self._debug_span("span recorded", span)
 
     record_generation = generation
 
@@ -680,35 +701,36 @@ class TraceContext:
         tool_description: str | None = None,
         tool_parameters: Any = None,
         user_facing_message: str | None = None,
+        tool_name: str | None = None,
         duration_ms: int | None = None,
         status: Status | None = None,
         error: Any = None,
+        id: str | None = None,
+        parent_id: str | None = None,
+        started_at: datetime | str | None = None,
+        ended_at: datetime | str | None = None,
     ) -> None:
-        now = _now()
-        span = _compact(
-            {
-                "name": name,
-                "type": "tool",
-                "input": input,
-                "output": output,
-                "metadata": metadata,
-                "attributes": _span_attributes(
-                    attributes,
-                    input_mime_type=input_mime_type,
-                    output_mime_type=output_mime_type,
-                    tool_description=tool_description,
-                    tool_parameters=tool_parameters,
-                    user_facing_message=user_facing_message,
-                ),
-                "duration_ms": duration_ms,
-                "status": status or ("ERROR" if error is not None else None),
-                "error": _failure_message(error),
-                "started_at": _iso(now),
-                "ended_at": _iso(now),
-            }
+        self.span(
+            name=name,
+            type="tool",
+            input=input,
+            output=output,
+            metadata=metadata,
+            attributes=attributes,
+            input_mime_type=input_mime_type,
+            output_mime_type=output_mime_type,
+            tool_description=tool_description,
+            tool_parameters=tool_parameters,
+            user_facing_message=user_facing_message,
+            tool_name=tool_name,
+            duration_ms=duration_ms,
+            status=status,
+            error=error,
+            id=id,
+            parent_id=parent_id,
+            started_at=started_at,
+            ended_at=ended_at,
         )
-        self.spans.append(span)
-        self._debug_span("span recorded", span)
 
     record_tool = tool
 
@@ -1137,7 +1159,7 @@ class Lemma:
         metadata: dict[str, Any] | None = None,
         duration_ms: int | None = None,
         started_at: datetime | str | None = None,
-    ) -> Any:
+    ) -> TurnHandle:
         from .turn import start_turn as _start_turn
 
         return _start_turn(
@@ -1153,7 +1175,7 @@ class Lemma:
         )
 
     @staticmethod
-    def attach(token: str | dict[str, Any]) -> Any:
+    def attach(token: str | dict[str, Any]) -> AttachedTurn:
         from .turn import attach_turn
 
         return attach_turn(token)

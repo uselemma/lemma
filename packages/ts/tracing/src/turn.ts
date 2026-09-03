@@ -573,10 +573,8 @@ Lemma.prototype.startTurn = function startTurnMethod(
 };
 
 Lemma.prototype.attach = function attachMethod(
-  this: Lemma,
   token: string | TurnContextToken,
 ) {
+  // Factory: the Lemma instance is unused, matching Python `Lemma.attach`.
   return attachTurn(token);
 };
-
-(Lemma as typeof Lemma & { attach: typeof attachTurn }).attach = attachTurn;
