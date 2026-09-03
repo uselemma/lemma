@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import uuid
 from datetime import datetime
@@ -10,42 +11,28 @@ from .client import Lemma, TraceContext, TraceHandle, _datetime_or_now, _iso, _n
 TURN_CONTEXT_VERSION = 1
 TURN_JOURNAL_VERSION = 1
 
-# Journal camelCase key -> TraceContext.span() kwargs. One map drives record,
-# replay, and emit so new span fields cannot drift across converters.
-_JOURNAL_SPAN_FIELDS = (
-    ("id", "id"),
-    ("parentId", "parent_id"),
-    ("name", "name"),
-    ("type", "type"),
-    ("input", "input"),
-    ("output", "output"),
-    ("metadata", "metadata"),
-    ("attributes", "attributes"),
-    ("startedAt", "started_at"),
-    ("endedAt", "ended_at"),
-    ("durationMs", "duration_ms"),
-    ("status", "status"),
-    ("error", "error"),
-    ("model", "model"),
-    ("toolName", "tool_name"),
-    ("usage", "usage"),
-    ("userFacingMessage", "user_facing_message"),
-    ("llmProvider", "llm_provider"),
-    ("llmModelName", "llm_model_name"),
-    ("llmSystem", "llm_system"),
-    ("llmInputMessages", "llm_input_messages"),
-    ("llmOutputMessages", "llm_output_messages"),
-    ("llmInvocationParameters", "llm_invocation_parameters"),
-    ("llmTools", "llm_tools"),
-    ("llmPromptTemplate", "llm_prompt_template"),
-    ("llmPromptTemplateVariables", "llm_prompt_template_variables"),
-    ("llmPromptTemplateVersion", "llm_prompt_template_version"),
-    ("toolDescription", "tool_description"),
-    ("toolParameters", "tool_parameters"),
-    ("inputMimeType", "input_mime_type"),
-    ("outputMimeType", "output_mime_type"),
-)
-_RECORD_KEYS = tuple(journal_key for journal_key, _span_key in _JOURNAL_SPAN_FIELDS)
+def _journal_key(span_key: str) -> str:
+    head, *rest = span_key.split("_")
+    return head + "".join(part.title() for part in rest)
+
+
+_SKIP_SPAN_PARAMS = {"self", "open_span"}
+
+
+def _journal_span_fields() -> tuple[tuple[str, str], ...]:
+    """camelCase journal key -> TraceContext._build_span kwargs.
+
+    Derived from the span payload surface so Python replay tracks TS
+    ``TurnJournalSpan = SpanOptions`` when new fields are added.
+    """
+    return tuple(
+        (_journal_key(name), name)
+        for name in inspect.signature(TraceContext._build_span).parameters
+        if name not in _SKIP_SPAN_PARAMS
+    )
+
+
+_JOURNAL_SPAN_FIELDS = _journal_span_fields()
 _SPAN_TO_JOURNAL = {
     span_key: journal_key for journal_key, span_key in _JOURNAL_SPAN_FIELDS
 }

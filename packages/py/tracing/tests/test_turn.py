@@ -228,6 +228,7 @@ def test_apply_start_end_preserves_llm_and_tool_journal_fields():
                     "llmPromptTemplate": "Say {x}",
                     "llmPromptTemplateVariables": {"x": "hi"},
                     "llmPromptTemplateVersion": "1",
+                    "embeddingModelName": "text-embedding-3",
                     "startedAt": "2026-09-03T00:00:01.000Z",
                 },
                 {
@@ -266,6 +267,7 @@ def test_apply_start_end_preserves_llm_and_tool_journal_fields():
     assert gen_attrs["llm.prompt_template.template"] == "Say {x}"
     assert gen_attrs["llm.prompt_template.version"] == "1"
     assert gen_attrs["input.mime_type"] == "text/plain"
+    assert gen_attrs["embedding.model_name"] == "text-embedding-3"
     assert by_id["tool-1"]["attributes"]["lemma.tool.message"] == "Looking it up"
     assert by_id["gen-1"]["input"] == "Say hi"
     assert by_id["gen-1"]["output"] == "hello"
