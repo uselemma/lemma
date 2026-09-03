@@ -40,36 +40,7 @@
 
 ## Development
 
-Install dependencies:
-
-```bash
-pnpm install
-uv sync
-```
-
-Run TypeScript checks:
-
-```bash
-pnpm --filter @uselemma/tracing test
-pnpm --filter @uselemma/tracing type-check
-pnpm --filter @uselemma/tracing build
-pnpm --filter @uselemma/codex-plugin test
-pnpm --filter @uselemma/codex-plugin type-check
-pnpm --filter @uselemma/codex-plugin build
-```
-
-Run Python checks:
-
-```bash
-uv run --project packages/py/tracing --extra dev pytest packages/py/tracing/tests
-uv build --package uselemma-tracing
-```
-
-Validate the docs config:
-
-```bash
-python3 -m json.tool docs/docs.json >/dev/null
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md#development).
 
 ## Contributing
 
