@@ -50,7 +50,7 @@ A single agent execution produces a tree. The root is the trace record; everythi
 
 ## Trace
 
-A **trace** is a single end-to-end execution of your agent, from the user’s input to the final response. It carries the input, the output (or error), timing, and the tree of spans inside it. Each trace has a unique trace ID.
+A **trace** is a single end-to-end execution of your agent, from the incoming request to the final response. It carries the input, the output (or error), timing, and the tree of spans inside it. Each trace has a unique trace ID.
 
 If every model or tool call shows up as its own trace, the child work ran without the root trace handle or trace IDs. Create the root trace first, then record child spans through that trace or an explicit parent span handle. See [Agent traces](/tracing/instrumentation/traces).
 
