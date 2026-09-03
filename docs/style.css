@@ -24,12 +24,12 @@
   font-display: swap;
 }
 
-/* Sidebar group labels + page eyebrows → same face as the rest of the docs, caps */
+/* Sidebar group labels + page eyebrows → same face as the rest of the docs, bold */
 .sidebar-title,
 .eyebrow {
   font-family: 'Britti Sans', sans-serif !important;
-  font-weight: 400 !important;
-  text-transform: uppercase !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
 }
 
 /* Navbar text link ("Talk to us") → mono caps, navy. Apply to span children too. */
