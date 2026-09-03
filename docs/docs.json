@@ -163,6 +163,7 @@
               "guides/turning-issues-into-fixes",
               "guides/building-high-quality-traces",
               "guides/instrumenting-multi-turn-agents",
+              "guides/examples",
               {
                 "group": "Migrations",
                 "expanded": false,

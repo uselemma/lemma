@@ -10,6 +10,27 @@ from .model import pick_generation_model_identity, pick_model_identity
 from .tool_result import tool_result_error
 from .usage import normalize_token_usage
 
+try:
+    from langchain_core.callbacks.base import BaseCallbackHandler as _CallbackHandlerBase
+except ImportError:  # pragma: no cover - langchain is an optional extra
+
+    class _CallbackHandlerBase:
+        """Stand-in so the SDK imports without LangChain installed.
+
+        LangChain 1.x reads these as attributes (not getattr). Missing
+        ``run_inline`` crashes ainvoke before any span is recorded.
+        """
+
+        raise_error = False
+        run_inline = False
+        ignore_llm = False
+        ignore_retry = False
+        ignore_chain = False
+        ignore_agent = False
+        ignore_retriever = False
+        ignore_chat_model = False
+        ignore_custom_event = False
+
 KNOWN_PROVIDERS = (
     "openai",
     "anthropic",
@@ -556,7 +577,7 @@ def llm_token_usage(response: Any) -> dict[str, int | float] | None:
                 return from_item
     return None
 
-class LemmaLangChainCallbackHandler:
+class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
     """LangChain callback handler that owns one Lemma trace per root run."""
 
     name = "lemma"

@@ -1,0 +1,66 @@
+name: Tracing SDK
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/tracing-sdk.yml"
+      - "packages/ts/tracing/**"
+      - "packages/py/tracing/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "uv.lock"
+      - "pyproject.toml"
+      - "examples/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/tracing-sdk.yml"
+      - "packages/ts/tracing/**"
+      - "packages/py/tracing/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "uv.lock"
+      - "pyproject.toml"
+      - "examples/**"
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm --filter @uselemma/tracing type-check
+
+      - name: Build
+        run: pnpm --filter @uselemma/tracing build
+
+      - name: Type-check examples
+        run: pnpm --filter "./examples/*" type-check
+
+      - name: Test
+        run: pnpm --filter @uselemma/tracing test
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Test
+        run: uv run --project packages/py/tracing --extra dev pytest packages/py/tracing/tests

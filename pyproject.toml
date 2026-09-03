@@ -5,7 +5,15 @@ description = "Monorepo root – not published"
 requires-python = ">=3.9"
 
 [tool.uv.workspace]
-members = ["packages/py/tracing"]
+members = [
+    "packages/py/tracing",
+    "examples/python/shared",
+    "examples/python/direct-sdk",
+    "examples/python/openai-agents",
+    "examples/python/langchain",
+    "examples/python/langgraph",
+]
 
 [tool.uv.sources]
 uselemma-tracing = { workspace = true }
+lemma-examples-shared = { workspace = true }

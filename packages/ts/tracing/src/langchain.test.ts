@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { jsonBody } from "../test-helpers";
 import { langChain, langGraph } from "./langchain";
-
-function jsonBody(call: unknown[]) {
-  return JSON.parse(String((call[1] as RequestInit).body));
-}
 
 function handler(fetchMock: ReturnType<typeof vi.fn>, options: Record<string, unknown> = {}) {
   return langChain({

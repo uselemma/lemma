@@ -7,3 +7,5 @@ packages:
   - "plugins/lemma-openclaw"
   - "plugins/lemma-opencode"
   - "plugins/lemma-pi"
+  - "examples/*"
+  - "!examples/python"

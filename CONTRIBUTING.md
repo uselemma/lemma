@@ -64,12 +64,20 @@ pnpm --filter @uselemma/tracing type-check
 pnpm --filter @uselemma/tracing build
 ```
 
+`*.framework.test.ts` files call the real framework (`generateText`, `run`,
+`createAgent`, `graph.invoke`, Mastra `generate`) with fake models. The
+scripted `*.test.ts` files only replay hand-written adapter events.
+
 Python SDK:
 
 ```bash
 uv run --project packages/py/tracing --extra dev pytest packages/py/tracing/tests
 uv build --package uselemma-tracing
 ```
+
+`--extra dev` installs LangChain, LangGraph, and OpenAI Agents so
+`test_*_framework.py` can `ainvoke` / `Runner.run` a real chain. The scripted
+`test_langchain.py` cases only replay callback events.
 
 Plugin packages use `pnpm --filter <package> type-check`, `test`, and `build`. Examples: `@uselemma/codex-plugin`, `@uselemma/opencode`, `@uselemma/pi`. See each plugin README.
 

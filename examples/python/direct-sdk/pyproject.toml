@@ -1,0 +1,13 @@
+[project]
+name = "lemma-example-direct-sdk"
+version = "0.0.0"
+description = "Lemma docs agent instrumented with the Python SDK directly"
+requires-python = ">=3.10"
+dependencies = [
+    "lemma-examples-shared",
+    "openai>=1.0",
+    "uselemma-tracing",
+]
+
+[tool.uv]
+package = false
