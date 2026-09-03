@@ -1,7 +1,7 @@
 ---
 title: "Vercel AI SDK"
 description: "Record Vercel AI SDK model calls and tool executions with Lemma"
-icon: "/images/brands/vercel-ai.svg"
+icon: "/images/brands/invert/vercel-ai.svg"
 ---
 
 Use `vercelAI()` when your app calls `generateText`, `streamText`, or an AI SDK agent. The integration supports AI SDK v7 and v6. It creates one Lemma trace for each AI SDK run, puts the current user turn on the root, promotes `threadId` / `userId` from telemetry metadata, and records model calls and tool executions as child spans.

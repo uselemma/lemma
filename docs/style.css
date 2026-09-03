@@ -117,10 +117,8 @@ img[src*="/icons/"] {
   filter: brightness(0) saturate(100%) invert(1);
 }
 
-/* Theme-flipping brand marks: black in the file, white under Mintlify .dark.
-   Do not use prefers-color-scheme inside these SVGs; Mintlify theme is a class. */
-.dark img[src*="vercel-ai.svg"],
-.dark img[src*="mastra.svg"] {
+/* Theme-flipping brand marks: black in the file, white under Mintlify .dark. */
+.dark img[src*="/images/brands/invert/"] {
   filter: brightness(0) saturate(100%) invert(1);
 }
 

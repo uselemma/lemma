@@ -18,9 +18,9 @@ The Claude Code contextual-menu mark lives here (`/icons/claude.svg`) so it gets
 
 Integration and product logos. Paths must **not** contain `/icons/`, or the Remix filter will flatten them.
 
-Pick one theme strategy per file and stick to it:
+Pick one theme strategy per file and stick to it. Every brand SVG uses `width="21" height="21"` (keep the original `viewBox` so non-square marks scale uniformly).
 
-1. **Fixed brand color** — hex `fill` on the path (LangChain, LangGraph, OpenAI Agents). Keep intrinsic size small (`width="21" height="21"` or viewBox-only).
-2. **Theme-flipping monochrome** — black `fill` in the SVG, plus a `.dark img[src*="<file>.svg"]` invert rule in `docs/style.css` (Vercel, Mastra). Do not embed `@media (prefers-color-scheme)`; Mintlify dark mode is the `.dark` class, not OS preference.
+1. **Fixed brand color** — hex `fill` on the path (LangChain, LangGraph, OpenAI Agents) at `/images/brands/<name>.svg`.
+2. **Theme-flipping monochrome** — black `fill` in the SVG at `/images/brands/invert/<name>.svg`. `docs/style.css` inverts everything under that prefix in `.dark`. Do not embed `@media (prefers-color-scheme)` or add per-file CSS.
 
-Reference them as `/images/brands/<name>.svg` from page `icon` frontmatter.
+Reference them from page `icon` frontmatter.
