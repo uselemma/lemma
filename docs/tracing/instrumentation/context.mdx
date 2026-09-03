@@ -9,6 +9,8 @@ Set trace-level context when you open the trace.
 
 When one user has a back-and-forth with your agent, each turn is its own trace. Give related turns the same `threadId` so Lemma groups them into one conversation.
 
+`threadId` / `thread_id` is the multi-**turn** key. It is not how you glue a host orchestrator and a sandbox into one turn. If one user turn spans processes (E2B-style), use `startTurn` / `attachTurn` / `apply` so they become one root — see [One turn across processes](/tracing/instrumentation/cross-process-turns).
+
 <Tabs>
   <Tab title="TypeScript">
     ```typescript
@@ -132,5 +134,8 @@ See the [trace contract](/reference/trace-contract) for how each field is sent a
   </Card>
   <Card title="Building high-quality traces" href="/guides/building-high-quality-traces">
     The ideal instrumentation path, with bad → better → best examples.
+  </Card>
+  <Card title="One turn across processes" href="/tracing/instrumentation/cross-process-turns">
+    Host + sandbox journal; `threadId` is not the glue.
   </Card>
 </CardGroup>

@@ -200,7 +200,11 @@ print(json.dumps(local.records()))
 ```
 
 The journal uses the same camelCase schema as the TypeScript SDK so a TS host
-can apply a Python child's dump (and the reverse).
+can apply a Python child's dump (and the reverse). `assemble_turn(token, journal)`
+builds a `TraceContext` when the coordinator already has the dump; then call
+`ingest()` once. Re-applying the same journal is idempotent (stable span ids).
+If the sandbox dies before a clean dump, end the host sandbox span as `ERROR`;
+tools that started and never ended are left incomplete.
 
 ## OpenAI Agents SDK
 

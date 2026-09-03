@@ -68,7 +68,7 @@ A **tool call** is a span that represents a single tool invocation: its name, ar
 
 ## Thread
 
-A **thread** groups the traces of a multi-turn conversation. Each turn is its own trace; giving related turns the same thread ID (`threadId` / `thread_id`) groups them into one conversation. See [Threads & context](/tracing/instrumentation/context).
+A **thread** groups the traces of a multi-turn conversation. Each turn is its own trace; giving related turns the same thread ID (`threadId` / `thread_id`) groups them into one conversation. See [Threads & context](/tracing/instrumentation/context). Do not use a shared thread ID to stitch a host and a sandbox that are really one turn — that is a [cross-process journal](/tracing/instrumentation/cross-process-turns), not two traces.
 
 Every trace also belongs to a **project**, the container that holds your API key and project ID. See [Platform concepts](/platform/concepts) for how projects, agents, and issues fit together on the dashboard side.
 
@@ -86,5 +86,8 @@ Every trace also belongs to a **project**, the container that holds your API key
   </Card>
   <Card title="Traces in the dashboard" href="/platform/traces">
     Search and inspect ready executions.
+  </Card>
+  <Card title="One turn across processes" href="/tracing/instrumentation/cross-process-turns">
+    Host + sandbox journal, not a second root.
   </Card>
 </CardGroup>

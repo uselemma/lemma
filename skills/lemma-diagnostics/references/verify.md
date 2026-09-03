@@ -30,7 +30,9 @@ Score the received tree against the crawled pages, not against memory.
 For each finding, cite the docs URL and heading that it comes from. Typical
 questions the live docs will answer: one root per execution, stable name,
 input plus output or error, typed generations and tools, nesting,
-`threadId` / `userId`, timing, multi-turn continuity.
+`threadId` / `userId`, timing, multi-turn continuity, and whether a host +
+sandbox that is one turn landed as one root rather than two traces that
+share a thread id.
 
 If the traces look healthy against the crawled headings, say so and stop.
 

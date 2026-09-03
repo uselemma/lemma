@@ -8,7 +8,7 @@ A high-quality Lemma trace is not just “data arrived.” It is a complete, nes
 This page is the pedagogical ideal path. For the exact ingest fields, validation rules, and client-vs-normalization mapping, see the [trace contract](/reference/trace-contract). Use [Common issues](/tracing/troubleshooting/common-issues) when something is missing or malformed.
 
 <Note>
-  **One agent execution = one trace.** Child LLM calls, tool calls, retrieval, and app logic belong inside that root — not as separate top-level traces.
+  **One agent execution = one trace.** Child LLM calls, tool calls, retrieval, and app logic belong inside that root — not as separate top-level traces. `threadId` groups turns of a conversation; it does not merge a host and a sandbox that are one turn.
 </Note>
 
 ## The ideal trace
@@ -404,5 +404,8 @@ Use live handles so start → end establishes timing. Put the **current user mes
   </Card>
   <Card title="Common issues" href="/tracing/troubleshooting/common-issues">
     Diagnose missing spans, flat trees, and blank I/O.
+  </Card>
+  <Card title="One turn across processes" href="/tracing/instrumentation/cross-process-turns">
+    Host + sandbox into one root, not two traces that share a thread id.
   </Card>
 </CardGroup>

@@ -195,6 +195,14 @@ Detached handle calls require `traceId`. If a detached span, generation, or tool
   Across queues and workers, assemble the full tree in a coordinator and `ingest()` once when the turn is done. Do not stream partial deliveries under one `trace.id`.
 </Warning>
 
+## One turn across processes
+
+`threadId` / `thread_id` correlates **turns of a conversation**. It does not stitch a host process and an E2B-style sandbox into one turn.
+
+When one user turn spans processes, the host calls `startTurn` / `start_turn`, the child `attachTurn`s / `attach_turn`s a context token and records a journal **without** a Lemma API key, and the host `apply`s that journal then `ingest()`s once. Do not start a second root with the same `threadId`. There is no live span stream to Lemma from the sandbox.
+
+See [One turn across processes](/tracing/instrumentation/cross-process-turns) for the host + child example, `assembleTurn` / `assemble_turn`, and unclean-exit handling.
+
 ## Override output or record errors
 
 Return values are captured automatically. Use `trace.output()` only when the recorded output should differ from the return value.
@@ -291,5 +299,8 @@ support-agent              <- trace root (input, output)
   </Card>
   <Card title="Trace contract" href="/reference/trace-contract">
     The exact shape Lemma reads.
+  </Card>
+  <Card title="One turn across processes" href="/tracing/instrumentation/cross-process-turns">
+    Host + sandbox into one ingest payload.
   </Card>
 </CardGroup>

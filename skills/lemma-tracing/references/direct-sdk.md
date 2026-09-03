@@ -215,11 +215,31 @@ Detached child records require `traceId`. Pass `parentSpanId` when the record be
 
 ## Host + sandbox (one turn across processes)
 
-`threadId` / `thread_id` is the multi-**turn** conversation key. Do not start one root per process and share `threadId` when the processes are really one user turn (host orchestrator + E2B-style sandbox). The sandbox must not hold `LEMMA_API_KEY` or call `/traces/ingest`.
+`threadId` / `thread_id` is the multi-**turn** conversation key. Do not start one root per process and share `threadId` when the processes are really one user turn (host orchestrator + E2B-style sandbox). The sandbox must not hold `LEMMA_API_KEY` or call `/traces/ingest`. Ship the journal on the app's existing channel (E2B events, stdout, dump file). The host `apply`s it and `ingest()`s once.
 
-Host:
+TypeScript host + child (same shape as `packages/ts/tracing/examples/cross-process-turn.ts`):
 
 ```typescript
+import { Lemma, attachTurn } from "@uselemma/tracing";
+
+const lemma = new Lemma();
+
+function runInSandbox(tokenJson: string, userMessage: string) {
+  const local = attachTurn(tokenJson);
+  local.recordTool({
+    name: "search_docs",
+    input: { query: userMessage },
+    output: docs,
+  });
+  const generation = local.startGeneration({
+    name: "answer",
+    model: "gpt-4o",
+    input: userMessage,
+  });
+  generation.end({ output: answer });
+  return local.records();
+}
+
 const turn = lemma.startTurn({
   name: "agent-turn",
   input: userMessage,
@@ -227,25 +247,43 @@ const turn = lemma.startTurn({
   userId,
 });
 const sandbox = turn.startSpan({ name: "e2b-sandbox" });
-await runChild({ LEMMA_TURN: JSON.stringify(turn.export({ parentSpanId: sandbox.id })) });
-for (const event of childEvents) turn.apply(event);
-sandbox.end();
-await turn.end({ output });
+const journal = runInSandbox(
+  JSON.stringify(turn.export({ parentSpanId: sandbox.id })),
+  userMessage,
+);
+turn.apply(journal);
+sandbox.end({ output: { ok: true } });
+await turn.end({ output: answer });
 ```
 
-Child:
+Python:
 
-```typescript
-import { attachTurn } from "@uselemma/tracing";
+```python
+import json
+from uselemma_tracing import Lemma, attach_turn
 
-const local = attachTurn(process.env.LEMMA_TURN);
-local.recordTool({ name: "search_docs", input: query, output: docs });
-emit(local.records()); // existing stdout / RPC / E2B event channel
+lemma = Lemma()
+
+def run_in_sandbox(token_json, user_message):
+    local = attach_turn(token_json)
+    local.record_tool(name="search_docs", input={"query": user_message}, output=docs)
+    generation = local.start_generation(name="answer", model="gpt-4o", input=user_message)
+    generation.end(output=answer)
+    return local.records()
+
+turn = lemma.start_turn("agent-turn", input=user_message, thread_id=thread_id, user_id=user_id)
+sandbox = turn.start_span(name="e2b-sandbox")
+journal = run_in_sandbox(json.dumps(turn.export(parent_span_id=sandbox.id)), user_message)
+turn.apply(journal)
+sandbox.end(output={"ok": True})
+turn.end(output=answer)
 ```
 
-`turn.end()` / coordinator `ingest()` stays strict so a failed send can be retried. Re-applying the same journal does not duplicate spans (stable ids). If the child exits uncleanly, end the sandbox span as ERROR; incomplete tools are allowed.
+`apply` also accepts a JSON string, one record, or an array of records if you stream events instead of one dump. `assembleTurn(token, journal)` / `assemble_turn(token, journal)` builds a `TraceContext` when the coordinator already has the dump and is not holding a live handle; then call `ingest()` once.
 
-Python mirrors this with `start_turn`, `attach_turn`, `apply`, and `end`.
+`turn.end()` / coordinator `ingest()` stays strict so a failed send can be retried. Re-applying the same journal does not duplicate spans (stable ids). If the child exits uncleanly, end the sandbox span as ERROR and `turn.fail(...)`; incomplete tools are allowed.
+
+Standalone helpers: `startTurn` / `attachTurn` / `applyTurnJournal` (Python `start_turn` / `attach_turn` / `apply_turn_journal`). Instance aliases: `lemma.startTurn` / `lemma.attach` (Python `lemma.start_turn` / `Lemma.attach`).
 
 ## Native Contract Props
 

@@ -110,6 +110,7 @@ Deliver **one complete trace** when the execution (agent turn) finishes. This is
 - **Not a merge API:** omitted root fields do **not** preserve prior values. There is no field-level upsert, and patching a trace across calls is not supported.
 - **Processing:** after an idle window Lemma processes the trace once; a later successful re-delivery does not restart `processTrace` / `extractSignals`. Late new span IDs may still append for display.
 - Do not reuse one `trace.id` across conversation turns — see [Instrumenting multi-turn agents](/guides/instrumenting-multi-turn-agents).
+- One user turn split across a host and a sandbox is still one delivery: journal locally, `apply`, then `ingest()` once — see [One turn across processes](/tracing/instrumentation/cross-process-turns). `thread_id` groups turns; it does not merge processes.
 
 ## Trace record
 
@@ -121,7 +122,7 @@ Deliver **one complete trace** when the execution (agent turn) finishes. This is
 | `output` | Final answer on success |
 | `error` / `status` | Failure message and `ERROR` status when the run fails |
 | `started_at` / `ended_at` / `duration_ms` | Trace timing |
-| `thread_id` | Groups multi-turn conversation traces |
+| `thread_id` | Groups multi-turn conversation traces. Not how you stitch a host and sandbox into one turn. |
 | `user_id` | Per-user slicing |
 | `release` | Optional deployed app version from the SDK client (`release` / `LEMMA_RELEASE`). Trimmed; empty, over 200 characters, or values with newlines, tabs, or carriage returns are omitted (unreleased) |
 | `metadata` | Arbitrary JSON attached to the root |
@@ -457,7 +458,7 @@ These are Lemma-specific extensions (not OpenTelemetry GenAI canonical names).
 | Token `usage` when the provider supplies it | Token and estimated-cost Analytics; omit vs zero coverage |
 | Typed tools with args + result/error | Makes tool behavior inspectable |
 | Correct `parent_id` nesting | Preserves causality in the tree |
-| `thread_id` for multi-turn work | Groups conversation turns |
+| `thread_id` for multi-turn work | Groups conversation turns. Not a substitute for a host-side journal when one turn spans processes. |
 | `user_id` when available | Enables per-user slicing |
 | Measured `duration_ms` on root and generations | Root latency vs generation speed as distinct quantities |
 

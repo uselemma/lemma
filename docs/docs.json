@@ -78,6 +78,7 @@
               "tracing/instrumentation/setup",
               "tracing/instrumentation/instrument-an-agent",
               "tracing/instrumentation/traces",
+              "tracing/instrumentation/cross-process-turns",
               "tracing/instrumentation/generations",
               "tracing/instrumentation/tool-calls",
               "tracing/instrumentation/spans",
