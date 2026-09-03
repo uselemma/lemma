@@ -7,12 +7,7 @@ import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
 import { MockLanguageModelV3 } from "ai/test";
 import { describe, expect, it } from "vitest";
-import {
-  ingestFetchMock,
-  jsonBody,
-  LEMMA_PROJECT_ID,
-  mastraExporters,
-} from "../test-helpers";
+import { ingestFetchMock, jsonBody, LEMMA_PROJECT_ID } from "../test-helpers";
 import { LemmaMastraExporter } from "./mastra";
 
 function mockModel(text: string) {
@@ -47,7 +42,7 @@ describe("LemmaMastraExporter through real Mastra", () => {
         configs: {
           default: {
             serviceName: "support-agent",
-            exporters: mastraExporters(exporter),
+            exporters: [exporter],
           },
         },
       }),

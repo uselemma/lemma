@@ -355,6 +355,14 @@ enable_debug_mode()
 You can also set `LEMMA_DEBUG=1` (`true` also works). Use this when validating that spans are
 created in the expected order and the SDK is sending to the intended URL.
 
+## Examples
+
+Runnable docs-chat agents for every Python stack live in
+[`examples/python/`](../../../examples/python). See
+[Runnable examples](https://docs.uselemma.ai/guides/examples).
+
+This package also ships SDK API snippets in [`examples/`](./examples).
+
 ## License
 
 MIT

@@ -5,12 +5,7 @@
 import { generateText } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { describe, expect, it } from "vitest";
-import {
-  ingestFetchMock,
-  jsonBody,
-  LEMMA_PROJECT_ID,
-  vercelTelemetry,
-} from "../test-helpers";
+import { ingestFetchMock, jsonBody, LEMMA_PROJECT_ID } from "../test-helpers";
 import { vercelAI } from "./vercel-ai";
 
 function mockModel(text: string) {
@@ -40,7 +35,7 @@ describe("vercelAI through real AI SDK", () => {
       telemetry: {
         isEnabled: true,
         functionId: "support-agent",
-        integrations: [vercelTelemetry(lemmaTelemetry)],
+        integrations: [lemmaTelemetry],
       },
     });
     await lemmaTelemetry.flush();

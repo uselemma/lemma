@@ -13,7 +13,10 @@ owned trace. Missing-parent events never overwrite concurrent trace state.
 
 You do not need to wrap LangChain calls in `lemma.trace()`. Pass the callback
 handler through LangChain's `callbacks` option, then `flush()` to send the
-trace.
+trace. A complete docs-chat agent using this integration lives in
+[`examples/langchain`](https://github.com/uselemma/lemma/tree/main/examples/langchain)
+(TypeScript) and [`examples/python/langchain`](https://github.com/uselemma/lemma/tree/main/examples/python/langchain)
+(Python). See [Runnable examples](/guides/examples).
 
 ## TypeScript
 

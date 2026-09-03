@@ -190,7 +190,7 @@ type VercelAIV6ToolCallFinishEvent = {
     }
 );
 
-export type VercelAITelemetryIntegration = {
+type VercelAITelemetryHandlers = {
   onLanguageModelCallStart?: (
     event: VercelAIModelCallStartEvent,
   ) => MaybePromise<void>;
@@ -217,6 +217,29 @@ export type VercelAITelemetryIntegration = {
   onToolCallFinish?: (
     event: VercelAIV6ToolCallFinishEvent,
   ) => MaybePromise<void>;
+  fail: (error: unknown) => Promise<void>;
+  recordResult: (result: unknown) => number;
+  flush: () => Promise<void>;
+  shutdown: () => Promise<void>;
+};
+
+/**
+ * Public telemetry shape. Event callbacks accept `object` so the integration
+ * is assignable to AI SDK `Telemetry` without an `ai` package dependency.
+ */
+export type VercelAITelemetryIntegration = {
+  onLanguageModelCallStart?: (event: object) => MaybePromise<void>;
+  onLanguageModelCallEnd?: (event: object) => MaybePromise<void>;
+  onToolExecutionStart?: (event: object) => MaybePromise<void>;
+  onToolCallStart?: (event: object) => MaybePromise<void>;
+  onToolExecutionEnd?: (event: object) => MaybePromise<void>;
+  onStart?: (event: object) => MaybePromise<void>;
+  onStepStart?: (event: object) => MaybePromise<void>;
+  onStepEnd?: (event: object) => MaybePromise<void>;
+  onStepFinish?: (event: object) => MaybePromise<void>;
+  onFinish?: (event: object) => MaybePromise<void>;
+  onEnd?: (event: object) => MaybePromise<void>;
+  onToolCallFinish?: (event: object) => MaybePromise<void>;
   /** Mark the active run as failed and end the owned trace. */
   fail: (error: unknown) => Promise<void>;
   /**
@@ -1100,7 +1123,7 @@ export function vercelAI(
     );
   }
 
-  const integration: VercelAITelemetryIntegration = {
+  const integration: VercelAITelemetryHandlers = {
     onLanguageModelCallStart(event) {
       if (
         phase === "active" &&
@@ -1438,7 +1461,7 @@ export function vercelAI(
     },
   };
 
-  return integration;
+  return integration as VercelAITelemetryIntegration;
 }
 
 export type LemmaVercelAIIntegrationOptions = VercelAIIntegrationOptions;

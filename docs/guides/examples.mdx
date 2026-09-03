@@ -1,0 +1,68 @@
+---
+title: "Runnable examples"
+description: "The same Lemma docs chat agent, instrumented once per first-party stack"
+---
+
+The [examples directory](https://github.com/uselemma/lemma/tree/main/examples) is a copy-paste guide: every folder is the same chat agent, and the only thing that changes is how Lemma tracing is wired.
+
+The agent answers questions about Lemma by calling two tools against the live docs (`https://docs.uselemma.ai/llms.txt` and each page's `.md` URL). Run a folder, ask a question, then open [Traces](/platform/traces) and confirm one root with nested tools and generations.
+
+<Note>
+  Package-level snippets in `packages/ts/tracing/examples` and `packages/py/tracing/examples` are SDK API samples. Use this directory when you want a complete agent.
+</Note>
+
+## Pick a stack
+
+Pass the framework adapter (callback, processor, exporter, or telemetry helper). Use `lemma.trace()` only when you are not on one of those frameworks.
+
+### TypeScript
+
+| Stack | Directory |
+| --- | --- |
+| No framework | [`examples/direct-sdk`](https://github.com/uselemma/lemma/tree/main/examples/direct-sdk) |
+| Vercel AI SDK | [`examples/vercel-ai`](https://github.com/uselemma/lemma/tree/main/examples/vercel-ai) |
+| OpenAI Agents SDK | [`examples/openai-agents`](https://github.com/uselemma/lemma/tree/main/examples/openai-agents) |
+| LangChain | [`examples/langchain`](https://github.com/uselemma/lemma/tree/main/examples/langchain) |
+| LangGraph | [`examples/langgraph`](https://github.com/uselemma/lemma/tree/main/examples/langgraph) |
+| Mastra | [`examples/mastra`](https://github.com/uselemma/lemma/tree/main/examples/mastra) |
+
+### Python
+
+| Stack | Directory |
+| --- | --- |
+| No framework | [`examples/python/direct-sdk`](https://github.com/uselemma/lemma/tree/main/examples/python/direct-sdk) |
+| OpenAI Agents SDK | [`examples/python/openai-agents`](https://github.com/uselemma/lemma/tree/main/examples/python/openai-agents) |
+| LangChain | [`examples/python/langchain`](https://github.com/uselemma/lemma/tree/main/examples/python/langchain) |
+| LangGraph | [`examples/python/langgraph`](https://github.com/uselemma/lemma/tree/main/examples/python/langgraph) |
+
+Vercel AI SDK and Mastra are TypeScript-only.
+
+## Run
+
+Copy [`examples/.env.example`](https://github.com/uselemma/lemma/blob/main/examples/.env.example) to `examples/.env` and set `LEMMA_API_KEY`, `LEMMA_PROJECT_ID`, and `OPENAI_API_KEY`.
+
+TypeScript, from the repo root after `pnpm install`:
+
+```bash
+pnpm --filter @lemma/example-direct-sdk start "How do I instrument a Vercel AI agent?"
+```
+
+Python, after `uv sync`:
+
+```bash
+uv run --project examples/python/direct-sdk python examples/python/direct-sdk/main.py \
+  "How do I instrument a Python agent with Lemma?"
+```
+
+Omit the question argument to open a REPL. Each turn is its own root trace; turns in the same session share `threadId` / `thread_id`. See [Instrumenting multi-turn agents](/guides/instrumenting-multi-turn-agents).
+
+## What a ready trace looks like
+
+```text
+lemma-docs-agent          <- root (current question, final answer, thread id)
+├── list_docs             <- tool
+├── read_doc              <- tool (may repeat)
+└── answer                <- generation(s)
+```
+
+If that shape is missing, enable `LEMMA_DEBUG=1` and follow [Common issues](/tracing/troubleshooting/common-issues).
