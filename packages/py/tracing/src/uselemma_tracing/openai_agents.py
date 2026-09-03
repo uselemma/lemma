@@ -432,13 +432,13 @@ class LemmaOpenAIAgentsProcessor:
 
         if stored.root_error:
             stored.context.fail(stored.root_error)
-            self.lemma._send(stored.context, started_at, ended_at)
+            self.lemma._deliver_automatic(stored.context, started_at, ended_at)
             return
 
         if stored.root_output is not None:
             stored.context.output(stored.root_output)
 
-        self.lemma._send(stored.context, started_at, ended_at)
+        self.lemma._deliver_automatic(stored.context, started_at, ended_at)
 
     def _ensure_trace(self, trace: Any) -> _StoredTrace:
         trace_id = _get(trace, "trace_id")

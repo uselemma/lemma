@@ -230,7 +230,7 @@ Return values are captured automatically. Use `trace.output()` only when the rec
   </Tab>
 </Tabs>
 
-If the callback throws, the SDK records the trace as failed, sends it to Lemma, and rethrows the original error. The rethrow holds even when the send itself fails: a delivery problem is warned about, never raised in place of your error. If the callback succeeds and the send fails, the send throws so you can retry — the trace is not marked failed, and it is not re-sent as a failed run.
+If the callback throws, the SDK records the trace as failed, sends it to Lemma, and rethrows the original error. Automatic delivery (`trace` / `async_trace` / `TraceHandle.end()`) fails open: a Lemma ingest 4xx/5xx or network error is logged in debug mode and dropped, so it cannot fail the caller's application or replace the original error. A transport failure on a successful run is not recorded as an agent failure. Use `ingest()` when you need a failed send to raise so you can retry.
 
 ## Pass trace context to helpers
 

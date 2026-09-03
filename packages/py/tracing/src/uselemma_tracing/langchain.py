@@ -744,13 +744,13 @@ class LemmaLangChainCallbackHandler:
 
         if stored.root_error:
             stored.context.fail(stored.root_error)
-            self.lemma._send(stored.context, started_at, ended_at)
+            self.lemma._deliver_automatic(stored.context, started_at, ended_at)
             return
 
         if stored.root_output is not None:
             stored.context.output(stored.root_output)
 
-        self.lemma._send(stored.context, started_at, ended_at)
+        self.lemma._deliver_automatic(stored.context, started_at, ended_at)
 
     def _maybe_finalize_owner(self, run: _StoredRun, ended_at: datetime) -> None:
         if not run.owns_trace:

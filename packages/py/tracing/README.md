@@ -157,6 +157,11 @@ tree for display). Retries of the same complete payload are safe — already-sto
 span IDs are skipped — so a failed send can be retried as-is. It raises on a
 non-2xx response and never mutates the trace's status.
 
+Automatic delivery (`trace` / `async_trace`) fails open: a Lemma ingest
+4xx/5xx or network error is logged in debug mode and dropped so it cannot fail
+the caller's application. LangChain and OpenAI Agents flush through this path.
+Use `ingest()` when you need a failed send to raise so you can retry.
+
 ## OpenAI Agents SDK
 
 Install the OpenAI Agents extra and register the Lemma processor:

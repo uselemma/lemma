@@ -1767,4 +1767,22 @@ describe("vercelAI", () => {
 
     expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
   });
+
+  it("flush does not throw when ingest returns 503", async () => {
+    const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      prompt: "hello",
+    });
+    await integration.onEnd?.({ text: "hi" });
+    await expect(integration.flush()).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

@@ -18,7 +18,7 @@ import {
   isDebugVerifyEnabled,
   lemmaDebug,
 } from "./debug-mode";
-import { describeError, failureMessage } from "./error-message";
+import { failureMessage } from "./error-message";
 import { normalizeRelease } from "./release";
 import {
   attachResultUsage,
@@ -956,7 +956,6 @@ export class Lemma {
   private readonly projectId: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
-  private deliveryWarningLogged = false;
   private readonly release?: string;
   private readonly traces = new Map<string, TraceHandle>();
   private configLogged = false;
@@ -1101,7 +1100,7 @@ export class Lemma {
         traceOptions,
         async (trace, startedAt, endedAt) => {
           try {
-            await this.flushTrace(trace, startedAt, endedAt);
+            await this.flushTraceAutomatic(trace, startedAt, endedAt);
           } finally {
             // Drop the handle once ended so long-lived clients don't retain
             // every historical TraceHandle (and its spans/payloads) forever.
@@ -1130,17 +1129,17 @@ export class Lemma {
       } catch (error) {
         // Only the agent's own failure belongs in this branch.
         context.fail(error);
-        await this.flushWithoutMasking(context, startedAt, new Date());
+        await this.flushTraceAutomatic(context, startedAt, new Date());
         throw error;
       }
 
       if (traceOptions.output === undefined) {
         context.output(result);
       }
-      // Delivery still throws on a non-2xx so the caller can retry, but it is
-      // no longer inside the agent's try block: a transport failure must not
-      // be recorded as an agent failure, or re-sent as one.
-      await this.flushTrace(context, startedAt, new Date());
+      // Automatic delivery is outside the agent's try: a transport failure
+      // must not be recorded as an agent failure. Fail-open so Lemma being
+      // down cannot fail the caller's app; ingest() stays strict for retries.
+      await this.flushTraceAutomatic(context, startedAt, new Date());
       return result;
     })();
   }
@@ -1428,25 +1427,19 @@ export class Lemma {
   }
 
   /**
-   * Deliver a trace without letting a delivery failure replace the caller's error.
-   *
-   * Called only from a `catch` block that is about to rethrow. If `flushTrace`
-   * threw from there, the ingest error would propagate in place of the agent's
-   * error and the caller would lose the failure they are handling.
+   * Automatic SDK delivery. Catches transport / non-2xx so Lemma being down
+   * cannot fail the caller's app. {@link Lemma.ingest} uses {@link flushTrace}
+   * (strict) so queue/plugin producers can retry.
    */
-  private async flushWithoutMasking(
+  private async flushTraceAutomatic(
     context: TraceContext,
     startedAt: Date,
     endedAt: Date,
   ) {
     try {
       await this.flushTrace(context, startedAt, endedAt);
-    } catch (flushError) {
-      if (this.deliveryWarningLogged) return;
-      this.deliveryWarningLogged = true;
-      warnNoop(
-        `could not deliver the trace for a failed run (${describeError(flushError)}); rethrowing the original error. Further delivery failures on this path are not repeated.`,
-      );
+    } catch {
+      // flushTrace already lemmaDebug'd "trace ingest failed".
     }
   }
 
@@ -1469,14 +1462,24 @@ export class Lemma {
       requestedAt: new Date().toISOString(),
       url,
     });
-    const response = await this.fetchImpl(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body,
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+    } catch (error) {
+      lemmaDebug("client", "trace ingest failed", {
+        traceId: payload.trace.id,
+        projectId: payload.project_id,
+        error: failureMessage(error) ?? String(error),
+      });
+      throw error;
+    }
 
     const responseHeaders = pickResponseHeaders(response.headers);
 

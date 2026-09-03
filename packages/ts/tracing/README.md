@@ -186,6 +186,8 @@ await lemma.ingest(context, { startedAt });
 
 `ingest()` is not an incremental merge API: omitted root fields do not preserve prior values, and after Lemma processes the trace once, a later re-delivery does not re-run issue extraction (occasional late child spans may still append to the tree for display). Retries of the same complete payload are safe — already-stored span IDs are skipped — so a failed send can be retried as-is. It throws on a non-2xx response and never mutates the trace's status.
 
+Automatic delivery (`trace(options, fn)` and `TraceHandle.end()`) fails open: a Lemma ingest 4xx/5xx or network error is logged in debug mode and dropped so it cannot fail the caller's application. Framework integrations that close through `end()` inherit this. Use `ingest()` when you need a failed send to throw so you can retry.
+
 ## Coding Agent Harness Turns
 
 Harness adapters receive prompts, tools, and responses as separate lifecycle

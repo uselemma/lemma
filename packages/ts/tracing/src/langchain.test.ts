@@ -790,6 +790,16 @@ describe("langChain", () => {
     expect(body.trace.spans[0].parent_id ?? null).toBeNull();
   });
 
+  it("flush does not throw when ingest returns 503", async () => {
+    const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
+    const h = handler(fetchMock);
+
+    h.handleChainStart({ name: "support-agent" }, "hi", "chain-1");
+    await h.handleChainEnd("done", "chain-1");
+    await expect(h.flush()).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("forwards release onto the ingest payload", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const h = handler(fetchMock, { release: "1.8.3" });
