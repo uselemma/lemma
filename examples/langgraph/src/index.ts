@@ -1,3 +1,5 @@
+import type { CallbackHandlerMethods } from "@langchain/core/callbacks/base";
+import type { Callbacks } from "@langchain/core/callbacks/manager";
 import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { tool } from "@langchain/core/tools";
 import { ChatOpenAI } from "@langchain/openai";
@@ -9,6 +11,9 @@ import {
   MODEL,
   READ_DOC_DESCRIPTION,
   SYSTEM_PROMPT,
+  langChainMessagesFromTurn,
+  lastMessageText,
+  lemmaExampleMetadata,
   listDocs,
   loadExampleEnv,
   readDoc,
@@ -64,30 +69,29 @@ const graph = new StateGraph(MessagesAnnotation)
 
 const lemmaHandler = langGraph({ agentName: AGENT_NAME });
 
+/**
+ * The published SDK stays framework-free, so the handler is duck-typed rather
+ * than a `BaseCallbackHandler` subclass. LangChain's invoke config still
+ * requires that type.
+ */
+function langChainCallbacks(handler: typeof lemmaHandler): Callbacks {
+  return [handler as unknown as CallbackHandlerMethods];
+}
+
 async function runTurn(turn: ChatTurn): Promise<string> {
   const result = await graph.invoke(
     {
-      messages: [
-        ...turn.history.map((item) =>
-          item.role === "user"
-            ? new HumanMessage(item.content)
-            : new AIMessage(item.content),
-        ),
-        new HumanMessage(turn.message),
-      ],
+      messages: langChainMessagesFromTurn(turn, (role, content) =>
+        role === "user" ? new HumanMessage(content) : new AIMessage(content),
+      ),
     },
     {
-      callbacks: [lemmaHandler] as never,
-      metadata: {
-        threadId: turn.identity.threadId,
-        ...(turn.identity.userId ? { userId: turn.identity.userId } : {}),
-      },
+      callbacks: langChainCallbacks(lemmaHandler),
+      metadata: lemmaExampleMetadata(turn.identity),
     },
   );
   await lemmaHandler.flush();
-  const last = result.messages.at(-1);
-  const content = last && "content" in last ? last.content : "";
-  return typeof content === "string" ? content : JSON.stringify(content);
+  return lastMessageText(result.messages);
 }
 
 await runCli(runTurn);

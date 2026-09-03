@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from urllib.parse import urljoin, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
@@ -17,7 +18,7 @@ def _get(url: str, label: str) -> str:
         return response.read().decode("utf-8")
 
 
-def list_docs() -> str:
+def list_docs_sync() -> str:
     return _get(DOCS_INDEX, "list_docs")
 
 
@@ -33,5 +34,13 @@ def to_markdown_docs_url(url: str) -> str:
     return urlunparse(parsed._replace(path=path))
 
 
-def read_doc(url: str) -> str:
+def read_doc_sync(url: str) -> str:
     return _get(to_markdown_docs_url(url), "read_doc")
+
+
+async def list_docs() -> str:
+    return await asyncio.to_thread(list_docs_sync)
+
+
+async def read_doc(url: str) -> str:
+    return await asyncio.to_thread(read_doc_sync, url)

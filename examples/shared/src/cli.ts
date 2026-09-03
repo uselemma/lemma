@@ -26,6 +26,34 @@ export function modelMessages(turn: ChatTurn): ChatMessage[] {
   return [...turn.history, { role: "user", content: turn.message }];
 }
 
+export function lemmaExampleMetadata(identity: TurnIdentity): {
+  threadId: string;
+  userId?: string;
+} {
+  return {
+    threadId: identity.threadId,
+    ...(identity.userId ? { userId: identity.userId } : {}),
+  };
+}
+
+export function langChainMessagesFromTurn<T>(
+  turn: ChatTurn,
+  toMessage: (role: ChatMessage["role"], content: string) => T,
+): T[] {
+  return [
+    ...turn.history.map((item) => toMessage(item.role, item.content)),
+    toMessage("user", turn.message),
+  ];
+}
+
+export function lastMessageText(
+  messages: Array<{ content?: unknown }> | undefined,
+): string {
+  const last = messages?.at(-1);
+  const content = last && "content" in last ? last.content : "";
+  return typeof content === "string" ? content : JSON.stringify(content);
+}
+
 export async function runCli(runTurn: RunTurn): Promise<void> {
   loadExampleEnv();
 

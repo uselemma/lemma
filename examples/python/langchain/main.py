@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage
@@ -14,6 +13,9 @@ from lemma_examples_shared import (
     READ_DOC_DESCRIPTION,
     SYSTEM_PROMPT,
     ChatTurn,
+    langchain_messages_from_turn,
+    last_message_text,
+    lemma_example_metadata,
     list_docs,
     load_example_env,
     read_doc,
@@ -29,12 +31,12 @@ tools = [
     StructuredTool.from_function(
         name="list_docs",
         description=LIST_DOCS_DESCRIPTION,
-        func=list_docs,
+        coroutine=list_docs,
     ),
     StructuredTool.from_function(
         name="read_doc",
         description=READ_DOC_DESCRIPTION,
-        func=read_doc,
+        coroutine=read_doc,
     ),
 ]
 
@@ -50,28 +52,20 @@ lemma_handler = langchain(agent_name=AGENT_NAME)
 async def run_turn(turn: ChatTurn) -> str:
     result = await agent.ainvoke(
         {
-            "messages": [
-                *[
-                    HumanMessage(item["content"])
-                    if item["role"] == "user"
-                    else AIMessage(item["content"])
-                    for item in turn.history
-                ],
-                HumanMessage(turn.message),
-            ]
+            "messages": langchain_messages_from_turn(
+                turn,
+                lambda role, content: (
+                    HumanMessage(content) if role == "user" else AIMessage(content)
+                ),
+            )
         },
         {
             "callbacks": [lemma_handler],
-            "metadata": {
-                "thread_id": turn.identity.thread_id,
-                **({"user_id": turn.identity.user_id} if turn.identity.user_id else {}),
-            },
+            "metadata": lemma_example_metadata(turn.identity),
         },
     )
     lemma_handler.flush()
-    last = result["messages"][-1]
-    content = getattr(last, "content", "")
-    return content if isinstance(content, str) else json.dumps(content)
+    return last_message_text(result["messages"])
 
 
 if __name__ == "__main__":

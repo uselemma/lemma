@@ -21,17 +21,24 @@ npm install @uselemma/tracing ai @ai-sdk/openai zod
 ```ts
 const lemmaTelemetry = vercelAI({ metadata: { threadId, userId } });
 
-await generateText({
-  model,
-  tools,
-  telemetry: {
-    functionId: "lemma-docs-agent",
-    integrations: [lemmaTelemetry],
-  },
-});
+try {
+  const result = await generateText({
+    model,
+    tools,
+    telemetry: {
+      functionId: "lemma-docs-agent",
+      integrations: [vercelTelemetry(lemmaTelemetry)],
+    },
+  });
+  await lemmaTelemetry.flush();
+  return result.text;
+} catch (error) {
+  await lemmaTelemetry.fail(error);
+  throw error;
+}
 ```
 
-Create one `vercelAI()` per `generateText` call. Call `flush()` in short-lived CLIs.
+Create one `vercelAI()` per `generateText` call. The example's `vercelTelemetry()` helper asserts the integration to AI SDK's `Telemetry` type — the published SDK cannot implement that interface without depending on `ai`. Call `flush()` in short-lived CLIs. Mark thrown `generateText` errors with `fail()`.
 
 ## Trace shape
 

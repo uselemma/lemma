@@ -10,6 +10,7 @@ on:
       - "pnpm-workspace.yaml"
       - "uv.lock"
       - "pyproject.toml"
+      - "examples/**"
   push:
     branches:
       - main
@@ -21,6 +22,7 @@ on:
       - "pnpm-workspace.yaml"
       - "uv.lock"
       - "pyproject.toml"
+      - "examples/**"
 
 jobs:
   typescript:
@@ -40,6 +42,9 @@ jobs:
 
       - name: Type-check
         run: pnpm --filter @uselemma/tracing type-check
+
+      - name: Type-check examples
+        run: pnpm --filter "./examples/*" type-check
 
       - name: Test
         run: pnpm --filter @uselemma/tracing test

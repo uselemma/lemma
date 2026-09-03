@@ -1,5 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { Mastra } from "@mastra/core";
+import type { ObservabilityExporter } from "@mastra/core/observability";
 import { createTool } from "@mastra/core/tools";
 import { Observability } from "@mastra/observability";
 import {
@@ -8,6 +9,7 @@ import {
   MODEL,
   READ_DOC_DESCRIPTION,
   SYSTEM_PROMPT,
+  lemmaExampleMetadata,
   listDocs,
   loadExampleEnv,
   modelMessages,
@@ -23,6 +25,16 @@ loadExampleEnv();
 requireOpenAIKey();
 
 const lemmaExporter = new LemmaMastraExporter({ agentName: AGENT_NAME });
+
+/**
+ * The published SDK stays framework-free and types Mastra events locally.
+ * Mastra's `ObservabilityExporter` uses its own `TracingEvent` union.
+ */
+function mastraExporters(
+  exporter: LemmaMastraExporter,
+): ObservabilityExporter[] {
+  return [exporter as ObservabilityExporter];
+}
 
 const listDocsTool = createTool({
   id: "list_docs",
@@ -55,7 +67,7 @@ const mastra = new Mastra({
     configs: {
       default: {
         serviceName: AGENT_NAME,
-        exporters: [lemmaExporter as never],
+        exporters: mastraExporters(lemmaExporter),
       },
     },
   }),
@@ -64,16 +76,16 @@ const mastra = new Mastra({
 async function runTurn(turn: ChatTurn): Promise<string> {
   const agent = mastra.getAgent("docsAgent");
   const result = await agent.generate(
-    modelMessages(turn).map(({ role, content }) => ({ role, content })) as never,
+    modelMessages(turn).map((item) =>
+      item.role === "user"
+        ? { role: "user" as const, content: item.content }
+        : { role: "assistant" as const, content: item.content },
+    ),
     {
-      tracingOptions: {
-        metadata: {
-          threadId: turn.identity.threadId,
-          ...(turn.identity.userId ? { userId: turn.identity.userId } : {}),
-        },
-      },
+    tracingOptions: {
+      metadata: lemmaExampleMetadata(turn.identity),
     },
-  );
+  });
   await lemmaExporter.flush();
   return result.text;
 }

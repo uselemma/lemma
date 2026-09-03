@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import json
 import os
 import asyncio
 import sys
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import Any, TypeVar
 
 from .env import load_example_env
 from .prompt import AGENT_NAME
+
+T = TypeVar("T")
 
 ChatMessage = dict[str, str]
 
@@ -31,6 +35,29 @@ RunTurn = Callable[[ChatTurn], Awaitable[str]]
 
 def model_messages(turn: ChatTurn) -> list[ChatMessage]:
     return [*turn.history, {"role": "user", "content": turn.message}]
+
+
+def lemma_example_metadata(identity: TurnIdentity) -> dict[str, str]:
+    metadata = {"thread_id": identity.thread_id}
+    if identity.user_id:
+        metadata["user_id"] = identity.user_id
+    return metadata
+
+
+def langchain_messages_from_turn(
+    turn: ChatTurn,
+    to_message: Callable[[str, str], T],
+) -> list[T]:
+    return [
+        *[to_message(item["role"], item["content"]) for item in turn.history],
+        to_message("user", turn.message),
+    ]
+
+
+def last_message_text(messages: list[Any] | None) -> str:
+    last = messages[-1] if messages else None
+    content = getattr(last, "content", "")
+    return content if isinstance(content, str) else json.dumps(content)
 
 
 async def run_cli(run_turn: RunTurn) -> None:

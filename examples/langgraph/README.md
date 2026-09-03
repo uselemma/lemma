@@ -22,10 +22,12 @@ npm install @uselemma/tracing @langchain/langgraph @langchain/openai
 const lemmaHandler = langGraph({ agentName: "lemma-docs-agent" });
 
 await graph.invoke(state, {
-  callbacks: [lemmaHandler],
+  callbacks: langChainCallbacks(lemmaHandler),
   metadata: { threadId, userId },
 });
 ```
+
+`@uselemma/tracing` is framework-free, so `langGraph()` is duck-typed. The example's `langChainCallbacks()` helper asserts it to LangChain's `Callbacks` type (`BaseCallbackHandler` lives in `@langchain/core`, which the published SDK does not import).
 
 ## Trace shape
 

@@ -26,13 +26,13 @@ processor = instrument_openai_agents()
 
 
 @function_tool(name_override="list_docs", description_override=LIST_DOCS_DESCRIPTION)
-def list_docs_tool() -> str:
-    return list_docs()
+async def list_docs_tool() -> str:
+    return await list_docs()
 
 
 @function_tool(name_override="read_doc", description_override=READ_DOC_DESCRIPTION)
-def read_doc_tool(url: str) -> str:
-    return read_doc(url)
+async def read_doc_tool(url: str) -> str:
+    return await read_doc(url)
 
 
 agent = Agent(

@@ -106,7 +106,7 @@ async def run_turn(turn: ChatTurn) -> str:
                 args = json.loads(call.function.arguments or "{}")
                 tool_started = time.perf_counter()
                 try:
-                    output = execute_docs_tool(call.function.name, args)
+                    output = await execute_docs_tool(call.function.name, args)
                     trace.record_tool(
                         name=call.function.name,
                         input=args,

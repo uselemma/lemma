@@ -8,4 +8,14 @@ export {
 export { listDocs, readDoc, toMarkdownDocsUrl } from "./docs";
 export { executeDocsTool } from "./tools";
 export { loadExampleEnv, requireOpenAIKey } from "./env";
-export { runCli, modelMessages, type ChatMessage, type ChatTurn, type RunTurn, type TurnIdentity } from "./cli";
+export {
+  runCli,
+  modelMessages,
+  lemmaExampleMetadata,
+  langChainMessagesFromTurn,
+  lastMessageText,
+  type ChatMessage,
+  type ChatTurn,
+  type RunTurn,
+  type TurnIdentity,
+} from "./cli";
