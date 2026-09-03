@@ -5,22 +5,24 @@ meta:
   contentType: "Landing"
 ---
 
-Lemma monitors production artificial intelligence (AI) agents. It records what each agent did, detects silent failures, and gives you the context to fix them.
+Lemma is an observability and evaluation platform for AI agents. It records what each agent did in production, finds recurring problems, and gives you the evidence to investigate.
 
 Traditional monitoring catches explicit errors. It misses agents that return incorrect answers, forget earlier messages, or choose the wrong tool.
 
-Lemma helps you:
+How Lemma works:
 
-- **Inspect agent runs**: Review model calls, tools, retrieval, latency, and errors
-- **Detect recurring failures**: Audit traces against your agent’s instructions and group related failures into issues
-- **Receive relevant alerts**: Triage issues and notify your team in Slack
-- **Fix failures in your editor**: Pull traces and issues into your coding agent through the [Model Context Protocol (MCP)](/connections/mcp)
+1. **Instrument** the production agent so each execution becomes a ready, inspectable [trace](/tracing/instrumentation/concepts#trace).
+2. **Analyze** completed traces for behavior that materially hurt the agent’s task.
+3. **Group** repeated evidence into an [issue](/platform/concepts#issue).
+4. **Investigate** in the dashboard, [Inspect](/platform/inspect), Slack, Linear, or a coding agent, then follow recurrence.
+
+See [Product boundaries](/platform/concepts#product-boundaries) for what Lemma evaluates and which surfaces are not shipped.
 
 <Frame>
   <img src="/images/platform/dashboard-home.png" alt="Project dashboard showing to-do items, headline stats, and resolved-versus-dismissed and traces-per-month charts" />
 </Frame>
 
-## Start monitoring your agents
+## Start sending traces
 
 Choose how you’ll send agent data to Lemma.
 
@@ -34,8 +36,8 @@ Choose how you’ll send agent data to Lemma.
   <Card title="Core concepts" href="/tracing/instrumentation/concepts">
     Learn how Lemma defines traces, spans, generations, and threads.
   </Card>
-  <Card title="Overview" href="/platform/overview">
-    What to do after the first trace arrives.
+  <Card title="Overview" href="/platform/overview#recommended-workspace-sequence">
+    What to do after the first ready trace arrives.
   </Card>
 </CardGroup>
 
@@ -53,7 +55,7 @@ Use Lemma to review detected failures, receive alerts, and investigate from your
   <Card title="Slack" href="/connections/slack">
     Receive issue alerts and optional Issue Briefs in Slack.
   </Card>
-  <Card title="MCP Server" href="/connections/mcp">
+  <Card title="Lemma MCP server" href="/connections/mcp">
     Give your coding agent the traces and issues it needs to investigate a failure.
   </Card>
 </CardGroup>

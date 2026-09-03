@@ -1,15 +1,35 @@
 ---
 title: "Quickstart"
 description: "Install the Lemma SDK and send your first complete agent trace"
+meta:
+  contentType: "Tutorial"
 ---
 
 Send one complete agent trace to Lemma. The software development kit (SDK) sends JSON to the Lemma API.
 
 One agent execution is one [trace](/tracing/instrumentation/concepts). Record model calls, tool calls, retrieval, and app logic inside that trace.
 
+## Set credentials
+
+Find these in [Lemma project settings](https://platform.uselemma.ai), or in the project get-started flow.
+
+```bash
+export LEMMA_API_KEY="lma_..."
+export LEMMA_PROJECT_ID="proj_..."
+export LEMMA_RELEASE="1.8.3" # optional
+```
+
+Keep `LEMMA_API_KEY` **server-side**. Never commit it. Never put it in browser or client-side code. The SDK sends to `https://api.uselemma.ai` by default. Pass `baseUrl` / `base_url` only for a custom endpoint.
+
+## What a ready trace is
+
+Creating an API key, adding an SDK dependency, or seeing an ingest attempt **does not** prove observability. Observability is proven when a real production-like path produces a **ready** trace you can open in the dashboard: inspectable, with a root, nested work, and input and output you recognize.
+
+A key, an SDK install, or a failed or empty ingest is not a ready trace.
+
 ## What you are building
 
-You will send one support-agent trace with a nested generation and tool call.
+You send one support-agent trace with a nested generation and tool call.
 
 ```text
 support-agent              <- trace root (input, output)
@@ -17,121 +37,135 @@ support-agent              <- trace root (input, output)
 └── search_docs            <- tool call (args, result)
 ```
 
-## Steps
+## Instrument the agent
 
-<Steps>
-  <Step title="Install the SDK">
-    <Tabs>
-      <Tab title="TypeScript">
+Pick one path. Framework adapters live on the integration pages: [Vercel AI SDK](/integrations/vercel-ai), [OpenAI Agents](/integrations/openai-agents), [LangChain](/integrations/langchain), and [LangGraph](/integrations/langgraph).
+
+<Tabs>
+  <Tab title="Coding agent">
+    Use a coding agent to instrument the production agent.
+
+    <Steps>
+      <Step title="Open the project get-started flow">
+        In the [Lemma dashboard](https://platform.uselemma.ai), select or create the organization and project, then open that project’s get-started flow.
+      </Step>
+      <Step title="Install the tracing skill">
         ```bash
-        npm install @uselemma/tracing
+        npx skills add uselemma/lemma --skill "lemma-tracing"
         ```
-      </Tab>
-      <Tab title="Python">
-        ```bash
-        pip install uselemma-tracing
-        ```
-      </Tab>
-    </Tabs>
-  </Step>
 
-  <Step title="Set environment variables">
-    Find these in [Lemma project settings](https://platform.uselemma.ai).
+        Ask the coding agent to use that skill to instrument the production agent.
+      </Step>
+      <Step title="Exercise a real path">
+        Run a production-like request through the instrumented agent.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Direct SDK">
+    Install the SDK and record one generation and one tool call inside a trace callback.
 
-    ```bash
-    export LEMMA_API_KEY="lma_..."
-    export LEMMA_PROJECT_ID="proj_..."
-    export LEMMA_RELEASE="1.8.3" # optional
-    ```
+    <Steps>
+      <Step title="Install the SDK">
+        <Tabs>
+          <Tab title="TypeScript">
+            ```bash
+            npm install @uselemma/tracing
+            ```
+          </Tab>
+          <Tab title="Python">
+            ```bash
+            pip install uselemma-tracing
+            ```
+          </Tab>
+        </Tabs>
+      </Step>
+      <Step title="Trace one agent execution">
+        Create a client, open a trace, then record one generation and one tool call inside the trace callback.
 
-    The SDK sends to `https://api.uselemma.ai` by default. Pass `baseUrl` / `base_url` only for a custom endpoint.
-  </Step>
+        <Tabs>
+          <Tab title="TypeScript">
+            ```typescript
+            import { Lemma } from "@uselemma/tracing";
 
-  <Step title="Trace one agent execution">
-    Create a client, open a trace, then record one generation and one tool call inside the trace callback.
+            const lemma = new Lemma();
 
-    <Tabs>
-      <Tab title="TypeScript">
-        ```typescript
-        import { Lemma } from "@uselemma/tracing";
+            const answer = await lemma.trace(
+              {
+                name: "support-agent",
+                input: userMessage,
+                threadId: conversationId,
+                userId: user.id,
+              },
+              async (trace) => {
+                const docs = await searchDocs(userMessage);
+                trace.recordTool({
+                  name: "search_docs",
+                  input: { query: userMessage },
+                  output: docs,
+                });
 
-        const lemma = new Lemma();
+                const response = await callModel(userMessage, docs);
+                trace.recordGeneration({
+                  name: "draft-reply",
+                  input: response.messages,
+                  output: response.text,
+                  model: "gpt-4o",
+                });
 
-        const answer = await lemma.trace(
-          {
-            name: "support-agent",
-            input: userMessage,
-            threadId: conversationId,
-            userId: user.id,
-          },
-          async (trace) => {
-            const docs = await searchDocs(userMessage);
-            trace.recordTool({
-              name: "search_docs",
-              input: { query: userMessage },
-              output: docs,
-            });
+                return response.text;
+              },
+            );
+            ```
+          </Tab>
+          <Tab title="Python">
+            ```python
+            from uselemma_tracing import Lemma
 
-            const response = await callModel(userMessage, docs);
-            trace.recordGeneration({
-              name: "draft-reply",
-              input: response.messages,
-              output: response.text,
-              model: "gpt-4o",
-            });
+            lemma = Lemma()
 
-            return response.text;
-          },
-        );
-        ```
-      </Tab>
-      <Tab title="Python">
-        ```python
-        from uselemma_tracing import Lemma
+            def run(trace):
+                docs = search_docs(user_message)
+                trace.record_tool(
+                    name="search_docs",
+                    input={"query": user_message},
+                    output=docs,
+                )
 
-        lemma = Lemma()
+                response = call_model(user_message, docs)
+                trace.record_generation(
+                    name="draft-reply",
+                    input=response.messages,
+                    output=response.text,
+                    model="gpt-4o",
+                )
 
-        def run(trace):
-            docs = search_docs(user_message)
-            trace.record_tool(
-                name="search_docs",
-                input={"query": user_message},
-                output=docs,
+                return response.text
+
+            answer = lemma.trace(
+                "support-agent",
+                run,
+                input=user_message,
+                thread_id=conversation_id,
+                user_id=user.id,
             )
+            ```
+          </Tab>
+        </Tabs>
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
 
-            response = call_model(user_message, docs)
-            trace.record_generation(
-                name="draft-reply",
-                input=response.messages,
-                output=response.text,
-                model="gpt-4o",
-            )
+## Verify a ready trace
 
-            return response.text
+Open **[Traces](/platform/traces)** in the [Lemma dashboard](https://platform.uselemma.ai). You should see:
 
-        answer = lemma.trace(
-            "support-agent",
-            run,
-            input=user_message,
-            thread_id=conversation_id,
-            user_id=user.id,
-        )
-        ```
-      </Tab>
-    </Tabs>
-  </Step>
+- One trace for the whole execution
+- The root trace with input and output
+- A nested generation with model metadata
+- A nested tool call with arguments and result
 
-  <Step title="Verify in Lemma">
-    Open **[Traces](/platform/traces)** in the [Lemma dashboard](https://platform.uselemma.ai). You should see:
-
-    - One trace for the whole execution
-    - The root trace with input and output
-    - A nested generation with model metadata
-    - A nested tool call with arguments and result
-
-    After the trace looks complete, see [Overview](/platform/overview) for issues, Inspect, and workflow connections.
-  </Step>
-</Steps>
+After the trace looks complete, see [Overview](/platform/overview) for issues, Inspect, and workflow connections.
 
 ## Stamp a release
 
@@ -160,14 +194,14 @@ Adapters (`vercelAI`, `openAIAgents`, `langChain`, `langGraph`, `mastra`) accept
 
 ## Next steps
 
-Use these pages after the first trace lands.
+Use these pages after the first ready trace lands.
 
 <CardGroup cols={2}>
   <Card title="Instrument an agent" href="/tracing/instrumentation/instrument-an-agent">
     Add spans, tools, generations, and errors to a real agent.
   </Card>
   <Card title="Traces in the dashboard" href="/platform/traces">
-    Search and inspect the trace you just sent.
+    Search and inspect the trace you sent.
   </Card>
   <Card title="Overview" href="/platform/overview">
     Issues, Inspect, Artifacts, and Analytics after ingest.

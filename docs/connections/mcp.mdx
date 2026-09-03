@@ -1,31 +1,36 @@
 ---
-title: "MCP Server"
-description: "Let your coding agent list traces and issues through the Model Context Protocol"
+title: "Lemma MCP server"
+description: "Connect a coding agent to Lemma, or connect an external MCP server into Lemma"
 meta:
   contentType: "How-to"
 ---
 
-The MCP server lets your coding agent call Lemma directly: list traces and issues, inspect evidence, and take the same authorized actions the API exposes, all without you switching to the dashboard. This isn't the same connection as [Inspect](/platform/inspect); Inspect runs in-product, while the MCP server is for editors and coding agents.
+Lemma has two opposite Model Context Protocol (MCP) directions. Don’t mix them:
 
-The endpoint is `https://api.uselemma.ai/mcp` (trailing slash variants work the same), authenticated with `Authorization: Bearer <organization API key>`. Pass a project ID on project-scoped tools. Lemma only records MCP activation for a project after a successful project-scoped tool call, so saving the URL in Cursor isn't activation by itself.
+- **Lemma MCP server**: your coding agent calls Lemma to list traces and issues, inspect evidence, and take authorized actions
+- **External MCP servers**: Lemma calls tools on a server you connect, so Inspect and analysis can use those tools
+
+This page is not the same connection as [Inspect](/platform/inspect). Inspect runs in-product. The Lemma MCP server is for editors and coding agents.
+
+The endpoint is `https://api.uselemma.ai/mcp/` (trailing-slash variants work the same), authenticated with `Authorization: Bearer your_organization_api_key`. Pass a project ID on project-scoped tools. Lemma only records MCP activation for a project after a successful project-scoped tool call, so saving the URL in Cursor isn’t activation by itself.
 
 ## Prerequisites
 
 - A Lemma organization with at least one project that has, or will have, traces
-- An organization API key from **API Keys** or the project get-started flow. Copy it immediately; Lemma won't show it again. Keep it server-side in your coding tool's MCP config, never in a public repo.
+- An organization API key from **API Keys** or the project get-started flow. Copy it immediately; Lemma won’t show it again. Keep it server-side in your coding tool’s MCP config, never in a public repo
 - An MCP client that supports Streamable HTTP, such as Cursor, Claude Desktop, or Claude Code
 
 ## Connect your coding agent
 
 <Steps>
-  <Step title="Get your API key">
+  <Step title="Get an organization API key">
     Create an organization API key in the [Lemma dashboard](https://platform.uselemma.ai).
 
     <Warning>
-      Copy your key immediately after creating it. You won't be able to see it again.
+      Copy your key immediately after creating it. You won’t be able to see it again.
     </Warning>
   </Step>
-  <Step title="Add it to your IDE">
+  <Step title="Add it to your editor">
     <Tabs>
       <Tab title="Cursor">
         In **Settings > MCP Servers**, add:
@@ -34,9 +39,9 @@ The endpoint is `https://api.uselemma.ai/mcp` (trailing slash variants work the 
         {
           "mcpServers": {
             "lemma": {
-              "url": "https://api.uselemma.ai/mcp",
+              "url": "https://api.uselemma.ai/mcp/",
               "headers": {
-                "Authorization": "Bearer <your-api-key>"
+                "Authorization": "Bearer your_organization_api_key"
               }
             }
           }
@@ -51,9 +56,9 @@ The endpoint is `https://api.uselemma.ai/mcp` (trailing slash variants work the 
           "mcpServers": {
             "lemma": {
               "type": "http",
-              "url": "https://api.uselemma.ai/mcp",
+              "url": "https://api.uselemma.ai/mcp/",
               "headers": {
-                "Authorization": "Bearer <your-api-key>"
+                "Authorization": "Bearer your_organization_api_key"
               }
             }
           }
@@ -67,8 +72,8 @@ The endpoint is `https://api.uselemma.ai/mcp` (trailing slash variants work the 
 
         ```bash
         claude mcp add --transport http lemma \
-          https://api.uselemma.ai/mcp \
-          --header "Authorization: Bearer <your-api-key>"
+          https://api.uselemma.ai/mcp/ \
+          --header "Authorization: Bearer your_organization_api_key"
         ```
       </Tab>
       <Tab title="Other">
@@ -78,9 +83,9 @@ The endpoint is `https://api.uselemma.ai/mcp` (trailing slash variants work the 
         {
           "mcpServers": {
             "lemma": {
-              "url": "https://api.uselemma.ai/mcp",
+              "url": "https://api.uselemma.ai/mcp/",
               "headers": {
-                "Authorization": "Bearer <your-api-key>"
+                "Authorization": "Bearer your_organization_api_key"
               }
             }
           }
@@ -89,24 +94,45 @@ The endpoint is `https://api.uselemma.ai/mcp` (trailing slash variants work the 
       </Tab>
     </Tabs>
 
-    Replace `<your-api-key>` with the organization API key you copied.
+    Replace `your_organization_api_key` with the organization API key you copied.
   </Step>
-  <Step title="Try it out">
+  <Step title="Call a project-scoped tool">
     Ask your agent:
 
-    ```
+    ```text
     Use Lemma to show me my last 5 traces, including any errors.
     ```
 
-    Include the project ID if your client hasn't already selected one.
+    Include the project ID if your client hasn’t already selected one. Activation is recorded only after that project-scoped call succeeds.
   </Step>
 </Steps>
 
 ## What tools exist
 
-REST and MCP share one operation list; see the [API Reference](/api-reference) for the full set. Results get truncated once they're oversized, so prefer pagination over asking for every span at once.
+REST and MCP share one operation list; see the [API Reference](/api-reference) for the full set. Results get truncated once they’re oversized, so prefer pagination over asking for every span at once.
 
-Typical uses include pulling the last traces with errors, inspecting a specific issue, exporting an issue as markdown, and creating or linking a Linear ticket when you're authorized to. MCP clients require confirmation before running any write tool.
+Typical uses include pulling the last traces with errors, inspecting a specific issue, exporting an issue as markdown, and creating or linking a Linear ticket when you’re authorized to. MCP clients require confirmation before running any write tool.
+
+## Connect an external MCP server
+
+Connect an external MCP server when **Lemma** needs that server’s tools, not when a coding agent needs Lemma.
+
+<Steps>
+  <Step title="Open External MCP Connections">
+    Open **Settings → External MCP Connections**.
+  </Step>
+  <Step title="Enter the server URL and authenticate">
+    Enter the server URL, then authenticate with OAuth or custom headers.
+  </Step>
+  <Step title="Wait until the connection is active">
+    Wait until the connection is `active`. `pending`, `expired`, `needs_reauth`, and `revoked` are not healthy.
+  </Step>
+  <Step title="Optionally add validation instructions">
+    Add project validation instructions so Lemma knows how to use the tools.
+  </Step>
+</Steps>
+
+Remove a connection when Lemma should stop calling those tools. External MCP is not a substitute for the Lemma MCP server above, and it does not deliver [webhook](/connections/webhooks) events.
 
 ## Related pages
 
@@ -115,7 +141,7 @@ Typical uses include pulling the last traces with errors, inspecting a specific 
     The issues your coding agent can list and act on.
   </Card>
   <Card title="Inspect" href="/platform/inspect">
-    In-product investigation. Inspect doesn't use this MCP connection.
+    In-product investigation. Inspect doesn’t use this MCP connection.
   </Card>
   <Card title="Connect your workflow" href="/connections/overview">
     When to use MCP versus Slack, Linear, or webhooks.

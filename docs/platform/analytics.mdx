@@ -7,6 +7,8 @@ meta:
 
 Analytics charts volume, latency, errors, tools, models, and estimated cost for every trace in a project over a chosen window. Use it to spot a trend, then jump to the traces or issues behind it. Open it from a project in the [Lemma dashboard](https://platform.uselemma.ai).
 
+Analytics is feature-gated. If you don’t see **Analytics** in the project sidebar, it isn’t enabled for your workspace. The project **Dashboard** (home and setup) is a different page. See [Product boundaries](/platform/concepts#product-boundaries).
+
 <Frame>
   <img src="/images/platform/analytics-dashboard.png" alt="Analytics dashboard showing headline stats, an agent scorecard, trace latency over time, model comparison, cost by model, and error rate widgets" />
 </Frame>
@@ -15,11 +17,11 @@ Analytics charts volume, latency, errors, tools, models, and estimated cost for 
 
 Pick a window: all time (clamped to the Analytics horizon), this week, this month, this quarter, this year, or a custom range. Lemma buckets the charts by day, week, or month, defaulting to whatever keeps them readable: day for a week or month window, week for a quarter, month for a year or all time.
 
-Analytics only looks back 90 days on a rolling basis, so older data won't show even if you pick all time. Individual traces on the [Traces](/platform/traces) list are retained for 14 days, which means a chart point can represent a day whose raw traces have already aged out of that list. Use Analytics to see the trend and Traces to open the executions you can still read.
+Analytics only looks back 90 days on a rolling basis, so older data won’t show even if you pick all time. Individual traces on the [Traces](/platform/traces) list are retained for 14 days, which means a chart point can represent a day whose raw traces have already aged out of that list. Use Analytics to see the trend and Traces to open the executions you can still read.
 
 ## Project and agent scope
 
-Analytics is project-scoped, and the agent scorecard lists every agent that appeared in the window. Agent names come from the traces themselves, not from a registry you maintain elsewhere, so a missing agent means it didn't emit ready traces in this project and window, not that someone deleted it from a catalog.
+Analytics is project-scoped, and the agent scorecard lists every agent that appeared in the window. Agent names come from the traces themselves, not from a registry you maintain elsewhere. A missing agent means it didn’t emit ready traces in this project and window, not that someone deleted it from a catalog.
 
 ## What the surface shows
 
@@ -37,7 +39,7 @@ Below the headline stats, you can add, remove, and reorder widgets. Lemma only o
 - **Tool error concentration**: tools ranked by failing proportion, linking into Traces
 
 <Note>
-  Cost figures are estimated model cost calculated from recorded usage, not a billed invoice. Lemma doesn't claim you were charged a specific amount on this page.
+  Cost figures are estimated model cost calculated from recorded usage, not a billed invoice. Lemma doesn’t claim you were charged a specific amount on this page.
 </Note>
 
 Empty and low-data states are expected, not a bug. A new project, a quiet agent, or traces missing model, tool, or cost fields will hide or zero the widgets that depend on that data. Send complete traces (see [Building high-quality traces](/guides/building-high-quality-traces) and [Analytics telemetry](/reference/analytics-telemetry)) before assuming an empty chart means an outage.

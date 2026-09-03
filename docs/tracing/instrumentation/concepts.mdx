@@ -5,7 +5,7 @@ meta:
   contentType: "Conceptual"
 ---
 
-Five nouns describe everything the SDK records. They're the same words used in the dashboard and across these docs.
+Five nouns describe everything the software development kit (SDK) records. They’re the same words used in the dashboard and across these docs.
 
 <Note>
   **One agent execution = one trace.** The root is the trace record; LLM calls, tool calls, and app logic are child spans inside it.
@@ -50,7 +50,7 @@ A single agent execution produces a tree. The root is the trace record; everythi
 
 ## Trace
 
-A **trace** is a single end-to-end execution of your agent, from the user's input to the final response. It carries the input, the output (or error), timing, and the tree of spans inside it. Each trace has a unique trace ID.
+A **trace** is a single end-to-end execution of your agent, from the incoming request to the final response. It carries the input, the output (or error), timing, and the tree of spans inside it. Each trace has a unique trace ID.
 
 If every model or tool call shows up as its own trace, the child work ran without the root trace handle or trace IDs. Create the root trace first, then record child spans through that trace or an explicit parent span handle. See [Agent traces](/tracing/instrumentation/traces).
 
@@ -70,13 +70,13 @@ A **tool call** is a span that represents a single tool invocation: its name, ar
 
 A **thread** groups the traces of a multi-turn conversation. Each turn is its own trace; giving related turns the same thread ID (`threadId` / `thread_id`) groups them into one conversation. See [Threads & context](/tracing/instrumentation/context).
 
-Every trace also belongs to a **project**, the container that holds your API key and project ID. See [Platform concepts](/platform/concepts) for how projects, agents, and issues fit together on the dashboard side.
+Every trace also belongs to a **project**, the container that holds your API key and project ID. See [Platform concepts](/platform/concepts) for how projects, agents, issues, and artifacts fit together on the dashboard side.
 
 ## Next steps
 
 <CardGroup cols={2}>
   <Card title="Platform concepts" href="/platform/concepts">
-    Issues, occurrences, artifacts, and agents once traces arrive.
+    Issues, artifacts, and agents once traces arrive.
   </Card>
   <Card title="Trace contract" href="/reference/trace-contract">
     The exact shape Lemma reads.

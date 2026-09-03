@@ -5,9 +5,9 @@ meta:
   contentType: "How-to"
 ---
 
-Project webhooks send a signed HTTP POST request whenever an issue changes state, separate from both Slack alerts and MCP. Open the project's **Settings → Webhooks** in the [Lemma dashboard](https://platform.uselemma.ai) to configure one.
+Project webhooks send a signed HTTP POST request whenever an issue changes state. They are separate from both [Slack](/connections/slack) alerts and [Lemma MCP](/connections/mcp). Open the project’s **Settings → Webhooks** in the [Lemma dashboard](https://platform.uselemma.ai) to configure one.
 
-Lemma doesn't emit `incident.*` events today; customer alerting follows issues instead. If you find incident-named events in older samples or docs, they're stale.
+Lemma doesn’t emit `incident.*` events. Customer alerting follows issues instead. If you find incident-named events in older samples or docs, they’re stale.
 
 ## Events
 
@@ -22,13 +22,15 @@ Lemma doesn't emit `incident.*` events today; customer alerting follows issues i
 
 <Steps>
   <Step title="Add an HTTPS endpoint">
-    Open the project's **Settings → Webhooks**, add an HTTPS endpoint, and select the issue events you want.
+    Open the project’s **Settings → Webhooks**, add an HTTPS endpoint, and select the issue events you want.
   </Step>
   <Step title="Save your signing secret">
-    Copy the signing secret when Lemma shows it. It won't be shown again, and regenerating it replaces the old value, so store it in your receiver's secret manager right away.
+    Copy the signing secret when Lemma shows it. It won’t be shown again, and regenerating it replaces the old value, so store it in your receiver’s secret manager immediately.
   </Step>
   <Step title="Verify signature and timestamp">
     Every request includes an `X-Lemma-Signature` header containing `sha256=<hex>` and an `X-Lemma-Timestamp` header with the Unix delivery time in seconds. Verify the signature against the raw request body, then check the timestamp is recent, before you process anything. A 5-minute tolerance (the convention Stripe and GitHub also use) absorbs normal delivery and retry delay while still rejecting a replayed request.
+
+    The signature is a Hash-based Message Authentication Code (HMAC) with SHA-256 over the exact raw body.
 
     <Tabs>
       <Tab title="Node.js">
@@ -89,17 +91,21 @@ Lemma doesn't emit `incident.*` events today; customer alerting follows issues i
     </Warning>
   </Step>
   <Step title="Test delivery">
-    Send a test event, confirm your endpoint returns `2xx` quickly, and leave it enabled.
+    Send a test event, confirm your endpoint returns `2xx`, and leave it enabled.
   </Step>
 </Steps>
 
 ## Headers and verification
 
-Every request carries three headers you'll use to verify and route it: `X-Lemma-Signature` (the `sha256=<hex>` HMAC-SHA256 of the raw body), `X-Lemma-Timestamp` (Unix seconds; reject requests older than your tolerance to block replays), and `X-Lemma-Event` (the event type).
+Every request carries three headers you’ll use to verify and route it:
+
+- **`X-Lemma-Signature`**: the `sha256=<hex>` HMAC-SHA256 of the raw body
+- **`X-Lemma-Timestamp`**: Unix seconds; reject requests older than your tolerance to block replays
+- **`X-Lemma-Event`**: the event type; route on this header
 
 ## Payload shape
 
-The envelope always includes `event`, `timestamp`, `projectId`, and an `issue` object with the issue's ID, status, and related fields. Don't expect an `incident` object; that shape doesn't exist anymore.
+The envelope always includes `event`, `timestamp`, `projectId`, and an `issue` object with the issue’s ID, status, and related fields. Don’t expect an `incident` object; that shape doesn’t exist anymore.
 
 ```json
 {
@@ -120,9 +126,10 @@ Lemma counts a `2xx` response within 10 seconds as a successful delivery and ret
 ## Security checklist
 
 - Verify `X-Lemma-Signature` and reject stale `X-Lemma-Timestamp` values (a 5-minute tolerance works well) on every request
+- Route on `X-Lemma-Event`
 - Use HTTPS endpoints only
 - Store the signing secret in an environment variable, never in source control
-- Remember this is distinct from Slack alerts and from Linear's inbound webhooks to Lemma
+- Remember this is distinct from Slack alerts and from Linear’s inbound webhooks to Lemma
 
 ## Related pages
 
