@@ -1043,14 +1043,23 @@ class Lemma:
         _lemma_debug("client", "trace started", name=ctx.name)
         try:
             result = fn(ctx)
-            if ctx.output_value is None:
-                ctx.output(result)
-            self._send(ctx, started_at, _now(), fail_open=True)
-            return result
         except BaseException as exc:
+            # Only the agent's own failure belongs here. Delivery is attempted
+            # but never allowed to escape: an ingest error raised from this
+            # block would replace ``exc``, and the caller would lose the
+            # failure they are handling.
             ctx.fail(exc)
-            self._send(ctx, started_at, _now(), fail_open=True)
+            self._deliver_automatic(ctx, started_at, _now())
             raise
+
+        if ctx.output_value is None:
+            ctx.output(result)
+        # Automatic delivery is outside the agent's ``try``: a transport
+        # failure must not be recorded as an agent failure. Fail-open so
+        # Lemma being down cannot fail the caller's app; ingest() stays
+        # strict for retries.
+        self._deliver_automatic(ctx, started_at, _now())
+        return result
 
     async def async_trace(
         self,
@@ -1080,14 +1089,15 @@ class Lemma:
                 if inspect.isawaitable(maybe_result)
                 else maybe_result
             )
-            if ctx.output_value is None:
-                ctx.output(result)
-            self._send(ctx, started_at, _now(), fail_open=True)
-            return result
         except BaseException as exc:
             ctx.fail(exc)
-            self._send(ctx, started_at, _now(), fail_open=True)
+            self._deliver_automatic(ctx, started_at, _now())
             raise
+
+        if ctx.output_value is None:
+            ctx.output(result)
+        self._deliver_automatic(ctx, started_at, _now())
+        return result
 
     def ingest(
         self,
@@ -1153,13 +1163,31 @@ class Lemma:
             payload["trace"]["release"] = self.release
         return payload
 
+    def _deliver_automatic(
+        self,
+        ctx: TraceContext,
+        started_at: datetime,
+        ended_at: datetime,
+    ) -> None:
+        """Automatic SDK delivery. Catches transport / non-2xx so Lemma being
+        down cannot fail the caller's app. ``ingest()`` uses ``_send`` (strict)
+        so queue/plugin producers can retry.
+
+        Only :class:`Exception` is caught. A ``BaseException`` from the
+        transport -- ``KeyboardInterrupt``, ``SystemExit``, ``CancelledError``
+        -- is left to propagate.
+        """
+        try:
+            self._send(ctx, started_at, ended_at)
+        except Exception:
+            # ``_send`` already debug-logs "trace ingest failed".
+            return
+
     def _send(
         self,
         ctx: TraceContext,
         started_at: datetime,
         ended_at: datetime,
-        *,
-        fail_open: bool = False,
     ) -> None:
         payload = self._stamp_release(ctx.payload(self.project_id or "", started_at, ended_at))
         body = json.dumps(payload, default=str).encode()
@@ -1192,8 +1220,6 @@ class Lemma:
                 project_id=payload["project_id"],
                 error=_failure_message(exc),
             )
-            if fail_open:
-                return
             raise
         response_headers = pick_response_headers(self._last_response_headers)
         if status < 200 or status >= 300:
@@ -1208,8 +1234,6 @@ class Lemma:
                 **response_headers,
                 **({"hint": hint} if hint else {}),
             )
-            if fail_open:
-                return
             raise RuntimeError(
                 f"uselemma-tracing: failed to ingest trace ({status}): {text}"
             )

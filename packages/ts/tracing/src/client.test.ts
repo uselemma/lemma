@@ -723,6 +723,68 @@ describe("Lemma", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("rethrows the original error when the failed trace cannot be delivered", async () => {
+    const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const agentError = new Error("tool timed out");
+
+    await expect(
+      lemma.trace("support-agent", async () => {
+        throw agentError;
+      }),
+    ).rejects.toBe(agentError);
+
+    // The failed trace was still attempted, and recorded the agent's error.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.status).toBe("ERROR");
+    expect(body.trace.error).toBe("tool timed out");
+  });
+
+  it("rethrows the original error when trace delivery rejects at the transport", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error("ECONNREFUSED");
+    });
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const agentError = new Error("premature termination");
+
+    await expect(
+      lemma.trace("support-agent", async () => {
+        throw agentError;
+      }),
+    ).rejects.toBe(agentError);
+  });
+
+  it("does not resend a successful run as a failed one when ingest fails", async () => {
+    // A transport failure must not fabricate an error status on the trace.
+    const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await expect(
+      lemma.trace("support-agent", async () => "ok"),
+    ).resolves.toBe("ok");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.status).toBeUndefined();
+    expect(body.trace.error).toBeNull();
+    expect(body.trace.output).toBe("ok");
+  });
+
   it("fails open when automatic trace ingest fetch rejects", async () => {
     const fetchMock = vi.fn(async () => {
       throw new Error("network down");

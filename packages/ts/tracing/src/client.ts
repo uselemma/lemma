@@ -1127,7 +1127,7 @@ export class Lemma {
         traceOptions,
         async (trace, startedAt, endedAt) => {
           try {
-            await this.flushTrace(trace, startedAt, endedAt, { failOpen: true });
+            await this.flushTraceAutomatic(trace, startedAt, endedAt);
           } finally {
             // Drop the handle once ended so long-lived clients don't retain
             // every historical TraceHandle (and its spans/payloads) forever.
@@ -1150,22 +1150,24 @@ export class Lemma {
     });
 
     return (async () => {
+      let result: Awaited<T>;
       try {
-        const result = await fn(context);
-        if (traceOptions.output === undefined) {
-          context.output(result);
-        }
-        await this.flushTrace(context, startedAt, new Date(), {
-          failOpen: true,
-        });
-        return result;
+        result = await fn(context);
       } catch (error) {
+        // Only the agent's own failure belongs in this branch.
         context.fail(error);
-        await this.flushTrace(context, startedAt, new Date(), {
-          failOpen: true,
-        });
+        await this.flushTraceAutomatic(context, startedAt, new Date());
         throw error;
       }
+
+      if (traceOptions.output === undefined) {
+        context.output(result);
+      }
+      // Automatic delivery is outside the agent's try: a transport failure
+      // must not be recorded as an agent failure. Fail-open so Lemma being
+      // down cannot fail the caller's app; ingest() stays strict for retries.
+      await this.flushTraceAutomatic(context, startedAt, new Date());
+      return result;
     })();
   }
 
@@ -1451,11 +1453,27 @@ export class Lemma {
     return payload;
   }
 
+  /**
+   * Automatic SDK delivery. Catches transport / non-2xx so Lemma being down
+   * cannot fail the caller's app. {@link Lemma.ingest} uses {@link flushTrace}
+   * (strict) so queue/plugin producers can retry.
+   */
+  private async flushTraceAutomatic(
+    context: TraceContext,
+    startedAt: Date,
+    endedAt: Date,
+  ) {
+    try {
+      await this.flushTrace(context, startedAt, endedAt);
+    } catch {
+      // flushTrace already lemmaDebug'd "trace ingest failed".
+    }
+  }
+
   private async flushTrace(
     context: TraceContext,
     startedAt: Date,
     endedAt: Date,
-    options: { failOpen?: boolean } = {},
   ) {
     const payload = this.stampRelease(
       context.toPayload(this.projectId, startedAt, endedAt),
@@ -1487,7 +1505,6 @@ export class Lemma {
         projectId: payload.project_id,
         error: failureMessage(error) ?? String(error),
       });
-      if (options.failOpen) return;
       throw error;
     }
 
@@ -1504,7 +1521,6 @@ export class Lemma {
         ...responseHeaders,
         ...(hint ? { hint } : {}),
       });
-      if (options.failOpen) return;
       throw new Error(
         `@uselemma/tracing: failed to ingest trace (${response.status})${responseBody ? `: ${responseBody}` : ""}`,
       );
