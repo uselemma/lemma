@@ -4,12 +4,9 @@
  */
 import { generateText, type Telemetry } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { ingestFetchMock, jsonBody, LEMMA_PROJECT_ID } from "../test-helpers";
 import { vercelAI } from "./vercel-ai";
-
-function jsonBody(call: unknown[]) {
-  return JSON.parse(String((call[1] as RequestInit).body));
-}
 
 function mockModel(text: string) {
   return new MockLanguageModelV3({
@@ -24,10 +21,10 @@ function mockModel(text: string) {
 
 describe("vercelAI through real AI SDK", () => {
   it("generateText sends one owned trace", async () => {
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const fetchMock = ingestFetchMock();
     const lemmaTelemetry = vercelAI({
       apiKey: "key",
-      projectId: "10000000-0000-0000-0000-000000000001",
+      projectId: LEMMA_PROJECT_ID,
       fetch: fetchMock as typeof fetch,
       metadata: { threadId: "thread-1", userId: "user-1" },
     });

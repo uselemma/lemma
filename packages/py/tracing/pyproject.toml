@@ -23,6 +23,7 @@ langgraph = ["langchain>=0.3.0", "langgraph>=0.2.0"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["tests"]
 
 [tool.coverage.run]
 source = ["src/uselemma_tracing"]

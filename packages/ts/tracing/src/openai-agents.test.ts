@@ -1,10 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { jsonBody } from "../test-helpers";
 import { disableDebugMode, enableDebugMode } from "./debug-mode";
 import { openAIAgents } from "./openai-agents";
-
-function jsonBody(call: unknown[]) {
-  return JSON.parse(String((call[1] as RequestInit).body));
-}
 
 describe("openAIAgents", () => {
   beforeEach(() => {

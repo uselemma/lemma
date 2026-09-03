@@ -1,6 +1,6 @@
 /**
  * Drive Lemma's LangChain handler through real LangChain / LangGraph.
- * No network: FakeListChatModel / FakeStreamingChatModel + mocked ingest.
+ * No network: FakeListChatModel + mocked ingest.
  */
 import { HumanMessage } from "@langchain/core/messages";
 import { tool } from "@langchain/core/tools";
@@ -8,21 +8,23 @@ import { FakeListChatModel } from "@langchain/core/utils/testing";
 import { RunnableLambda } from "@langchain/core/runnables";
 import { END, MessagesAnnotation, START, StateGraph } from "@langchain/langgraph";
 import { createAgent } from "langchain";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import {
+  ingestFetchMock,
+  jsonBody,
+  langChainCallbacks,
+  LEMMA_PROJECT_ID,
+} from "../test-helpers";
 import { langChain, langGraph } from "./langchain";
 
-function jsonBody(call: unknown[]) {
-  return JSON.parse(String((call[1] as RequestInit).body));
-}
-
 function handler(
-  fetchMock: ReturnType<typeof vi.fn>,
+  fetchMock: ReturnType<typeof ingestFetchMock>,
   options: Record<string, unknown> = {},
 ) {
   return langChain({
     apiKey: "key",
-    projectId: "10000000-0000-0000-0000-000000000001",
+    projectId: LEMMA_PROJECT_ID,
     fetch: fetchMock as typeof fetch,
     ...options,
   });
@@ -30,12 +32,12 @@ function handler(
 
 describe("langChain through real LangChain", () => {
   it("accepts the handler on model.invoke and sends one trace", async () => {
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const fetchMock = ingestFetchMock();
     const h = handler(fetchMock, { agentName: "support-agent" });
     const model = new FakeListChatModel({ responses: ["hello from model"] });
 
     const result = await model.invoke([new HumanMessage("hi")], {
-      callbacks: [h],
+      callbacks: langChainCallbacks(h),
       metadata: { threadId: "thread-1", userId: "user-1" },
     });
     await h.flush();
@@ -50,7 +52,7 @@ describe("langChain through real LangChain", () => {
   });
 
   it("createAgent.invoke is one root", async () => {
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const fetchMock = ingestFetchMock();
     const h = handler(fetchMock, { agentName: "support-agent" });
     const agent = createAgent({
       model: new FakeListChatModel({ responses: ["pong from docs"] }),
@@ -61,7 +63,7 @@ describe("langChain through real LangChain", () => {
     const result = await agent.invoke(
       { messages: [new HumanMessage("ping")] },
       {
-        callbacks: [h] as never,
+        callbacks: langChainCallbacks(h),
         metadata: { threadId: "thread-1", userId: "user-1" },
       },
     );
@@ -79,7 +81,7 @@ describe("langChain through real LangChain", () => {
   });
 
   it("nests a real tool.invoke under one parent chain root", async () => {
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const fetchMock = ingestFetchMock();
     const h = handler(fetchMock, { agentName: "support-agent" });
     const ping = tool(async () => "pong", {
       name: "ping",
@@ -93,7 +95,7 @@ describe("langChain through real LangChain", () => {
     const result = await chain.invoke(
       {},
       {
-        callbacks: [h],
+        callbacks: langChainCallbacks(h),
         metadata: { threadId: "thread-1" },
       },
     );
@@ -114,10 +116,10 @@ describe("langChain through real LangChain", () => {
 
 describe("langGraph through real LangGraph", () => {
   it("graph.invoke is one root with a nested generation", async () => {
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const fetchMock = ingestFetchMock();
     const h = langGraph({
       apiKey: "key",
-      projectId: "10000000-0000-0000-0000-000000000001",
+      projectId: LEMMA_PROJECT_ID,
       fetch: fetchMock as typeof fetch,
       agentName: "support-graph",
     });
@@ -134,7 +136,7 @@ describe("langGraph through real LangGraph", () => {
     const result = await graph.invoke(
       { messages: [new HumanMessage("hi")] },
       {
-        callbacks: [h] as never,
+        callbacks: langChainCallbacks(h),
         metadata: { threadId: "thread-9" },
       },
     );

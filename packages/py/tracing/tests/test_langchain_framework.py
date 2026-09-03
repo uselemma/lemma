@@ -19,17 +19,8 @@ from langchain_core.tools import tool
 from langgraph.graph import END, START, MessagesState, StateGraph
 from pydantic import PrivateAttr
 
+from helpers import PROJECT_ID, make_transport
 from uselemma_tracing import langchain, langgraph
-
-
-def make_transport(calls):
-    def transport(url, headers, body):
-        import json
-
-        calls.append(json.loads(body.decode()))
-        return 201, "{}"
-
-    return transport
 
 
 class ScriptedChatModel(BaseChatModel):
@@ -63,7 +54,7 @@ class ScriptedChatModel(BaseChatModel):
 def _handler(calls, **options):
     return langchain(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
         **options,
     )
@@ -97,7 +88,7 @@ def test_runnable_ainvoke_sends_one_trace():
 
     assert result == "echo:hello"
     assert len(calls) == 1
-    trace = calls[0]["trace"]
+    trace = calls[0]["body"]["trace"]
     assert trace["name"] == "support-agent"
     assert trace["thread_id"] == "thread-1"
     assert trace["user_id"] == "user-1"
@@ -142,7 +133,7 @@ def test_create_agent_ainvoke_is_one_root_with_tool_and_generation():
     last = result["messages"][-1]
     assert getattr(last, "content", "") == "pong from docs"
     assert len(calls) == 1
-    trace = calls[0]["trace"]
+    trace = calls[0]["body"]["trace"]
     assert trace["name"] == "support-agent"
     assert trace["thread_id"] == "thread-1"
     types = {span["type"] for span in trace["spans"]}
@@ -160,7 +151,7 @@ def test_langgraph_ainvoke_is_one_root():
     calls = []
     handler = langgraph(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
         agent_name="support-graph",
     )
@@ -190,7 +181,7 @@ def test_langgraph_ainvoke_is_one_root():
 
     assert result["messages"][-1].content == "graph hello"
     assert len(calls) == 1
-    trace = calls[0]["trace"]
+    trace = calls[0]["body"]["trace"]
     assert trace["name"] == "support-graph"
     assert trace["thread_id"] == "thread-9"
     assert any(span["type"] == "generation" for span in trace["spans"])

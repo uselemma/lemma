@@ -6,12 +6,14 @@ import { Agent } from "@mastra/core/agent";
 import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
 import { MockLanguageModelV3 } from "ai/test";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import {
+  ingestFetchMock,
+  jsonBody,
+  LEMMA_PROJECT_ID,
+  mastraExporters,
+} from "../test-helpers";
 import { LemmaMastraExporter } from "./mastra";
-
-function jsonBody(call: unknown[]) {
-  return JSON.parse(String((call[1] as RequestInit).body));
-}
 
 function mockModel(text: string) {
   return new MockLanguageModelV3({
@@ -26,10 +28,10 @@ function mockModel(text: string) {
 
 describe("LemmaMastraExporter through real Mastra", () => {
   it("agent.generate sends one owned trace", async () => {
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const fetchMock = ingestFetchMock();
     const exporter = new LemmaMastraExporter({
       apiKey: "key",
-      projectId: "10000000-0000-0000-0000-000000000001",
+      projectId: LEMMA_PROJECT_ID,
       fetch: fetchMock as typeof fetch,
       agentName: "support-agent",
     });
@@ -45,7 +47,7 @@ describe("LemmaMastraExporter through real Mastra", () => {
         configs: {
           default: {
             serviceName: "support-agent",
-            exporters: [exporter as never],
+            exporters: mastraExporters(exporter),
           },
         },
       }),

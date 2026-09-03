@@ -7,7 +7,6 @@ Replaces the default OpenAI trace backend so CI never calls api.openai.com.
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -22,15 +21,14 @@ from agents.tracing import generation_span
 from agents.usage import Usage
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
+from helpers import PROJECT_ID, make_transport
 from uselemma_tracing import Lemma, instrument_openai_agents
 
 
-def make_transport(calls):
-    def transport(url, headers, body):
-        calls.append(json.loads(body.decode()))
-        return 201, "{}"
-
-    return transport
+@pytest.fixture(autouse=True)
+def _isolate_agents_trace_processors():
+    yield
+    set_trace_processors([])
 
 
 class ScriptedModel(Model):
@@ -80,7 +78,7 @@ def test_instrumented_runner_sends_one_trace():
     calls = []
     lemma = Lemma(
         api_key="key",
-        project_id="10000000-0000-0000-0000-000000000001",
+        project_id=PROJECT_ID,
         transport=make_transport(calls),
     )
     processor = instrument_openai_agents(lemma=lemma)
@@ -106,7 +104,7 @@ def test_instrumented_runner_sends_one_trace():
 
     assert output == "hello from agents"
     assert len(calls) == 1
-    trace_payload = calls[0]["trace"]
+    trace_payload = calls[0]["body"]["trace"]
     assert trace_payload["name"] == "support-agent"
     assert trace_payload["thread_id"] == "thread-1"
     assert trace_payload["user_id"] == "user-1"
