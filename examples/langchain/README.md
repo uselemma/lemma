@@ -1,6 +1,6 @@
 # LangChain
 
-Lemma callback handler on a LangChain tool-calling loop. Do **not** wrap the run in `lemma.trace()` — `langChain()` owns the root trace.
+Lemma callback handler on a LangChain `createAgent` invoke. Do **not** wrap the run in `lemma.trace()` — `langChain()` owns the root trace. One `agent.invoke()` is one root.
 
 ## Run
 
@@ -13,7 +13,7 @@ pnpm --filter @lemma/example-langchain start "How do I instrument LangChain?"
 Standalone install:
 
 ```bash
-npm install @uselemma/tracing @langchain/core @langchain/openai
+npm install @uselemma/tracing langchain @langchain/core @langchain/openai
 ```
 
 ## Instrumentation
@@ -25,14 +25,23 @@ const lemmaHandler = langChain({
   userIdKey: "userId",
 });
 
-await model.invoke(messages, {
-  callbacks: [lemmaHandler],
-  metadata: { threadId, userId },
+const agent = createAgent({
+  model: new ChatOpenAI({ model: "gpt-4o-mini" }),
+  tools,
+  systemPrompt,
 });
+
+await agent.invoke(
+  { messages },
+  {
+    callbacks: [lemmaHandler],
+    metadata: { threadId, userId },
+  },
+);
 await lemmaHandler.flush();
 ```
 
-Invoke tools through LangChain (`tool.invoke`) so tool callbacks show up as Lemma tool spans.
+Use `createAgent` (one invoke per turn) so LangChain callbacks nest under a single root. A manual `model.invoke` / `tool.invoke` loop creates one owned trace per call.
 
 ## Trace shape
 

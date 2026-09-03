@@ -4,6 +4,7 @@ version = "0.0.0"
 description = "Lemma docs agent instrumented with LangChain"
 requires-python = ">=3.10"
 dependencies = [
+    "langchain>=1.0.0",
     "langchain-core>=0.3.0",
     "langchain-openai>=0.3.0",
     "lemma-examples-shared",

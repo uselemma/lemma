@@ -48,6 +48,9 @@ importers:
       '@uselemma/tracing':
         specifier: workspace:*
         version: link:../../packages/ts/tracing
+      langchain:
+        specifier: ^1.0.0
+        version: 1.5.10(@langchain/core@1.2.9(@opentelemetry/api@1.9.0)(openai@7.10.0(@aws-sdk/credential-provider-node@3.972.80)(@smithy/signature-v4@5.7.3)(undici@8.9.0)(ws@8.21.3)(zod@3.25.76))(ws@8.21.3))(@opentelemetry/api@1.9.0)(openai@7.10.0(@aws-sdk/credential-provider-node@3.972.80)(@smithy/signature-v4@5.7.3)(undici@8.9.0)(ws@8.21.3)(zod@3.25.76))(ws@8.21.3)
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -5367,6 +5370,22 @@ snapshots:
       '@langchain/langgraph': 1.4.13(@langchain/core@1.2.9(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.21.3)(zod@3.25.76))(ws@8.21.3))(zod@3.25.76)
       '@langchain/langgraph-checkpoint': 1.1.5(@langchain/core@1.2.9(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.21.3)(zod@3.25.76))(ws@8.21.3))
       langsmith: 0.10.1(@opentelemetry/api@1.9.0)(openai@6.26.0(ws@8.21.3)(zod@3.25.76))(ws@8.21.3)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - '@opentelemetry/exporter-trace-otlp-proto'
+      - '@opentelemetry/sdk-trace-base'
+      - openai
+      - react
+      - react-dom
+      - ws
+
+  langchain@1.5.10(@langchain/core@1.2.9(@opentelemetry/api@1.9.0)(openai@7.10.0(@aws-sdk/credential-provider-node@3.972.80)(@smithy/signature-v4@5.7.3)(undici@8.9.0)(ws@8.21.3)(zod@3.25.76))(ws@8.21.3))(@opentelemetry/api@1.9.0)(openai@7.10.0(@aws-sdk/credential-provider-node@3.972.80)(@smithy/signature-v4@5.7.3)(undici@8.9.0)(ws@8.21.3)(zod@3.25.76))(ws@8.21.3):
+    dependencies:
+      '@langchain/core': 1.2.9(@opentelemetry/api@1.9.0)(openai@7.10.0(@aws-sdk/credential-provider-node@3.972.80)(@smithy/signature-v4@5.7.3)(undici@8.9.0)(ws@8.21.3)(zod@3.25.76))(ws@8.21.3)
+      '@langchain/langgraph': 1.4.13(@langchain/core@1.2.9(@opentelemetry/api@1.9.0)(openai@7.10.0(@aws-sdk/credential-provider-node@3.972.80)(@smithy/signature-v4@5.7.3)(undici@8.9.0)(ws@8.21.3)(zod@3.25.76))(ws@8.21.3))(zod@3.25.76)
+      '@langchain/langgraph-checkpoint': 1.1.5(@langchain/core@1.2.9(@opentelemetry/api@1.9.0)(openai@7.10.0(@aws-sdk/credential-provider-node@3.972.80)(@smithy/signature-v4@5.7.3)(undici@8.9.0)(ws@8.21.3)(zod@3.25.76))(ws@8.21.3))
+      langsmith: 0.10.1(@opentelemetry/api@1.9.0)(openai@7.10.0(@aws-sdk/credential-provider-node@3.972.80)(@smithy/signature-v4@5.7.3)(undici@8.9.0)(ws@8.21.3)(zod@3.25.76))(ws@8.21.3)
       zod: 3.25.76
     transitivePeerDependencies:
       - '@opentelemetry/api'

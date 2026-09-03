@@ -1,12 +1,7 @@
-import {
-  AIMessage,
-  HumanMessage,
-  SystemMessage,
-  ToolMessage,
-  type BaseMessage,
-} from "@langchain/core/messages";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { tool } from "@langchain/core/tools";
 import { ChatOpenAI } from "@langchain/openai";
+import { createAgent } from "langchain";
 import {
   AGENT_NAME,
   LIST_DOCS_DESCRIPTION,
@@ -26,20 +21,24 @@ import { z } from "zod";
 loadExampleEnv();
 requireOpenAIKey();
 
-const listDocsTool = tool(async () => listDocs(), {
-  name: "list_docs",
-  description: LIST_DOCS_DESCRIPTION,
-  schema: z.object({}),
-});
-
-const readDocTool = tool(
-  async ({ url }: { url: string }) => readDoc(url),
-  {
+const tools = [
+  tool(async () => listDocs(), {
+    name: "list_docs",
+    description: LIST_DOCS_DESCRIPTION,
+    schema: z.object({}),
+  }),
+  tool(async ({ url }: { url: string }) => readDoc(url), {
     name: "read_doc",
     description: READ_DOC_DESCRIPTION,
     schema: z.object({ url: z.string() }),
-  },
-);
+  }),
+];
+
+const agent = createAgent({
+  model: new ChatOpenAI({ model: MODEL }),
+  tools,
+  systemPrompt: SYSTEM_PROMPT,
+});
 
 const lemmaHandler = langChain({
   agentName: AGENT_NAME,
@@ -47,76 +46,30 @@ const lemmaHandler = langChain({
   userIdKey: "userId",
 });
 
-const model = new ChatOpenAI({
-  model: MODEL,
-}).bindTools([listDocsTool, readDocTool]);
-
-async function invokeDocsTool(
-  name: string,
-  args: Record<string, unknown>,
-  config: object,
-): Promise<string> {
-  const output =
-    name === "list_docs"
-      ? await listDocsTool.invoke({}, config)
-      : name === "read_doc"
-        ? await readDocTool.invoke({ url: String(args.url ?? "") }, config)
-        : null;
-  if (output == null) {
-    throw new Error(`Unknown tool: ${name}`);
-  }
-  return typeof output === "string" ? output : JSON.stringify(output);
-}
-
 async function runTurn(turn: ChatTurn): Promise<string> {
-  const config = {
-    callbacks: [lemmaHandler],
-    metadata: {
-      threadId: turn.identity.threadId,
-      ...(turn.identity.userId ? { userId: turn.identity.userId } : {}),
+  const result = await agent.invoke(
+    {
+      messages: [
+        ...turn.history.map((item) =>
+          item.role === "user"
+            ? new HumanMessage(item.content)
+            : new AIMessage(item.content),
+        ),
+        new HumanMessage(turn.message),
+      ],
     },
-  };
-
-  const messages: BaseMessage[] = [
-    new SystemMessage(SYSTEM_PROMPT),
-    ...turn.history.map((item) =>
-      item.role === "user"
-        ? new HumanMessage(item.content)
-        : new AIMessage(item.content),
-    ),
-    new HumanMessage(turn.message),
-  ];
-
-  for (let step = 0; step < 8; step++) {
-    const response = await model.invoke(messages, {
-      ...config,
-      callbacks: config.callbacks as never,
-    });
-    messages.push(response);
-    const toolCalls = response.tool_calls ?? [];
-    if (toolCalls.length === 0) {
-      await lemmaHandler.flush();
-      return typeof response.content === "string"
-        ? response.content
-        : JSON.stringify(response.content);
-    }
-    for (const call of toolCalls) {
-      const output = await invokeDocsTool(
-        call.name,
-        call.args as Record<string, unknown>,
-        { ...config, callbacks: config.callbacks as never },
-      );
-      messages.push(
-        new ToolMessage({
-          content: output,
-          tool_call_id: call.id ?? call.name,
-        }),
-      );
-    }
-  }
-
+    {
+      callbacks: [lemmaHandler] as never,
+      metadata: {
+        threadId: turn.identity.threadId,
+        ...(turn.identity.userId ? { userId: turn.identity.userId } : {}),
+      },
+    },
+  );
   await lemmaHandler.flush();
-  return "Stopped after the tool-call limit.";
+  const last = result.messages.at(-1);
+  const content = last && "content" in last ? last.content : "";
+  return typeof content === "string" ? content : JSON.stringify(content);
 }
 
 await runCli(runTurn);

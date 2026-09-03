@@ -9,6 +9,7 @@
   "dependencies": {
     "@langchain/core": "^1.0.0",
     "@langchain/openai": "^1.0.0",
+    "langchain": "^1.0.0",
     "@lemma/examples-shared": "workspace:*",
     "@uselemma/tracing": "workspace:*",
     "zod": "^3.25.0"
