@@ -365,11 +365,10 @@ function contractAttributes(
   const attributes: Record<string, unknown> = {};
   addDefined(attributes, "input.mime_type", options.inputMimeType);
   addDefined(attributes, "output.mime_type", options.outputMimeType);
-  addDefined(
-    attributes,
-    "llm.model_name",
-    options.llmModelName ?? options.model,
-  );
+  const modelIdentity = options.llmModelName ?? options.model;
+  addDefined(attributes, "llm.model_name", modelIdentity);
+  addDefined(attributes, "gen_ai.request.model", modelIdentity);
+  addDefined(attributes, "ai.model.id", modelIdentity);
   addDefined(attributes, "llm.provider", options.llmProvider);
   // llm.system from explicit llmSystem; gen_ai.system from llmSystem or llmProvider.
   addDefined(attributes, "llm.system", options.llmSystem);
@@ -528,6 +527,7 @@ export class SpanHandle {
         startedAt: this.options.startedAt ?? new Date(),
         endedAt: this.options.endedAt ?? null,
       });
+    this.trace.registerSpanHandle(this);
   }
 
   end(options: Omit<SpanOptions, "id" | "name" | "type" | "startedAt"> = {}) {
@@ -542,6 +542,9 @@ export class SpanHandle {
           id: this.id,
           startedAt: this.options.startedAt,
           endedAt: options.endedAt ?? new Date(),
+          // Keep a start-time model when end() omits it or would overwrite
+          // with undefined. Fill in from the response only when unset.
+          model: this.options.model ?? options.model,
         },
         this.options.type ?? "span",
       ),
@@ -693,6 +696,7 @@ export class NoopSpanHandle {
 
 export class TraceContext {
   private readonly spans: SdkTraceSpanPayload[] = [];
+  private readonly spanHandles = new Map<string, SpanHandle>();
   private traceOutput: unknown;
   private traceError: string | null = null;
   readonly id: string;
@@ -735,6 +739,31 @@ export class TraceContext {
   fail(error: unknown) {
     this.traceError = failureMessage(error);
     this.changed();
+  }
+
+  /** Root identity for a versioned turn context token. */
+  identity(): {
+    name: string;
+    threadId?: string;
+    userId?: string;
+  } {
+    return {
+      name: this.options.name ?? "trace",
+      threadId: this.options.threadId,
+      userId: this.options.userId,
+    };
+  }
+
+  registerSpanHandle(handle: SpanHandle) {
+    this.spanHandles.set(handle.id, handle);
+  }
+
+  spanHandle(id: string): SpanHandle | undefined {
+    return this.spanHandles.get(id);
+  }
+
+  hasSpan(id: string): boolean {
+    return this.spans.some((span) => span.id === id);
   }
 
   changed() {
@@ -892,7 +921,7 @@ export class TraceContext {
 export class TraceHandle extends TraceContext {
   private sendPromise: Promise<void> = Promise.resolve();
   private ended = false;
-  private readonly startedAt: Date;
+  protected readonly startedAt: Date;
 
   constructor(
     options: TraceOptions,
@@ -1098,7 +1127,7 @@ export class Lemma {
         traceOptions,
         async (trace, startedAt, endedAt) => {
           try {
-            await this.flushTrace(trace, startedAt, endedAt);
+            await this.flushTraceAutomatic(trace, startedAt, endedAt);
           } finally {
             // Drop the handle once ended so long-lived clients don't retain
             // every historical TraceHandle (and its spans/payloads) forever.
@@ -1121,18 +1150,24 @@ export class Lemma {
     });
 
     return (async () => {
+      let result: Awaited<T>;
       try {
-        const result = await fn(context);
-        if (traceOptions.output === undefined) {
-          context.output(result);
-        }
-        await this.flushTrace(context, startedAt, new Date());
-        return result;
+        result = await fn(context);
       } catch (error) {
+        // Only the agent's own failure belongs in this branch.
         context.fail(error);
-        await this.flushTrace(context, startedAt, new Date());
+        await this.flushTraceAutomatic(context, startedAt, new Date());
         throw error;
       }
+
+      if (traceOptions.output === undefined) {
+        context.output(result);
+      }
+      // Automatic delivery is outside the agent's try: a transport failure
+      // must not be recorded as an agent failure. Fail-open so Lemma being
+      // down cannot fail the caller's app; ingest() stays strict for retries.
+      await this.flushTraceAutomatic(context, startedAt, new Date());
+      return result;
     })();
   }
 
@@ -1418,6 +1453,23 @@ export class Lemma {
     return payload;
   }
 
+  /**
+   * Automatic SDK delivery. Catches transport / non-2xx so Lemma being down
+   * cannot fail the caller's app. {@link Lemma.ingest} uses {@link flushTrace}
+   * (strict) so queue/plugin producers can retry.
+   */
+  private async flushTraceAutomatic(
+    context: TraceContext,
+    startedAt: Date,
+    endedAt: Date,
+  ) {
+    try {
+      await this.flushTrace(context, startedAt, endedAt);
+    } catch {
+      // flushTrace already lemmaDebug'd "trace ingest failed".
+    }
+  }
+
   private async flushTrace(
     context: TraceContext,
     startedAt: Date,
@@ -1437,14 +1489,24 @@ export class Lemma {
       requestedAt: new Date().toISOString(),
       url,
     });
-    const response = await this.fetchImpl(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body,
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+    } catch (error) {
+      lemmaDebug("client", "trace ingest failed", {
+        traceId: payload.trace.id,
+        projectId: payload.project_id,
+        error: failureMessage(error) ?? String(error),
+      });
+      throw error;
+    }
 
     const responseHeaders = pickResponseHeaders(response.headers);
 

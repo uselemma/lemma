@@ -1,0 +1,44 @@
+---
+title: "Overview"
+description: "Connect Lemma findings to Slack, Linear, MCP, and webhooks"
+meta:
+  contentType: "Conceptual"
+---
+
+Integrations and connections solve two different problems. Integrations, OpenAI Agents, Vercel AI SDK, LangChain, LangGraph, and Mastra, attach Lemma tracing to your agent framework; they're how traces get into Lemma in the first place. Connections take what Lemma finds after those traces exist and route it to the rest of your team's workflow. They never instrument the agent itself.
+
+Pick a connection based on what should happen next:
+
+| Connection | Use it when |
+| -- | -- |
+| **[Slack](/connections/slack)** | The team should see issue alerts and optional Issue Briefs in a Slack channel you choose |
+| **[Linear](/connections/linear)** | Issues should become or link to Linear tickets, with an explicit create or link action, not automatic filing |
+| **[MCP Server](/connections/mcp)** | A coding agent in Cursor, Claude Code, or similar should query this project's traces and issues |
+| **[Webhooks](/connections/webhooks)** | Another system should receive signed HTTP POST requests for issue lifecycle events |
+
+You can use several at once, and none of them replace the dashboard as the source of truth.
+
+## Suggested order
+
+Most teams wire these up in the same sequence: confirm ready traces exist in the project, connect a Slack workspace and pick this project's alert channel (turning on Issue Briefs if you want them), connect a Linear workspace and set project defaults if you file tickets (each person still maps their own Linear identity separately), add the MCP server for coding-agent investigation, and add webhooks last for machine-to-machine issue events.
+
+The Lemma support channel, a Slack Connect channel with the Lemma team, isn't a workflow connection for alerts. See [Slack](/connections/slack) for the distinction.
+
+Organization owners and admins connect Slack and Linear at the workspace level. Project members can bind the project's Slack channel and Linear defaults on top of that connection, though setting defaults still requires an owner or admin. API keys and webhook secrets are shown exactly once at creation.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Slack" href="/connections/slack">
+    Issue alerts and Issue Briefs in your workspace.
+  </Card>
+  <Card title="Linear" href="/connections/linear">
+    Create, link, and unlink Linear tickets from issues.
+  </Card>
+  <Card title="MCP Server" href="/connections/mcp">
+    Let a coding agent query traces and issues.
+  </Card>
+  <Card title="Webhooks" href="/connections/webhooks">
+    Signed HTTP POST requests for issue lifecycle events.
+  </Card>
+</CardGroup>

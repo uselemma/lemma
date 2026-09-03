@@ -134,18 +134,18 @@ Spans, generations, and tools recorded during `lemma.trace()` become children of
 
 ```text
 support-agent              <- trace root
-`- retrieve-context        <- span
-   |- search_docs          <- tool call
-   `- draft-reply          <- generation
+└── retrieve-context       <- span
+    ├── search_docs        <- tool call
+    └── draft-reply        <- generation
 ```
 
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Threads & context" icon="/icons/users.svg" href="/tracing/instrumentation/context">
+  <Card title="Threads & context" href="/tracing/instrumentation/context">
     Group conversations and attach users.
   </Card>
-  <Card title="Trace contract" icon="/icons/file-check.svg" href="/reference/trace-contract">
+  <Card title="Trace contract" href="/reference/trace-contract">
     The exact shape Lemma reads.
   </Card>
 </CardGroup>

@@ -7,6 +7,7 @@ import {
 import { describeError } from "./error-message";
 import { scheduleMacrotask } from "./schedule";
 import { toolResultError } from "./tool-result";
+import { pickGenerationModelIdentity, pickModelIdentity } from "./model";
 import { normalizeTokenUsage, type TokenUsage } from "./usage";
 
 const INTEGRATION_ATTRS = {
@@ -127,28 +128,6 @@ function serializedName(serialized: Serialized | undefined, fallback: string) {
     return String(id[id.length - 1]);
   }
   return fallback;
-}
-
-function modelName(
-  serialized: Serialized | undefined,
-  extraParams?: Record<string, unknown>,
-) {
-  const kwargs = serialized?.kwargs;
-  const sources = [kwargs, serialized, extraParams];
-  for (const source of sources) {
-    if (!source) continue;
-    for (const key of [
-      "model",
-      "modelName",
-      "model_name",
-      "model_id",
-      "modelId",
-    ]) {
-      const value = source[key];
-      if (typeof value === "string" && value) return value;
-    }
-  }
-  return undefined;
 }
 
 function lookupString(
@@ -1089,7 +1068,10 @@ export class LemmaLangChainCallbackHandler {
     this.noteBounds(attachment.stored, startedAt, undefined);
 
     const provider = llmProvider(serialized, extraParams);
-    const model = modelName(serialized, extraParams);
+    const model =
+      pickModelIdentity(serialized?.kwargs) ??
+      pickModelIdentity(serialized) ??
+      pickModelIdentity(extraParams);
     const handle = attachment.stored.handle.startGeneration({
       name: serializedName(serialized, "langchain-llm"),
       parentId: attachment.parentId,
@@ -1145,7 +1127,10 @@ export class LemmaLangChainCallbackHandler {
     this.noteBounds(attachment.stored, startedAt, undefined);
 
     const provider = llmProvider(serialized, extraParams);
-    const model = modelName(serialized, extraParams);
+    const model =
+      pickModelIdentity(serialized?.kwargs) ??
+      pickModelIdentity(serialized) ??
+      pickModelIdentity(extraParams);
     const handle = attachment.stored.handle.startGeneration({
       name: serializedName(serialized, "langchain-chat-model"),
       parentId: attachment.parentId,
@@ -1192,6 +1177,7 @@ export class LemmaLangChainCallbackHandler {
     const softError = toolResultError(structured);
     const awaitingTools = !softError && hasToolCalls(structured);
 
+    const model = pickGenerationModelIdentity(output);
     run.handle.end({
       output: softError ? undefined : structured,
       error: softError ?? undefined,
@@ -1200,6 +1186,7 @@ export class LemmaLangChainCallbackHandler {
       durationMs: durationMs(run.startedAt, endedAt),
       llmOutputMessages: softError ? undefined : outputMessages,
       usage: llmTokenUsage(output),
+      ...(model ? { model } : {}),
     });
 
     const stored = this.storedTrace(run.owningTraceId);

@@ -3,13 +3,19 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
+      "outputs": [
+        "dist/**",
+        "runtime/**",
+        "scripts/**",
+        "extensions/**",
+        "hermes-plugin/lemma/runtime/**"
+      ]
     },
     "type-check": {
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["build", "^build"]
     },
     "clean": {
       "cache": false

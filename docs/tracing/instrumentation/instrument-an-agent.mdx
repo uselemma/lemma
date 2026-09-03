@@ -3,27 +3,25 @@ title: "Instrument an agent"
 description: "Build a complete Lemma trace one piece at a time"
 ---
 
-This guide starts with an untraced support agent and adds Lemma SDK calls step by step. Each step adds one visible part of the trace.
+This page starts from an untraced support agent and adds Lemma software development kit (SDK) calls one piece at a time. Complete the [Quickstart](/tracing/instrumentation/setup) first so the SDK is installed and a Lemma client can read your credentials.
 
-The per-primitive pages go deeper on each piece: [Traces](/tracing/instrumentation/traces), [Generations](/tracing/instrumentation/generations), [Tool calls](/tracing/instrumentation/tool-calls), [Spans](/tracing/instrumentation/spans), and [Threads & context](/tracing/instrumentation/context).
+The per-primitive pages go deeper on each piece: [Agent traces](/tracing/instrumentation/traces), [Generations](/tracing/instrumentation/generations), [Tool calls](/tracing/instrumentation/tool-calls), [Spans](/tracing/instrumentation/spans), and [Threads and context](/tracing/instrumentation/context).
 
-<Note>
-  The rule is simple: one agent execution = one `lemma.trace()` call. Record model calls, tool calls, and app work inside that trace.
-</Note>
+One agent execution is one `lemma.trace()` call. Record model calls, tool calls, and app work inside that trace. If that execution spans a host and a sandbox, follow [Cross-process turns](/tracing/instrumentation/cross-process-turns) instead of starting a second root.
 
-## What you'll build
+## What you will build
 
 ```text
 support-agent                  <- trace root (input, output, agent name, thread, user)
-|- retrieve-context            <- span (retrieval work)
-|- search_docs                 <- tool call (query, docs)
-|- lookup_order                <- tool call (user ID, order)
-`- answer                      <- generation (model, prompt, completion)
+├── retrieve-context           <- span (retrieval work)
+├── search_docs                <- tool call (query, docs)
+├── lookup_order               <- tool call (user ID, order)
+└── answer                     <- generation (model, prompt, completion)
 ```
 
 ## Before you start
 
-The examples assume you already have an agent shaped roughly like this:
+The examples assume you already have an agent shaped like this:
 
 <Tabs>
   <Tab title="TypeScript">
@@ -58,51 +56,15 @@ The examples assume you already have an agent shaped roughly like this:
 ## Steps
 
 <Steps>
-  <Step title="Install the SDK">
-    <Tabs>
-      <Tab title="TypeScript">
-        ```bash
-        npm install @uselemma/tracing
-        ```
-      </Tab>
-      <Tab title="Python">
-        ```bash
-        pip install uselemma-tracing
-        ```
-      </Tab>
-    </Tabs>
-  </Step>
-
-  <Step title="Create one Lemma client">
-    The SDK reads `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` from the environment.
-
-    <Tabs>
-      <Tab title="TypeScript">
-        ```typescript
-        import { Lemma } from "@uselemma/tracing";
-
-        export const lemma = new Lemma();
-        ```
-      </Tab>
-      <Tab title="Python">
-        ```python
-        from uselemma_tracing import Lemma
-
-        lemma = Lemma()
-        ```
-      </Tab>
-    </Tabs>
-
-    The SDK sends to `https://api.uselemma.ai/traces/ingest` by default. Pass `baseUrl` / `base_url` only for staging or self-hosted deployments.
-  </Step>
-
   <Step title="Wrap the whole agent run in a trace">
     Start with the root boundary. The returned value becomes the trace output.
 
     <Tabs>
       <Tab title="TypeScript">
         ```typescript
-        import { lemma } from "./lemma";
+        import { Lemma } from "@uselemma/tracing";
+
+        const lemma = new Lemma();
 
         return lemma.trace(
           {
@@ -124,7 +86,9 @@ The examples assume you already have an agent shaped roughly like this:
       </Tab>
       <Tab title="Python">
         ```python
-        from .lemma import lemma
+        from uselemma_tracing import Lemma
+
+        lemma = Lemma()
 
         def run(trace):
             docs = search_docs(message)
@@ -350,17 +314,19 @@ The examples assume you already have an agent shaped roughly like this:
 
 ## Go deeper
 
+Use these pages for field-level detail and framework-specific tracing.
+
 <CardGroup cols={2}>
-  <Card title="Trace contract" icon="/icons/file-check.svg" href="/reference/trace-contract">
+  <Card title="Trace contract" href="/reference/trace-contract">
     The exact fields and native SDK props Lemma reads.
   </Card>
-  <Card title="Vercel AI SDK" icon="/icons/sparkles.svg" href="/integrations/vercel-ai">
+  <Card title="Vercel AI SDK" href="/integrations/vercel-ai">
     Record AI SDK model calls and tool executions automatically.
   </Card>
-  <Card title="Tool calls" icon="/icons/wrench.svg" href="/tracing/instrumentation/tool-calls">
+  <Card title="Tool calls" href="/tracing/instrumentation/tool-calls">
     Capture tool arguments, results, and failures.
   </Card>
-  <Card title="Troubleshooting" icon="/icons/circle-help.svg" href="/tracing/troubleshooting/common-issues">
+  <Card title="Troubleshooting" href="/tracing/troubleshooting/common-issues">
     Fix missing traces, empty outputs, and shape issues.
   </Card>
 </CardGroup>

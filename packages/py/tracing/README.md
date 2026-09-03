@@ -157,6 +157,55 @@ tree for display). Retries of the same complete payload are safe — already-sto
 span IDs are skipped — so a failed send can be retried as-is. It raises on a
 non-2xx response and never mutates the trace's status.
 
+Automatic delivery (`trace` / `async_trace`) fails open: a Lemma ingest
+4xx/5xx or network error is logged in debug mode and dropped so it cannot fail
+the caller's application. LangChain and OpenAI Agents flush through this path.
+Use `ingest()` when you need a failed send to raise so you can retry.
+
+## Cross-process turns
+
+When a user turn spans a host and a sandbox such as E2B, record one
+trace. Export a context token on the host. The child records a journal
+with no API key. The host applies the journal and `ingest()`s once.
+
+```python
+import json
+from uselemma_tracing import Lemma, attach_turn
+
+lemma = Lemma()
+turn = lemma.start_turn(
+    "agent-turn",
+    input=user_message,
+    thread_id=conversation_id,
+)
+sandbox = turn.start_span(name="e2b-sandbox")
+token = json.dumps(turn.export(parent_span_id=sandbox.id))
+# pass token to the child on the existing channel, then:
+turn.apply(child_journal)
+sandbox.end()
+turn.end(output=answer)  # strict ingest
+```
+
+In the child, do not construct `Lemma` and do not call `/traces/ingest`:
+
+```python
+import json
+import os
+from uselemma_tracing import attach_turn
+
+local = attach_turn(os.environ["LEMMA_TURN"])
+local.record_tool(name="search_docs", input=query, output=docs)
+print(json.dumps(local.records()))
+```
+
+The journal uses the same camelCase schema as the TypeScript SDK, so a
+TypeScript host can apply a Python child's journal. `assemble_turn(token,
+journal)` builds a `TraceContext` when you already have the journal; then
+call `ingest()` once. Re-applying the same journal is idempotent (stable
+span ids). If the sandbox dies before a clean journal, end the host
+sandbox span as `ERROR`. Tools that started and never ended stay
+incomplete.
+
 ## OpenAI Agents SDK
 
 Install the OpenAI Agents extra and register the Lemma processor:

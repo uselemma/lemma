@@ -125,6 +125,49 @@ def test_llm_end_emits_usage_from_llm_output_token_usage():
     assert span["attributes"]["lemma.sdk.language"] == "python"
 
 
+def test_chat_model_end_stamps_response_metadata_model_name():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id="10000000-0000-0000-0000-000000000001",
+        transport=make_transport(calls),
+    )
+
+    handler.on_chat_model_start(
+        {
+            "id": ["langchain", "chat_models", "fake", "FakeMessagesListChatModel"],
+            "name": "FakeMessagesListChatModel",
+            "kwargs": {"responses": [{"type": "ai", "content": "It arrives Friday."}]},
+        },
+        [[{"type": "human", "content": "where is my order?"}]],
+        run_id="llm-fake",
+    )
+    handler.on_llm_end(
+        {
+            "generations": [
+                [
+                    {
+                        "text": "It arrives Friday.",
+                        "message": {
+                            "type": "ai",
+                            "content": "It arrives Friday.",
+                            "response_metadata": {"model_name": "gpt-4o-mini"},
+                        },
+                    }
+                ]
+            ]
+        },
+        run_id="llm-fake",
+    )
+
+    span = calls[0]["body"]["trace"]["spans"][0]
+    assert span["type"] == "generation"
+    assert span["model"] == "gpt-4o-mini"
+    assert span["attributes"]["llm.model_name"] == "gpt-4o-mini"
+    assert span["attributes"]["gen_ai.request.model"] == "gpt-4o-mini"
+    assert span["attributes"]["ai.model.id"] == "gpt-4o-mini"
+
+
 def test_standalone_chat_model_finalizes_one_owned_trace():
     calls = []
     handler = langchain(
@@ -326,6 +369,43 @@ def test_langchain_records_is_error_tool_end_as_error_without_output():
     assert span["name"] == "pdf_server_pdf"
     assert span["status"] == "ERROR"
     assert span["error"] == "Internal error: Validation error"
+    assert "output" not in span
+
+
+def test_langchain_records_payload_encoded_tool_failure_as_error():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id="10000000-0000-0000-0000-000000000001",
+        transport=make_transport(calls),
+    )
+
+    handler.on_chain_start({"name": "support-agent"}, "hello", run_id="chain-1")
+    handler.on_tool_start(
+        {"name": "return_delivered_order_items"},
+        {"order_id": "#W-001"},
+        run_id="tool-1",
+        parent_run_id="chain-1",
+    )
+    handler.on_tool_end(
+        {
+            "isError": False,
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps({"error": "Error: Payment method not found"}),
+                }
+            ],
+            "structuredContent": {"error": "Error: Payment method not found"},
+        },
+        run_id="tool-1",
+    )
+    handler.on_chain_end({"ok": True}, run_id="chain-1")
+
+    span = calls[0]["body"]["trace"]["spans"][0]
+    assert span["name"] == "return_delivered_order_items"
+    assert span["status"] == "ERROR"
+    assert span["error"] == "Error: Payment method not found"
     assert "output" not in span
 
 
@@ -604,6 +684,17 @@ def test_langchain_forwards_release_onto_ingest_payload():
     )
     handler.on_chain_end({"answer": "ok"}, run_id="chain-1")
     assert calls[0]["body"]["trace"]["release"] == "1.8.3"
+
+
+def test_langchain_flush_does_not_raise_on_ingest_503():
+    handler = langchain(
+        api_key="key",
+        project_id="10000000-0000-0000-0000-000000000001",
+        transport=lambda _url, _headers, _body: (503, "nope"),
+    )
+    handler.on_chain_start({"name": "support-agent"}, "hi", run_id="chain-1")
+    handler.on_chain_end("done", run_id="chain-1")
+    handler.flush()
 
 
 def test_langgraph_forwards_release_onto_ingest_payload():

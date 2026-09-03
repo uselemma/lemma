@@ -1,8 +1,18 @@
 {
   "name": "@uselemma/opencode",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Lemma SDK tracing for OpenCode coding-agent sessions",
   "license": "MIT",
+  "author": "Lemma",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uselemma/lemma",
+    "directory": "plugins/lemma-opencode"
+  },
+  "homepage": "https://github.com/uselemma/lemma/tree/main/plugins/lemma-opencode#readme",
+  "bugs": {
+    "url": "https://github.com/uselemma/lemma/issues"
+  },
   "type": "module",
   "main": "./runtime/lemma.mjs",
   "types": "./runtime/lemma.d.ts",
@@ -31,7 +41,8 @@
     "build": "node build.mjs",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
-    "verify:local": "pnpm run build && node verify-local.mjs"
+    "verify:local": "pnpm run build && node verify-local.mjs",
+    "prepublishOnly": "pnpm run type-check && pnpm run build"
   },
   "dependencies": {
     "@opencode-ai/plugin": "1.18.19",

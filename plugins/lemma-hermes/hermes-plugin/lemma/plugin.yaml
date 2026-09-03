@@ -1,5 +1,5 @@
 name: lemma
-version: "0.1.0"
+version: "0.1.1"
 description: "Project-scoped Lemma SDK tracing for Hermes Agent sessions."
 author: Lemma
 hooks:

@@ -1,0 +1,53 @@
+---
+title: "Concepts"
+description: "Traces, issues, occurrences, artifacts, and agents in the Lemma dashboard"
+meta:
+  contentType: "Conceptual"
+---
+
+Once traces start arriving, five more nouns describe what you see in the dashboard. They build on the SDK vocabulary in [Concepts](/tracing/instrumentation/concepts): a trace is still the unit you send, but everything below describes what Lemma does with traces after ingest.
+
+Lemma evaluates production traces after the fact; it doesn't run offline evaluations. There's no standalone monitors product, no incidents, and no separate metrics surface — detection and alerting both run through the issue lifecycle defined below.
+
+## Project
+
+A **project** is the top-level container for traces, issues, artifacts, and settings from your agent or agents. Each project has its own dashboard, API key, and project ID. Use separate projects to isolate environments (dev, staging, prod) or distinct products.
+
+## Agent
+
+An **agent** isn't something you register. It's a name that appears on a trace, and Lemma uses that name to scope Artifacts, Analytics scorecards, and issue grouping to the right agent. A trace with no usable agent name still ingests, but nothing agent-scoped has anywhere to attach it.
+
+## Trace
+
+A **trace** is one ready agent execution: the conversation, the execution tree of spans, and any errors it produced. Traces are what you search and open on the [Traces](/platform/traces) page, and they're the raw evidence behind every issue.
+
+## Occurrence
+
+An **occurrence** is one instance of a failure pattern showing up in a specific trace. Every occurrence points back to the trace and the spans that produced it, so you can always trace a finding to its source.
+
+## Issue
+
+An **issue** is a group of occurrences that share the same underlying failure pattern. Lemma detects an occurrence by analyzing a trace after its conversation goes quiet, or immediately if the trace has no thread ID, then canonicalizes it against existing issues so the same bug accumulates occurrences instead of spawning a new issue every time it recurs. One issue, many occurrences, many traces: opening an issue shows you the pattern; opening an occurrence shows you the specific run that triggered it. See [Issues](/platform/issues) for status, priority, and investigation.
+
+Detection and grouping are probabilistic. Treat an issue as a hypothesis backed by evidence, not a certainty, and open the underlying occurrences before you call it confirmed.
+
+## Artifact
+
+An **artifact** is agent-scoped context that sharpens how Lemma interprets traces and issues for one agent: the context you provide, plus the understanding document and decision-flow diagram Lemma generates from it. Artifacts don't create traces or issues; they change how confidently Lemma judges the traces you already sent. See [Artifacts](/platform/artifacts).
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Overview" href="/platform/overview">
+    How a trace moves through detection to become an issue.
+  </Card>
+  <Card title="Issues" href="/platform/issues">
+    Status, priority, and investigating an issue's occurrences.
+  </Card>
+  <Card title="Artifacts" href="/platform/artifacts">
+    Agent-scoped context that sharpens detection.
+  </Card>
+  <Card title="SDK concepts" href="/tracing/instrumentation/concepts">
+    Trace, span, generation, tool call, and thread.
+  </Card>
+</CardGroup>

@@ -30,3 +30,6 @@ const { harness } = await AgentHarness.create({
 ```
 
 The exporter maps `pi.ai.request` spans to Lemma generations, `pi.harness.tool` spans to Lemma tools, and other Pi telemetry spans to regular SDK spans. It posts only to `/traces/ingest`.
+
+Generated `scripts/` and `extensions/` are not committed. Build them with `pnpm --filter @uselemma/pi build` before tests or pack.
+

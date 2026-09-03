@@ -297,6 +297,50 @@ describe("langChain", () => {
     });
   });
 
+  it("stamps response_metadata.model_name onto the generation when start omits model", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock);
+
+    h.handleChatModelStart(
+      {
+        id: ["langchain", "chat_models", "fake", "FakeMessagesListChatModel"],
+        name: "FakeMessagesListChatModel",
+        kwargs: { responses: [{ type: "ai", content: "It arrives Friday." }] },
+      },
+      [[{ type: "human", content: "where is my order?" }]],
+      "llm-fake",
+    );
+    await h.handleLLMEnd(
+      {
+        generations: [
+          [
+            {
+              text: "It arrives Friday.",
+              message: {
+                type: "ai",
+                content: "It arrives Friday.",
+                response_metadata: { model_name: "gpt-4o-mini" },
+              },
+            },
+          ],
+        ],
+      },
+      "llm-fake",
+    );
+
+    await h.flush();
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      type: "generation",
+      model: "gpt-4o-mini",
+      attributes: {
+        "llm.model_name": "gpt-4o-mini",
+        "gen_ai.request.model": "gpt-4o-mini",
+        "ai.model.id": "gpt-4o-mini",
+      },
+    });
+  });
+
   it("omits usage when the provider did not supply token counts", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const h = handler(fetchMock);
@@ -465,6 +509,43 @@ describe("langChain", () => {
       type: "tool",
       status: "ERROR",
       error: "Internal error: Validation error",
+    });
+    expect(body.trace.spans[0]).not.toHaveProperty("output");
+  });
+
+  it("records MCP isError:false payloads with structuredContent.error as span errors", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock);
+
+    h.handleChainStart({ name: "support-agent" }, "hello", "chain-1");
+    h.handleToolStart(
+      { name: "return_delivered_order_items" },
+      { order_id: "#W-001" },
+      "tool-1",
+      "chain-1",
+    );
+    await h.handleToolEnd(
+      {
+        isError: false,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ error: "Error: Payment method not found" }),
+          },
+        ],
+        structuredContent: { error: "Error: Payment method not found" },
+      },
+      "tool-1",
+    );
+    await h.handleChainEnd({ ok: true }, "chain-1");
+
+    await h.flush();
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      name: "return_delivered_order_items",
+      type: "tool",
+      status: "ERROR",
+      error: "Error: Payment method not found",
     });
     expect(body.trace.spans[0]).not.toHaveProperty("output");
   });
@@ -707,6 +788,16 @@ describe("langChain", () => {
       output: { ok: true },
     });
     expect(body.trace.spans[0].parent_id ?? null).toBeNull();
+  });
+
+  it("flush does not throw when ingest returns 503", async () => {
+    const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
+    const h = handler(fetchMock);
+
+    h.handleChainStart({ name: "support-agent" }, "hi", "chain-1");
+    await h.handleChainEnd("done", "chain-1");
+    await expect(h.flush()).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("forwards release onto the ingest payload", async () => {

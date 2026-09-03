@@ -6,6 +6,7 @@ from typing import Any
 
 from .client import Lemma, SpanHandle, TraceContext, _duration_ms, _now
 from .error_message import describe_error
+from .model import pick_generation_model_identity, pick_model_identity
 from .tool_result import tool_result_error
 from .usage import normalize_token_usage
 
@@ -99,18 +100,6 @@ def _serialized_name(serialized: Any, fallback: str) -> str:
     if isinstance(ids, list) and ids:
         return str(ids[-1])
     return fallback
-
-
-def _model_name(serialized: Any, extra_params: dict[str, Any] | None = None) -> str | None:
-    kwargs = _get(serialized, "kwargs", {}) or {}
-    for source in (kwargs, serialized, extra_params or {}):
-        if not isinstance(source, dict) and source is not serialized:
-            continue
-        for key in ("model", "model_name", "modelName", "model_id", "modelId"):
-            value = _get(source, key)
-            if isinstance(value, str) and value:
-                return value
-    return None
 
 
 def _lookup_string(
@@ -755,13 +744,13 @@ class LemmaLangChainCallbackHandler:
 
         if stored.root_error:
             stored.context.fail(stored.root_error)
-            self.lemma._send(stored.context, started_at, ended_at)
+            self.lemma._deliver_automatic(stored.context, started_at, ended_at)
             return
 
         if stored.root_output is not None:
             stored.context.output(stored.root_output)
 
-        self.lemma._send(stored.context, started_at, ended_at)
+        self.lemma._deliver_automatic(stored.context, started_at, ended_at)
 
     def _maybe_finalize_owner(self, run: _StoredRun, ended_at: datetime) -> None:
         if not run.owns_trace:
@@ -927,7 +916,11 @@ class LemmaLangChainCallbackHandler:
         self._note_bounds(stored, started_at, None)
 
         provider = llm_provider(serialized, invocation_params)
-        model = _model_name(serialized, invocation_params)
+        model = (
+            pick_model_identity(_get(serialized, "kwargs"))
+            or pick_model_identity(serialized)
+            or pick_model_identity(invocation_params)
+        )
         handle = stored.context.start_generation(
             name=_serialized_name(serialized, "langchain-llm"),
             parent_id=parent_id,
@@ -989,7 +982,11 @@ class LemmaLangChainCallbackHandler:
         self._note_bounds(stored, started_at, None)
 
         provider = llm_provider(serialized, invocation_params)
-        model = _model_name(serialized, invocation_params)
+        model = (
+            pick_model_identity(_get(serialized, "kwargs"))
+            or pick_model_identity(serialized)
+            or pick_model_identity(invocation_params)
+        )
         handle = stored.context.start_generation(
             name=_serialized_name(serialized, "langchain-chat-model"),
             parent_id=parent_id,
@@ -1023,6 +1020,7 @@ class LemmaLangChainCallbackHandler:
         soft_error = tool_result_error(structured)
         awaiting_tools = soft_error is None and _has_tool_calls(structured)
 
+        model = pick_generation_model_identity(response)
         run.handle.end(
             output=structured if soft_error is None else None,
             error=soft_error,
@@ -1031,6 +1029,7 @@ class LemmaLangChainCallbackHandler:
             duration_ms=_duration_ms(run.started_at, ended_at),
             llm_output_messages=(output_messages if soft_error is None else None),
             usage=llm_token_usage(response),
+            **({"model": model} if model else {}),
         )
 
         stored = self._traces.get(run.owning_trace_id)

@@ -1,0 +1,188 @@
+---
+title: "Cross-process turns"
+description: "Record a host and sandbox as one Lemma trace"
+meta:
+  contentType: "How-to"
+---
+
+When a user turn spans a host and a sandbox such as E2B, record one Lemma [trace](/tracing/instrumentation/traces). The host owns the root and the API key. The child records a journal (local span, tool, and generation records). You apply that journal on the host and `ingest()` once.
+
+A **context token** is the payload the host exports. It includes `traceId`, `parentSpanId`, `threadId`, `userId`, and `startedAt`. The helpers are `startTurn` / `attachTurn` / `apply` (Python `start_turn` / `attach_turn` / `apply`).
+
+A [thread id](/tracing/instrumentation/context) groups successive conversation turns. It does not join a host and a sandbox into one turn. For later turns in other processes, see [Instrumenting multi-turn agents](/guides/instrumenting-multi-turn-agents).
+
+## Host, child, and coordinator
+
+The work splits across three roles:
+
+- **Host**: process that holds the Lemma client and API key
+- **Child**: sandbox or worker that records the journal
+- **Coordinator**: process that applies the journal and sends (the host, unless another process holds the journal)
+
+The host starts the root, exports the token, and calls `ingest()`. The child never constructs `Lemma` and never calls `/traces/ingest`.
+
+## Record the host and child as one turn
+
+Export a token on the host, attach in the child, apply the journal, then end once.
+
+<Steps>
+  <Step title="Start the host root and export a token">
+    Call `startTurn` / `start_turn`, start a sandbox span, and export with that span as `parentSpanId`. In a sandbox, pass the token as env (for example `LEMMA_TURN`).
+  </Step>
+  <Step title="Attach in the child and record locally">
+    Call `attachTurn` / `attach_turn` with the token. Record generations, tools, and spans on the local handle. Emit `local.records()` on the app's existing event channel. Do not set `LEMMA_API_KEY` in the child.
+  </Step>
+  <Step title="Apply the journal and ingest once">
+    On the host, `apply` the journal, end the sandbox span, then `turn.end()` or `ingest()`. Do not call `/traces/ingest` from the child. Lemma ingest happens once at the end.
+  </Step>
+</Steps>
+
+This example runs all three steps in one process so you can copy it. Split `export` / `attachTurn` / `apply` across host and child in production.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript {4-9,11,17,19-20}
+    import { Lemma, attachTurn, startTurn } from "@uselemma/tracing";
+
+    const lemma = new Lemma();
+    const turn = startTurn(lemma, {
+      name: "agent-turn",
+      input: userMessage,
+      threadId: conversationId,
+    });
+    const sandbox = turn.startSpan({ name: "e2b-sandbox" });
+
+    const local = attachTurn(turn.export({ parentSpanId: sandbox.id }));
+    local.recordTool({
+      name: "lookup_order",
+      input: { orderId: "1843" },
+      output: { status: "shipped" },
+    });
+    turn.apply(local.records());
+
+    sandbox.end();
+    await turn.end({ output: "It ships tomorrow." });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python {4-9,11,17,19-20}
+    from uselemma_tracing import Lemma, attach_turn
+
+    lemma = Lemma()
+    turn = lemma.start_turn(
+        "agent-turn",
+        input=user_message,
+        thread_id=conversation_id,
+    )
+    sandbox = turn.start_span(name="e2b-sandbox")
+
+    local = attach_turn(turn.export(parent_span_id=sandbox.id))
+    local.record_tool(
+        name="lookup_order",
+        input={"orderId": "1843"},
+        output={"status": "shipped"},
+    )
+    turn.apply(local.records())
+
+    sandbox.end()
+    turn.end(output="It ships tomorrow.")
+    ```
+  </Tab>
+</Tabs>
+
+`apply` accepts any of:
+
+- **Full journal**: `local.records()`
+- **JSON string**: a serialized journal
+- **One record**: a single event
+- **Array of records**: streamed events
+
+`apply` only updates the in-memory tree on the host or coordinator. It does not call `/traces/ingest`. Stream journal events into `apply` as they arrive, or apply the full journal once. Send to Lemma once with `turn.end()` or `ingest()` after the sandbox finishes.
+
+## Assemble a trace from a stored journal
+
+When you have a token and journal and no live turn handle, build a `TraceContext` and `ingest()` once. The journal can be a file or a queued payload:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    import { Lemma, assembleTurn } from "@uselemma/tracing";
+
+    const lemma = new Lemma();
+    const { context, startedAt } = assembleTurn(token, journal, {
+      input: userMessage,
+      output: answer,
+    });
+    await lemma.ingest(context, { startedAt });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from uselemma_tracing import Lemma, assemble_turn
+
+    lemma = Lemma()
+    context, started_at = assemble_turn(
+        token, journal, input=user_message, output=answer
+    )
+    lemma.ingest(context, started_at=started_at)
+    ```
+  </Tab>
+</Tabs>
+
+Re-applying the same journal is idempotent. Span IDs are stable, so a retried assemble plus ingest does not duplicate children.
+
+## Recover when the sandbox exits uncleanly
+
+If the sandbox dies before a complete journal, apply whatever records arrived. End the sandbox span as `ERROR`, leave incomplete tools as they are, then `fail` and `end()` so one payload still goes out.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    turn.apply(journal);
+    sandbox.end({ status: "ERROR", error: "sandbox killed" });
+    turn.fail("sandbox exited uncleanly");
+    await turn.end();
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    turn.apply(journal)
+    sandbox.end(status="ERROR", error="sandbox killed")
+    turn.fail("sandbox exited uncleanly")
+    turn.end()
+    ```
+  </Tab>
+</Tabs>
+
+`turn.end()` is **strict**: a 4xx/5xx from Lemma throws so you can retry the same payload. Automatic `lemma.trace()` delivery fails open.
+
+## Helpers for each role
+
+| Role | TypeScript | Python |
+| --- | --- | --- |
+| Start the host root | `startTurn(lemma, ...)` | `lemma.start_turn(...)` / `start_turn(lemma, ...)` |
+| Export the child token | `turn.export({ parentSpanId })` | `turn.export(parent_span_id=...)` |
+| Record in the child | `attachTurn(token)` | `attach_turn(token)` / `Lemma.attach(token)` |
+| Collect journal records | `local.records()` | `local.records()` |
+| Apply the journal | `turn.apply(journal)` / `applyTurnJournal(context, journal)` | `turn.apply(journal)` / `apply_turn_journal(context, journal)` |
+| Assemble without a live handle | `assembleTurn(token, journal)` | `assemble_turn(token, journal)` |
+| Send once | `await turn.end(...)` or `lemma.ingest(...)` | `turn.end(...)` or `lemma.ingest(...)` |
+
+Journal fields are camelCase in both languages (`traceId`, `parentSpanId`, `parentId`, `startedAt`, …). A TypeScript host can apply a Python child's journal. A Python host can apply a TypeScript child's journal.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Agent traces" href="/tracing/instrumentation/traces">
+    Callback traces, handles, and `ingest()` in one process.
+  </Card>
+  <Card title="Instrumenting multi-turn agents" href="/guides/instrumenting-multi-turn-agents">
+    New root per user turn, same `threadId` for the conversation.
+  </Card>
+  <Card title="Threads & context" href="/tracing/instrumentation/context">
+    `threadId` and `userId` on the root.
+  </Card>
+  <Card title="Common issues" href="/tracing/troubleshooting/common-issues">
+    Two roots, missing children, sparse ingest.
+  </Card>
+</CardGroup>

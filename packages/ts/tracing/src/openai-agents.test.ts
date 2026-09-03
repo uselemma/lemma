@@ -322,6 +322,64 @@ describe("openAIAgents", () => {
     expect(body.trace.spans[0]).not.toHaveProperty("output");
   });
 
+  it("records function spans with payload-encoded error as error without output", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await processor.onTraceStart({
+      traceId: "trace_payload_err",
+      name: "support-agent",
+    });
+    await processor.onSpanStart({
+      traceId: "trace_payload_err",
+      spanId: "span_tool",
+      spanData: {
+        type: "function",
+        name: "return_delivered_order_items",
+        input: JSON.stringify({ order_id: "#W-001" }),
+      },
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_payload_err",
+      spanId: "span_tool",
+      spanData: {
+        type: "function",
+        name: "return_delivered_order_items",
+        input: JSON.stringify({ order_id: "#W-001" }),
+        output: JSON.stringify({
+          isError: false,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: "Error: Payment method not found",
+              }),
+            },
+          ],
+          structuredContent: { error: "Error: Payment method not found" },
+        }),
+      },
+    });
+    await processor.onTraceEnd({
+      traceId: "trace_payload_err",
+      name: "support-agent",
+    });
+    await processor.forceFlush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      name: "return_delivered_order_items",
+      type: "tool",
+      status: "ERROR",
+      error: "Error: Payment method not found",
+    });
+    expect(body.trace.spans[0]).not.toHaveProperty("output");
+  });
+
   it("extends a parent generation when a child tool ends later", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const processor = openAIAgents({
@@ -776,5 +834,46 @@ describe("openAIAgents", () => {
     await processor.forceFlush();
 
     expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
+  });
+
+  it("copies model from the response payload when spanData.model is unset", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await processor.onTraceStart({
+      traceId: "trace_openai_model",
+      name: "support-agent",
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_openai_model",
+      spanId: "span_generation_model",
+      spanData: {
+        type: "generation",
+        input: [{ role: "user", content: "hi" }],
+        output: [{ role: "assistant", content: "hello" }],
+        response: { model: "o3-mini" },
+      },
+      startedAt: "2026-06-29T10:00:00.000Z",
+      endedAt: "2026-06-29T10:00:00.050Z",
+    });
+    await processor.onTraceEnd({
+      traceId: "trace_openai_model",
+      name: "support-agent",
+    });
+    await processor.forceFlush();
+
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0]).toMatchObject({
+      type: "generation",
+      model: "o3-mini",
+      attributes: {
+        "llm.model_name": "o3-mini",
+        "gen_ai.request.model": "o3-mini",
+        "ai.model.id": "o3-mini",
+      },
+    });
   });
 });

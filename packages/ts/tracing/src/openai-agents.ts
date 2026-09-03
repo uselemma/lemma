@@ -2,6 +2,7 @@ import { Lemma, type SpanHandle, type TraceHandle } from "./client";
 import { describeError } from "./error-message";
 import { scheduleMacrotask } from "./schedule";
 import { toolResultError } from "./tool-result";
+import { pickModelIdentity } from "./model";
 import { normalizeTokenUsage, type TokenUsage } from "./usage";
 
 const INTEGRATION_ATTRS = {
@@ -382,7 +383,7 @@ export function openAIAgents(
     if (isGenerationType(data.type)) {
       return trace.handle.startGeneration({
         ...base,
-        model: typeof data["model"] === "string" ? data["model"] : undefined,
+        model: pickModelIdentity(data),
         llmProvider: "openai",
         llmInputMessages: Array.isArray(input)
           ? (input as unknown[])
@@ -449,7 +450,7 @@ export function openAIAgents(
       output: parsedOutput,
       error: errorMessage,
       status: errorMessage ? "ERROR" : undefined,
-      model: typeof data["model"] === "string" ? data["model"] : undefined,
+      model: pickModelIdentity(data),
       endedAt: spanEndedAt,
       durationMs: durationMs(spanStartedAt, spanEndedAt),
       llmOutputMessages:

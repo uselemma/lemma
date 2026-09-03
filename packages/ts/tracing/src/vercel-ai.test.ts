@@ -824,6 +824,65 @@ describe("vercelAI", () => {
     expect(tool).not.toHaveProperty("output");
   });
 
+  it("records MCP isError:false payloads with structuredContent.error as span errors", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await lemma.trace("support-agent", async (trace) => {
+      const integration = vercelAI({ trace });
+
+      integration.onStepStart?.({
+        stepNumber: 0,
+        model: { provider: "openai", modelId: "gpt-4o" },
+        messages: [{ role: "user", content: "return the camera" }],
+      });
+      integration.onToolCallFinish?.({
+        toolCall: {
+          toolName: "return_delivered_order_items",
+          toolCallId: "tool-1",
+          input: { order_id: "#W-001" },
+        },
+        durationMs: 40,
+        success: true,
+        output: {
+          isError: false,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error: "Error: Payment method not found",
+              }),
+            },
+          ],
+          structuredContent: { error: "Error: Payment method not found" },
+        },
+      } as never);
+      integration.onStepFinish?.({
+        stepNumber: 0,
+        model: { provider: "openai", modelId: "gpt-4o" },
+        text: "The return could not be completed.",
+      });
+
+      return "The return could not be completed.";
+    });
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    const tool = body.trace.spans.find(
+      (span: { type?: string }) => span.type === "tool",
+    );
+    expect(tool).toMatchObject({
+      name: "return_delivered_order_items",
+      type: "tool",
+      status: "ERROR",
+      error: "Error: Payment method not found",
+    });
+    expect(tool).not.toHaveProperty("output");
+  });
+
   it("keeps v6 tool timing inside the parent generation window", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const lemma = new Lemma({
@@ -1013,6 +1072,295 @@ describe("vercelAI", () => {
       attributes: {
         "llm.input_messages.0.message.role": "system",
         "llm.input_messages.1.message.content": "Summarize shipping.",
+      },
+    });
+  });
+
+  it("prepends v6 system onto generation messages when messages is also set", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      system: "Follow the playbook.",
+      messages: [{ role: "user", content: "where is my order?" }],
+    });
+    await integration.onFinish?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "It arrives Friday.",
+    });
+    await integration.flush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.input).toBe("where is my order?");
+    expect(body.trace.spans[0]).toMatchObject({
+      input: [
+        { role: "system", content: "Follow the playbook." },
+        { role: "user", content: "where is my order?" },
+      ],
+      attributes: {
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.0.message.content": "Follow the playbook.",
+        "llm.input_messages.1.message.content": "where is my order?",
+      },
+    });
+  });
+
+  it("prepends onStart system onto v7 step generations that only receive messages", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      system: "Follow the playbook.",
+      messages: [{ role: "user", content: "where is my order?" }],
+    });
+    integration.onStepStart?.({
+      functionId: "support-agent",
+      callId: "call-1",
+      provider: "openai",
+      modelId: "gpt-4o",
+      stepNumber: 0,
+      messages: [{ role: "user", content: "where is my order?" }],
+    } as never);
+    integration.onStepEnd?.({
+      callId: "call-1",
+      stepNumber: 0,
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "It arrives Friday.",
+      performance: { responseTimeMs: 100, stepTimeMs: 100 },
+    } as never);
+    await integration.onEnd?.({ text: "It arrives Friday." });
+    await integration.flush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      input: [
+        { role: "system", content: "Follow the playbook." },
+        { role: "user", content: "where is my order?" },
+      ],
+      attributes: {
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.0.message.content": "Follow the playbook.",
+      },
+    });
+  });
+
+  it("records a later step's instructions instead of the onStart system", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      system: "Follow the playbook.",
+      messages: [{ role: "user", content: "where is my order?" }],
+    });
+    integration.onStepStart?.({
+      functionId: "support-agent",
+      callId: "call-1",
+      provider: "openai",
+      modelId: "gpt-4o",
+      stepNumber: 0,
+      messages: [{ role: "user", content: "where is my order?" }],
+    } as never);
+    integration.onStepEnd?.({
+      callId: "call-1",
+      stepNumber: 0,
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "Looking up.",
+      performance: { responseTimeMs: 40, stepTimeMs: 40 },
+      toolCalls: [{ toolCallId: "tool-1", toolName: "lookup" }],
+    } as never);
+    integration.onStepStart?.({
+      functionId: "support-agent",
+      callId: "call-2",
+      provider: "openai",
+      modelId: "gpt-4o",
+      stepNumber: 1,
+      instructions: "Use the lookup result. Be brief.",
+      messages: [
+        { role: "user", content: "where is my order?" },
+        { role: "assistant", content: "Looking up." },
+      ],
+    } as never);
+    integration.onStepEnd?.({
+      callId: "call-2",
+      stepNumber: 1,
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "It arrives Friday.",
+      performance: { responseTimeMs: 50, stepTimeMs: 50 },
+    } as never);
+    await integration.onEnd?.({ text: "It arrives Friday." });
+    await integration.flush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans).toHaveLength(2);
+    expect(body.trace.spans[0]).toMatchObject({
+      input: [
+        { role: "system", content: "Follow the playbook." },
+        { role: "user", content: "where is my order?" },
+      ],
+    });
+    expect(body.trace.spans[1]).toMatchObject({
+      input: [
+        { role: "system", content: "Use the lookup result. Be brief." },
+        { role: "user", content: "where is my order?" },
+        { role: "assistant", content: "Looking up." },
+      ],
+      attributes: {
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.0.message.content":
+          "Use the lookup result. Be brief.",
+      },
+    });
+  });
+
+  it("prepends onStart instructions onto v7 step generations", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      instructions: "Be brief.",
+      messages: [{ role: "user", content: "status?" }],
+    });
+    integration.onStepStart?.({
+      functionId: "support-agent",
+      callId: "call-1",
+      provider: "openai",
+      modelId: "gpt-4o",
+      stepNumber: 0,
+      messages: [{ role: "user", content: "status?" }],
+    } as never);
+    integration.onStepEnd?.({
+      callId: "call-1",
+      stepNumber: 0,
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "Shipped.",
+      performance: { responseTimeMs: 20, stepTimeMs: 20 },
+    } as never);
+    await integration.onEnd?.({ text: "Shipped." });
+    await integration.flush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      input: [
+        { role: "system", content: "Be brief." },
+        { role: "user", content: "status?" },
+      ],
+      attributes: {
+        "llm.input_messages.0.message.content": "Be brief.",
+      },
+    });
+  });
+
+  it("does not prepend onStart system when later messages already start with a different system", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      system: "Old playbook.",
+      messages: [{ role: "user", content: "hello" }],
+    });
+    integration.onStepStart?.({
+      functionId: "support-agent",
+      callId: "call-1",
+      provider: "openai",
+      modelId: "gpt-4o",
+      stepNumber: 0,
+      messages: [
+        { role: "system", content: "New playbook." },
+        { role: "user", content: "hello" },
+      ],
+    } as never);
+    integration.onStepEnd?.({
+      callId: "call-1",
+      stepNumber: 0,
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "hi",
+      performance: { responseTimeMs: 10, stepTimeMs: 10 },
+    } as never);
+    await integration.onEnd?.({ text: "hi" });
+    await integration.flush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0].input).toEqual([
+      { role: "system", content: "New playbook." },
+      { role: "user", content: "hello" },
+    ]);
+    expect(body.trace.spans[0].attributes).toMatchObject({
+      "llm.input_messages.0.message.content": "New playbook.",
+    });
+  });
+
+  it("records a v6 step system that differs from onStart", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      system: "Follow the playbook.",
+      messages: [{ role: "user", content: "hello" }],
+    });
+    integration.onStepStart?.({
+      stepNumber: 0,
+      model: { provider: "openai", modelId: "gpt-4o" },
+      system: "Use special instructions for this step.",
+      messages: [{ role: "user", content: "hello" }],
+    });
+    integration.onStepFinish?.({
+      stepNumber: 0,
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "done",
+    });
+    await integration.onFinish?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      text: "done",
+    });
+    await integration.flush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.spans[0]).toMatchObject({
+      input: [
+        { role: "system", content: "Use special instructions for this step." },
+        { role: "user", content: "hello" },
+      ],
+      attributes: {
+        "llm.input_messages.0.message.content":
+          "Use special instructions for this step.",
       },
     });
   });
@@ -1418,5 +1766,23 @@ describe("vercelAI", () => {
     await integration.flush();
 
     expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
+  });
+
+  it("flush does not throw when ingest returns 503", async () => {
+    const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
+    const integration = vercelAI({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    integration.onStart?.({
+      functionId: "support-agent",
+      model: { provider: "openai", modelId: "gpt-4o" },
+      prompt: "hello",
+    });
+    await integration.onEnd?.({ text: "hi" });
+    await expect(integration.flush()).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

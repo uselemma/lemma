@@ -9,6 +9,22 @@ This page is organized by **symptom**. Most issues are trace-shape problems: the
   When behavior is unclear, first enable [Debug mode](/tracing/troubleshooting/debug-mode) in the same runtime that serves traffic. It shows whether the SDK is running, which trace it tries to send, how many child spans were included, and whether the ingest request succeeds.
 </Note>
 
+## Audit traces that already land
+
+Use the Lemma diagnostics skill when traces are arriving and you want to check whether their shape matches the [high-quality traces guide](/guides/building-high-quality-traces). The skill audits your traces without editing your app.
+
+```bash
+npx skills add uselemma/lemma --skill "lemma-diagnostics"
+```
+
+Then prompt your coding agent:
+
+```text
+Are these traces high quality? Audit the shape of traces already in Lemma.
+```
+
+If no traces are arriving, start with [Quickstart](/tracing/instrumentation/setup) instead.
+
 ## No traces in Lemma
 
 **Cause:** credentials, project ID, base URL, or outbound network access is wrong.
@@ -109,9 +125,47 @@ This page is organized by **symptom**. Most issues are trace-shape problems: the
   </Tab>
 </Tabs>
 
-Across queues, workers, or separate services, start a new top-level trace and pass the same `threadId` / `userId` so turns remain connected. If one logical agent execution spans multiple processes, prefer recording the final trace in the coordinator that has the complete input, output, tools, and model calls.
+Distinguish two boundaries:
 
-**Debug with Debug mode:** compare logs from the request handler and any background worker. If the child work runs after the `lemma.trace()` callback has returned, it will not attach to the root trace automatically. Move the recording into the callback, or pass trace/span IDs and use the detached `record*` helpers from the coordinator.
+- **Successive conversation turns** in different processes (request handler answers turn 1, a worker answers turn 2): start a **new** root for each turn and pass the same `threadId` / `userId`. See [Instrumenting multi-turn agents](/guides/instrumenting-multi-turn-agents).
+- **One user turn** on a host and a sandbox: export a context token, record a journal in the child with no API key, then `apply` and `ingest()` once. See [Cross-process turns](/tracing/instrumentation/cross-process-turns).
+
+**Debug with Debug mode:** compare logs from the request handler and any background worker. If the child work runs after the `lemma.trace()` callback has returned, it will not attach to the root trace automatically. Move the recording into the callback, pass trace/span IDs to detached `record*` helpers from the coordinator, or use `startTurn` / `attachTurn` when the child is a separate process of the **same** turn.
+
+## Host and sandbox show up as two traces
+
+**Cause:** each process started its own `lemma.trace()` and shared `threadId` / `thread_id`. Lemma groups those as two conversation turns, not one execution.
+
+**Fix:** export a context token on the host. Call `attachTurn` / `attach_turn` in the child with no API key. Apply the journal on the host and `ingest()` once. Keep `LEMMA_API_KEY` off the sandbox.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const turn = startTurn(lemma, {
+      name: "agent-turn",
+      input: userMessage,
+      threadId,
+    });
+    const sandbox = turn.startSpan({ name: "e2b-sandbox" });
+    turn.apply(childJournal);
+    sandbox.end();
+    await turn.end({ output });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    turn = lemma.start_turn("agent-turn", input=user_message, thread_id=thread_id)
+    sandbox = turn.start_span(name="e2b-sandbox")
+    turn.apply(child_journal)
+    sandbox.end()
+    turn.end(output=answer)
+    ```
+  </Tab>
+</Tabs>
+
+See [Cross-process turns](/tracing/instrumentation/cross-process-turns). Set `threadId` on the host root so this turn groups with the rest of the conversation.
+
+**Debug with Debug mode:** the host should log one `sending trace` / `trace sent` with sandbox children included. The child process should not log ingest at all.
 
 ## Tool calls are missing
 
@@ -200,11 +254,11 @@ For failures, record the error before re-raising:
 
 ## Root input/output is null after a second delivery
 
-**Cause:** the trace was delivered again with a sparse `ingest()` payload — for example a follow-up call that carries a late child span but omits root `input`/`output`. `ingest()` is not an incremental merge API, so omitted root fields do not preserve prior values, and analysis typically already ran once after the first complete delivery.
+**Cause:** the trace was delivered again with a sparse `ingest()` payload, for example a follow-up call that carries a late child span but omits root `input`/`output`. `ingest()` is not an incremental merge API, so omitted root fields do not preserve prior values, and analysis typically already ran once after the first complete delivery.
 
-**Fix:** send **one complete trace** when the execution finishes — root input/output, thread/user, and all child spans in a single `ingest()` call. Retries of that same complete payload are safe (already-stored span IDs are skipped). Across queues and workers, assemble the full tree in a coordinator and ingest once rather than streaming partial deliveries under one `trace.id`.
+**Fix:** send **one complete trace** when the execution finishes: root input/output, thread/user, and all child spans in a single `ingest()` call. Retries of that same complete payload are safe (already-stored span IDs are skipped). Across queues and workers, assemble the full tree in a coordinator and ingest once rather than streaming partial deliveries under one `trace.id`. For a host and sandbox that are one turn, apply the child journal on the host and ingest once. See [Cross-process turns](/tracing/instrumentation/cross-process-turns).
 
-**Debug with Debug mode:** check the `sending trace` log for each delivery. If a later send has a small `spanCount` (`span_count` in Python) and no root I/O, that sparse payload is overwriting the root fields — consolidate it into the single terminal send.
+**Debug with Debug mode:** check the `sending trace` log for each delivery. If a later send has a small `spanCount` (`span_count` in Python) and no root I/O, that sparse payload is overwriting the root fields. Consolidate it into the single terminal send.
 
 ## Model or content is missing
 
@@ -335,5 +389,6 @@ support-agent
 - Use `trace.recordTool()` / `trace.record_tool()` for tool calls.
 - Use `trace.recordSpan()` / `trace.record_span()` for completed app work or `trace.startSpan()` / `trace.start_span()` for live app work.
 - Pass `threadId` / `thread_id` and `userId` / `user_id` for multi-turn analysis.
+- If one turn spans a host and a sandbox, use `startTurn` / `attachTurn` / `apply`. See [Cross-process turns](/tracing/instrumentation/cross-process-turns).
 
 **Debug with Debug mode:** confirm the SDK logs `trace sent` with the expected trace name and child `spanCount` (`span_count` in Python), then compare the dashboard trace against the contract.

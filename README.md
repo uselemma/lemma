@@ -16,7 +16,7 @@
 
 | Resource                                                            | Use it for                                   |
 | ------------------------------------------------------------------- | -------------------------------------------- |
-| [Quickstart](https://docs.uselemma.ai/getting-started/quickstart)   | Send your first useful trace to Lemma.       |
+| [Quickstart](https://docs.uselemma.ai/tracing/instrumentation/setup) | Send your first useful trace to Lemma.       |
 | [Trace contract](https://docs.uselemma.ai/reference/trace-contract) | Learn the trace shape Lemma expects.         |
 | [TypeScript SDK](packages/ts/tracing)                               | Instrument Node and TypeScript applications. |
 | [Python SDK](packages/py/tracing)                                   | Instrument Python applications.              |
