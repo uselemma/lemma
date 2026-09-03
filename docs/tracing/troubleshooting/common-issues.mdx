@@ -128,7 +128,7 @@ If no traces are arriving, start with [Quickstart](/tracing/instrumentation/setu
 Distinguish two boundaries:
 
 - **Successive conversation turns** in different processes (request handler answers turn 1, a worker answers turn 2): start a **new** root for each turn and pass the same `threadId` / `userId`. See [Instrumenting multi-turn agents](/guides/instrumenting-multi-turn-agents).
-- **One user turn** split across a host and a sandbox (E2B-style): do **not** start a second root with the same `threadId`. The host mints a context token, the child records a journal with no API key, and the host `apply`s then `ingest()`s once. See [One turn across processes](/tracing/instrumentation/cross-process-turns).
+- **One user turn** split across a host and a sandbox (E2B-style): the host mints a context token, the child records a journal with no API key, and the host `apply`s then `ingest()`s once. See [One turn across processes](/tracing/instrumentation/cross-process-turns).
 
 **Debug with Debug mode:** compare logs from the request handler and any background worker. If the child work runs after the `lemma.trace()` callback has returned, it will not attach to the root trace automatically. Move the recording into the callback, pass trace/span IDs to detached `record*` helpers from the coordinator, or use `startTurn` / `attachTurn` when the child is a separate process of the **same** turn.
 
@@ -389,6 +389,6 @@ support-agent
 - Use `trace.recordTool()` / `trace.record_tool()` for tool calls.
 - Use `trace.recordSpan()` / `trace.record_span()` for completed app work or `trace.startSpan()` / `trace.start_span()` for live app work.
 - Pass `threadId` / `thread_id` and `userId` / `user_id` for multi-turn analysis.
-- If one turn spans a host and a sandbox, stitch them with `startTurn` / `attachTurn` / `apply` rather than two roots that share `threadId`.
+- If one turn spans a host and a sandbox, use `startTurn` / `attachTurn` / `apply` — see [One turn across processes](/tracing/instrumentation/cross-process-turns).
 
 **Debug with Debug mode:** confirm the SDK logs `trace sent` with the expected trace name and child `spanCount` (`span_count` in Python), then compare the dashboard trace against the contract.

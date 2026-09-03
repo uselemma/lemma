@@ -215,75 +215,51 @@ Detached child records require `traceId`. Pass `parentSpanId` when the record be
 
 ## Host + sandbox (one turn across processes)
 
-`threadId` / `thread_id` is the multi-**turn** conversation key. Do not start one root per process and share `threadId` when the processes are really one user turn (host orchestrator + E2B-style sandbox). The sandbox must not hold `LEMMA_API_KEY` or call `/traces/ingest`. Ship the journal on the app's existing channel (E2B events, stdout, dump file). The host `apply`s it and `ingest()`s once.
-
-TypeScript host + child (same shape as `packages/ts/tracing/examples/cross-process-turn.ts`):
+Host mints a token, child `attachTurn`s / `attach_turn`s and records a journal (no API key), host `apply`s and `ingest()`s once. Docs: [One turn across processes](https://docs.uselemma.ai/tracing/instrumentation/cross-process-turns).
 
 ```typescript
 import { Lemma, attachTurn, startTurn } from "@uselemma/tracing";
 
 const lemma = new Lemma();
-
-function runInSandbox(tokenJson: string, userMessage: string) {
-  const local = attachTurn(tokenJson);
-  local.recordTool({
-    name: "search_docs",
-    input: { query: userMessage },
-    output: docs,
-  });
-  const generation = local.startGeneration({
-    name: "answer",
-    model: "gpt-4o",
-    input: userMessage,
-  });
-  generation.end({ output: answer });
-  return local.records();
-}
-
 const turn = startTurn(lemma, {
   name: "agent-turn",
   input: userMessage,
   threadId,
-  userId,
 });
 const sandbox = turn.startSpan({ name: "e2b-sandbox" });
-const journal = runInSandbox(
-  JSON.stringify(turn.export({ parentSpanId: sandbox.id })),
-  userMessage,
-);
-turn.apply(journal);
-sandbox.end({ output: { ok: true } });
+
+const local = attachTurn(turn.export({ parentSpanId: sandbox.id }));
+local.recordTool({
+  name: "lookup_order",
+  input: { orderId: "1843" },
+  output: { status: "shipped" },
+});
+turn.apply(local.records());
+
+sandbox.end();
 await turn.end({ output: answer });
 ```
 
-Python:
-
 ```python
-import json
 from uselemma_tracing import Lemma, attach_turn
 
 lemma = Lemma()
-
-def run_in_sandbox(token_json, user_message):
-    local = attach_turn(token_json)
-    local.record_tool(name="search_docs", input={"query": user_message}, output=docs)
-    generation = local.start_generation(name="answer", model="gpt-4o", input=user_message)
-    generation.end(output=answer)
-    return local.records()
-
-turn = lemma.start_turn("agent-turn", input=user_message, thread_id=thread_id, user_id=user_id)
+turn = lemma.start_turn("agent-turn", input=user_message, thread_id=thread_id)
 sandbox = turn.start_span(name="e2b-sandbox")
-journal = run_in_sandbox(json.dumps(turn.export(parent_span_id=sandbox.id)), user_message)
-turn.apply(journal)
-sandbox.end(output={"ok": True})
+
+local = attach_turn(turn.export(parent_span_id=sandbox.id))
+local.record_tool(
+    name="lookup_order",
+    input={"orderId": "1843"},
+    output={"status": "shipped"},
+)
+turn.apply(local.records())
+
+sandbox.end()
 turn.end(output=answer)
 ```
 
-`apply` also accepts a JSON string, one record, or an array of records if you stream events instead of one dump. `assembleTurn(token, journal)` / `assemble_turn(token, journal)` builds a `TraceContext` when the coordinator already has the dump and is not holding a live handle; then call `ingest()` once.
-
-`turn.end()` / coordinator `ingest()` stays strict so a failed send can be retried. Re-applying the same journal does not duplicate spans (stable ids). If the child exits uncleanly, end the sandbox span as ERROR and `turn.fail(...)`; incomplete tools are allowed.
-
-Standalone helpers: `startTurn` / `attachTurn` / `applyTurnJournal` (Python `start_turn` / `attach_turn` / `apply_turn_journal`). TypeScript keeps those exported functions only (no `Lemma` methods — `client.ts` cannot import `turn.ts` without a cycle). Python also exposes `lemma.start_turn` / `Lemma.attach` via lazy imports.
+`assembleTurn(token, journal)` / `assemble_turn(token, journal)` builds a `TraceContext` when you already have a dump and no live handle; then `ingest()` once. `turn.end()` is strict so a failed send can be retried.
 
 ## Native Contract Props
 
