@@ -6,7 +6,7 @@ Thank you for contributing.
 
 Check [open and closed issues](https://github.com/uselemma/lemma/issues?q=is%3Aissue) for anything similar. Comment on an existing issue if you have more context. Open a new issue for a bug or a change that needs discussion.
 
-To contribute code: fork the repo, develop locally, and open a pull request against `main`. After it merges, you are added to the [contributors table](README.md#contributors) in the README. This project follows the [all-contributors](https://allcontributors.org) specification.
+To contribute code: fork the repo, develop locally, and open a pull request against `main`. After it merges, you are added to the [contributors table](README.md#contributing) in the README. This project follows the [all-contributors](https://allcontributors.org) specification.
 
 ### Pull requests
 

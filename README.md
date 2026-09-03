@@ -116,8 +116,6 @@ python3 -m json.tool docs/docs.json >/dev/null
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Check existing issues, then open a pull request against `main`. The author keeps the branch current with `main`, resolves every review comment (Thermo-Nuclear Review and human review), and keeps every CI check that runs green.
 
-## Contributors
-
 Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
 
 <!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
