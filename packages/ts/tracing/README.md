@@ -190,7 +190,7 @@ Automatic delivery (`trace(options, fn)` and `TraceHandle.end()`) fails open: a 
 
 ## Cross-process turns
 
-`threadId` correlates **turns** of a conversation. It is not how you glue a host process and an E2B-style sandbox into one turn. For that, the host mints a versioned context token, the child records a serializable journal without a Lemma API key, and the host applies the journal then `ingest()`s once.
+When a user turn spans a host and a sandbox such as E2B, record one trace. Mint a context token on the host. The child records a journal with no API key. The host applies the journal and `ingest()`s once.
 
 ```typescript
 import { Lemma, attachTurn, startTurn } from "@uselemma/tracing";
@@ -211,7 +211,7 @@ await e2b.run({
 for (const event of e2b.events) turn.apply(event);
 
 sandbox.end();
-await turn.end({ output }); // strict ingest — retry the same payload on failure
+await turn.end({ output }); // strict ingest: retry the same payload on failure
 ```
 
 In the child process, do not construct `Lemma` and do not call `/traces/ingest`:
@@ -226,9 +226,9 @@ generation.end({ output: answer });
 process.stdout.write(JSON.stringify(local.records()));
 ```
 
-Re-applying the same journal is idempotent (stable span ids). If the sandbox dies before a clean dump, end the host sandbox span as `ERROR`; tools that started and never ended are left incomplete, same as coding-agent `resultMissing`. `assembleTurn(token, journal)` builds a `TraceContext` for a coordinator that already has the dump.
+Re-applying the same journal is idempotent (stable span ids). If the sandbox dies before a clean journal, end the host sandbox span as `ERROR`. Tools that started and never ended stay incomplete. `assembleTurn(token, journal)` builds a `TraceContext` when you already have the journal.
 
-See [`examples/cross-process-turn.ts`](./examples/cross-process-turn.ts).
+A longer host and child sample is in [`examples/cross-process-turn.ts`](./examples/cross-process-turn.ts).
 
 ## Coding Agent Harness Turns
 

@@ -48,12 +48,12 @@ See [Threads & context](/tracing/instrumentation/context) for the full reference
 
 ## Multi-process and async turns
 
-Turns often do not run in the same process: a request handler answers turn 1, a queue worker answers turn 2, or turns are processed asynchronously. The rule is unchanged — **start a new top-level trace per turn** — but you must carry the thread id (and user id) across the boundary so the new process can reattach the turn to the conversation.
+Turns often do not run in the same process: a request handler answers turn 1, a queue worker answers turn 2, or turns are processed asynchronously. The rule is unchanged: start a new top-level trace per turn. Carry the thread id and user id across the boundary so the new process can reattach the turn to the conversation.
 
 Persist the thread id wherever you persist the conversation (session store, database row, queue message), then read it back when the next turn runs.
 
 <Note>
-  This is for **successive user turns**. If **one** turn is split across a host and a sandbox, do not start a second root with the same `threadId` — see [Cross-process turns](/tracing/instrumentation/cross-process-turns).
+  This section covers successive user turns. If one turn spans a host and a sandbox, keep a single root. See [Cross-process turns](/tracing/instrumentation/cross-process-turns).
 </Note>
 
 <Tabs>
@@ -106,9 +106,9 @@ Persist the thread id wherever you persist the conversation (session store, data
   Do not reuse one trace id across processes to "continue" a conversation. Repeated deliveries for the same `trace.id` are append-only, so a second turn under the same id would graft onto the first turn's tree instead of becoming its own turn. Use a new trace per turn and the same `threadId`.
 </Warning>
 
-## One turn split across processes
+## Record one turn on a host and sandbox
 
-A host orchestrator plus an E2B-style sandbox is one user turn. The host mints a context token (`startTurn` / `start_turn`), the child records a journal with `attachTurn` / `attach_turn` and no Lemma API key, and the host `apply`s the journal then `ingest()`s once.
+A host plus a sandbox such as E2B is still one user turn, so it is one trace:
 
 ```text
 thread: conversation-42
@@ -119,7 +119,7 @@ thread: conversation-42
     └── (host output)
 ```
 
-See [Cross-process turns](/tracing/instrumentation/cross-process-turns) for the API (`export`, `apply`, `assembleTurn` / `assemble_turn`) and a host + child example.
+Export a context token on the host. Record a journal in the child with `attachTurn` / `attach_turn` and no Lemma API key. Apply the journal on the host, then `ingest()` once. See [Cross-process turns](/tracing/instrumentation/cross-process-turns).
 
 ## Example: two turns of one thread
 
@@ -270,7 +270,7 @@ Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a 
 - Root `input` is the current user message only; the final answer (or error) is the root output.
 - Each turn's generation carries the full message history for that call, including prior turns and tool results, as `input` and `llmInputMessages` / `llm_input_messages`.
 - The thread id (and user id) travels with the work across queues, workers, and async boundaries.
-- A host + sandbox that is **one** user turn is one root via `startTurn` / `attachTurn` / `apply`.
+- A host and sandbox that are one user turn share one root via `startTurn` / `attachTurn` / `apply`.
 
 ## Pitfalls
 
@@ -279,7 +279,7 @@ Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a 
 
   - **Cramming every turn into one trace.** A conversation is not one execution. One giant trace loses per-turn timing, inputs, and outputs, and grows unbounded.
   - **Losing the thread id across processes.** If a worker or async turn starts a trace without the conversation's `threadId`, that turn detaches from the conversation.
-  - **Host + sandbox as two traces.** If one user turn spans processes, use `startTurn` / `attachTurn` / `apply` — see [Cross-process turns](/tracing/instrumentation/cross-process-turns).
+  - **Host and sandbox as two traces.** If one user turn spans processes, use `startTurn` / `attachTurn` / `apply`. See [Cross-process turns](/tracing/instrumentation/cross-process-turns).
   - **Putting the full history only on the root.** The root `input` is the current turn. Prior turns and tool results belong on the generation's message list — otherwise you can't see what the model actually received.
   - **Reusing one trace id to "continue" a conversation.** Ingest is append-only per `trace.id`; reuse grafts turns together instead of grouping separate traces by thread.
   - **Incremental-ingesting one turn.** Send each turn as one complete trace when it finishes; do not stream sparse partial deliveries under the same `trace.id` expecting later calls to patch the root or re-run analysis. Retries of the same complete payload are safe.
@@ -301,6 +301,6 @@ Both turns share `threadId` / `thread_id` and `userId` / `user_id`. Turn 1 is a 
     Capture model, full messages, and completion.
   </Card>
   <Card title="Cross-process turns" href="/tracing/instrumentation/cross-process-turns">
-    `startTurn` / `attachTurn` / `apply` when one turn spans a host and a sandbox.
+    `startTurn` / `attachTurn` / `apply` when one turn runs on a host and a sandbox.
   </Card>
 </CardGroup>

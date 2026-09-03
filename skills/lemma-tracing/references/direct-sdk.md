@@ -213,9 +213,9 @@ await trace.end({ output });
 
 Detached child records require `traceId`. Pass `parentSpanId` when the record belongs under a span; otherwise the SDK cannot safely preserve nesting.
 
-## Host + sandbox (Cross-process turns)
+## Cross-process turns
 
-Host mints a token, child `attachTurn`s / `attach_turn`s and records a journal (no API key), host `apply`s and `ingest()`s once. Docs: [Cross-process turns](https://docs.uselemma.ai/tracing/instrumentation/cross-process-turns).
+Export a context token on the host. Call `attachTurn` / `attach_turn` in the child and record a journal with no API key. Apply on the host and `ingest()` once. Docs: [Cross-process turns](https://docs.uselemma.ai/tracing/instrumentation/cross-process-turns).
 
 ```typescript
 import { Lemma, attachTurn, startTurn } from "@uselemma/tracing";
@@ -259,7 +259,7 @@ sandbox.end()
 turn.end(output=answer)
 ```
 
-`assembleTurn(token, journal)` / `assemble_turn(token, journal)` builds a `TraceContext` when you already have a dump and no live handle; then `ingest()` once. `turn.end()` is strict so a failed send can be retried.
+`assembleTurn(token, journal)` / `assemble_turn(token, journal)` builds a `TraceContext` when you already have a journal and no live handle. Then `ingest()` once. `turn.end()` is strict so a failed send can be retried.
 
 ## Native Contract Props
 

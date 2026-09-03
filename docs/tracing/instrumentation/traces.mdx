@@ -144,7 +144,7 @@ Detached handle calls require `traceId`. If a detached span, generation, or tool
 
 ## Send a trace you built yourself
 
-`lemma.trace()` assumes the client owns the trace lifecycle within a single process. When the producer lives elsewhere — a cross-process buffer, a queue worker, a batch backfill — build a `TraceContext` yourself and deliver it with `ingest()`. Give it a stable `id` so retries address the same trace.
+`lemma.trace()` assumes the client owns the trace lifecycle within a single process. When the producer lives elsewhere (a cross-process buffer, a queue worker, a batch backfill), build a `TraceContext` yourself and deliver it with `ingest()`. Give it a stable `id` so retries address the same trace.
 
 <Tabs>
   <Tab title="TypeScript">
@@ -195,7 +195,7 @@ Detached handle calls require `traceId`. If a detached span, generation, or tool
   Across queues and workers, assemble the full tree in a coordinator and `ingest()` once when the turn is done. Do not stream partial deliveries under one `trace.id`.
 </Warning>
 
-When one user turn spans a host and a sandbox, use `startTurn` / `attachTurn` / `apply` (Python `start_turn` / `attach_turn`) so they become one root — see [Cross-process turns](/tracing/instrumentation/cross-process-turns).
+When one user turn spans a host and a sandbox, use `startTurn` / `attachTurn` / `apply` (Python `start_turn` / `attach_turn`) so they become one root. See [Cross-process turns](/tracing/instrumentation/cross-process-turns).
 
 ## Override output or record errors
 
