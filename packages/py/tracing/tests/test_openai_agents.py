@@ -836,3 +836,15 @@ def test_openai_agents_copies_model_from_response_when_span_data_omits_it():
     assert span["attributes"]["llm.model_name"] == "o3-mini"
     assert span["attributes"]["gen_ai.request.model"] == "o3-mini"
     assert span["attributes"]["ai.model.id"] == "o3-mini"
+
+
+def test_openai_agents_force_flush_does_not_raise_on_ingest_503():
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda _url, _headers, _body: (503, "nope"),
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_503", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_503", name="agent"))
+    processor.force_flush()

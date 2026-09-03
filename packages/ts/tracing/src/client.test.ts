@@ -709,7 +709,7 @@ describe("Lemma", () => {
     });
   });
 
-  it("surfaces ingest failures", async () => {
+  it("fails open when automatic trace ingest returns a non-2xx", async () => {
     const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
     const lemma = new Lemma({
       apiKey: "key",
@@ -719,7 +719,50 @@ describe("Lemma", () => {
 
     await expect(
       lemma.trace("support-agent", async () => "ok"),
-    ).rejects.toThrow("failed to ingest trace (503): nope");
+    ).resolves.toBe("ok");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails open when automatic trace ingest fetch rejects", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await expect(
+      lemma.trace("support-agent", async () => "ok"),
+    ).resolves.toBe("ok");
+  });
+
+  it("preserves the callback error when ingest also fails", async () => {
+    const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await expect(
+      lemma.trace("support-agent", async () => {
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
+  });
+
+  it("resolves TraceHandle.end when ingest fails", async () => {
+    const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const trace = lemma.trace({ name: "support-agent" });
+    await expect(trace.end({ output: "ok" })).resolves.toBeUndefined();
   });
 
   it("ingest sends a self-built trace once, merging by default", async () => {
@@ -806,6 +849,26 @@ describe("Lemma", () => {
       lemma.ingest(context, { startedAt: new Date() }),
     ).rejects.toThrow("failed to ingest trace (503): nope");
     // A transport failure must not fabricate an error status on the trace.
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.status).toBeUndefined();
+  });
+
+  it("ingest throws on a network error so the caller can retry", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error("socket hang up");
+    });
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const context = new TraceContext({ id: "trace-1", name: "t" });
+    await expect(
+      lemma.ingest(context, { startedAt: new Date() }),
+    ).rejects.toThrow("socket hang up");
+    expect(jsonBody(fetchMock.mock.calls[0])).toMatchObject({
+      trace: { id: "trace-1", name: "t" },
+    });
     expect(jsonBody(fetchMock.mock.calls[0]).trace.status).toBeUndefined();
   });
 
@@ -1002,7 +1065,7 @@ describe("Lemma", () => {
     try {
       await expect(
         lemma.trace({ name: "support-agent" }, async () => "ok"),
-      ).rejects.toThrow("failed to ingest trace (429)");
+      ).resolves.toBe("ok");
 
       const failedLog = spy.mock.calls.find((call) =>
         String(call[0]).includes("trace ingest failed"),
@@ -1012,6 +1075,36 @@ describe("Lemma", () => {
         hint: "ingest rate limit exceeded; retry with backoff",
         "cf-ray": "ray-429",
         server: "cloudflare",
+        projectId: "10000000-0000-0000-0000-000000000001",
+      });
+    } finally {
+      disableDebugMode();
+      spy.mockRestore();
+    }
+  });
+
+  it("logs trace ingest failed when fetch rejects", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    enableDebugMode();
+    const fetchMock = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    try {
+      await expect(
+        lemma.trace({ name: "support-agent" }, async () => "ok"),
+      ).resolves.toBe("ok");
+
+      const failedLog = spy.mock.calls.find((call) =>
+        String(call[0]).includes("trace ingest failed"),
+      );
+      expect(failedLog?.[1]).toMatchObject({
+        error: "network down",
         projectId: "10000000-0000-0000-0000-000000000001",
       });
     } finally {

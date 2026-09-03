@@ -1035,11 +1035,11 @@ class Lemma:
             result = fn(ctx)
             if ctx.output_value is None:
                 ctx.output(result)
-            self._send(ctx, started_at, _now())
+            self._send(ctx, started_at, _now(), fail_open=True)
             return result
         except BaseException as exc:
             ctx.fail(exc)
-            self._send(ctx, started_at, _now())
+            self._send(ctx, started_at, _now(), fail_open=True)
             raise
 
     async def async_trace(
@@ -1072,11 +1072,11 @@ class Lemma:
             )
             if ctx.output_value is None:
                 ctx.output(result)
-            self._send(ctx, started_at, _now())
+            self._send(ctx, started_at, _now(), fail_open=True)
             return result
         except BaseException as exc:
             ctx.fail(exc)
-            self._send(ctx, started_at, _now())
+            self._send(ctx, started_at, _now(), fail_open=True)
             raise
 
     def ingest(
@@ -1116,6 +1116,8 @@ class Lemma:
         ctx: TraceContext,
         started_at: datetime,
         ended_at: datetime,
+        *,
+        fail_open: bool = False,
     ) -> None:
         payload = self._stamp_release(ctx.payload(self.project_id or "", started_at, ended_at))
         body = json.dumps(payload, default=str).encode()
@@ -1131,14 +1133,26 @@ class Lemma:
             requested_at=_iso(_now()),
             url=url,
         )
-        status, text = self.transport(
-            url,
-            {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            body,
-        )
+        try:
+            status, text = self.transport(
+                url,
+                {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                body,
+            )
+        except Exception as exc:
+            _lemma_debug(
+                "client",
+                "trace ingest failed",
+                trace_id=payload["trace"]["id"],
+                project_id=payload["project_id"],
+                error=_failure_message(exc),
+            )
+            if fail_open:
+                return
+            raise
         response_headers = pick_response_headers(self._last_response_headers)
         if status < 200 or status >= 300:
             hint = ingest_failure_hint(status)
@@ -1152,6 +1166,8 @@ class Lemma:
                 **response_headers,
                 **({"hint": hint} if hint else {}),
             )
+            if fail_open:
+                return
             raise RuntimeError(
                 f"uselemma-tracing: failed to ingest trace ({status}): {text}"
             )

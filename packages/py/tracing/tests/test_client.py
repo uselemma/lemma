@@ -365,15 +365,49 @@ def test_lemma_keeps_failures_that_carry_no_readable_message():
     assert trace["spans"][0]["error"] == "Error"
 
 
-def test_lemma_trace_surfaces_ingest_failures():
+def test_lemma_trace_fails_open_on_ingest_failures():
     lemma = Lemma(
         api_key="key",
         project_id=PROJECT_ID,
         transport=lambda _url, _headers, _body: (503, "nope"),
     )
 
-    with pytest.raises(RuntimeError, match="failed to ingest trace"):
-        lemma.trace("support-agent", lambda _trace: "ok")
+    assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+
+
+def test_lemma_trace_fails_open_on_transport_error():
+    def transport(_url, _headers, _body):
+        raise TimeoutError("timed out")
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+
+
+def test_lemma_trace_preserves_callback_error_when_ingest_fails():
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda _url, _headers, _body: (503, "nope"),
+    )
+
+    def run(_trace):
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        lemma.trace("support-agent", run)
+
+
+async def test_lemma_async_trace_fails_open_on_ingest_failures():
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda _url, _headers, _body: (503, "nope"),
+    )
+
+    async def run(_trace):
+        return "ok"
+
+    assert await lemma.async_trace("support-agent", run) == "ok"
 
 
 def test_ingest_sends_a_self_built_trace_once_merging_by_default():
@@ -459,6 +493,20 @@ def test_ingest_surfaces_failures_without_fabricating_status():
         lemma.ingest(context, started_at=_now_utc())
 
     assert calls[0]["trace"]["status"] is None
+
+
+def test_ingest_throws_on_transport_error_without_fabricating_status():
+    def transport(_url, _headers, _body):
+        raise TimeoutError("timed out")
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    context = TraceContext(id="trace-1", name="t")
+    context.record_tool(name="lookup")
+
+    with pytest.raises(TimeoutError, match="timed out"):
+        lemma.ingest(context, started_at=_now_utc())
+
+    assert context.error is None
 
 
 def _now_utc() -> datetime:
@@ -641,6 +689,38 @@ def test_debug_smoke_test_not_ok_when_ingest_status_fails(monkeypatch):
     result = lemma.debug_smoke_test()
     assert result["ok"] is False
     assert "ingest-status check failed after ingest (status/network)" in result["hints"]
+
+
+def test_debug_mode_logs_ingest_failure_without_raising(capsys):
+    enable_debug_mode()
+    try:
+        lemma = Lemma(
+            api_key="key",
+            project_id=PROJECT_ID,
+            transport=lambda _url, _headers, _body: (503, "nope"),
+        )
+        assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+        output = capsys.readouterr().out
+        assert "trace ingest failed" in output
+        assert "503" in output
+    finally:
+        disable_debug_mode()
+
+
+def test_debug_mode_logs_transport_error_without_raising(capsys):
+    enable_debug_mode()
+    try:
+
+        def transport(_url, _headers, _body):
+            raise TimeoutError("timed out")
+
+        lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+        assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+        output = capsys.readouterr().out
+        assert "trace ingest failed" in output
+        assert "timed out" in output
+    finally:
+        disable_debug_mode()
 
 
 def test_debug_verify_polls_only_when_debug_mode_enabled(monkeypatch, capsys):

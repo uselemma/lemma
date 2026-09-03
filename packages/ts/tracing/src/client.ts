@@ -1100,7 +1100,7 @@ export class Lemma {
         traceOptions,
         async (trace, startedAt, endedAt) => {
           try {
-            await this.flushTrace(trace, startedAt, endedAt);
+            await this.flushTrace(trace, startedAt, endedAt, { failOpen: true });
           } finally {
             // Drop the handle once ended so long-lived clients don't retain
             // every historical TraceHandle (and its spans/payloads) forever.
@@ -1128,11 +1128,15 @@ export class Lemma {
         if (traceOptions.output === undefined) {
           context.output(result);
         }
-        await this.flushTrace(context, startedAt, new Date());
+        await this.flushTrace(context, startedAt, new Date(), {
+          failOpen: true,
+        });
         return result;
       } catch (error) {
         context.fail(error);
-        await this.flushTrace(context, startedAt, new Date());
+        await this.flushTrace(context, startedAt, new Date(), {
+          failOpen: true,
+        });
         throw error;
       }
     })();
@@ -1424,6 +1428,7 @@ export class Lemma {
     context: TraceContext,
     startedAt: Date,
     endedAt: Date,
+    options: { failOpen?: boolean } = {},
   ) {
     const payload = this.stampRelease(
       context.toPayload(this.projectId, startedAt, endedAt),
@@ -1439,14 +1444,25 @@ export class Lemma {
       requestedAt: new Date().toISOString(),
       url,
     });
-    const response = await this.fetchImpl(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body,
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+    } catch (error) {
+      lemmaDebug("client", "trace ingest failed", {
+        traceId: payload.trace.id,
+        projectId: payload.project_id,
+        error: failureMessage(error) ?? String(error),
+      });
+      if (options.failOpen) return;
+      throw error;
+    }
 
     const responseHeaders = pickResponseHeaders(response.headers);
 
@@ -1461,6 +1477,7 @@ export class Lemma {
         ...responseHeaders,
         ...(hint ? { hint } : {}),
       });
+      if (options.failOpen) return;
       throw new Error(
         `@uselemma/tracing: failed to ingest trace (${response.status})${responseBody ? `: ${responseBody}` : ""}`,
       );
