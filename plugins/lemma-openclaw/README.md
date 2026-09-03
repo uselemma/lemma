@@ -36,3 +36,7 @@ pnpm dlx @uselemma/openclaw setup --api-url https://dev.api.uselemma.ai
 Trace delivery is bounded to ten seconds and runs in a detached process after
 the agent turn ends. Failed deliveries remain in the OpenClaw Lemma data
 directory for the next turn to retry and never interrupt the agent loop.
+
+Generated `runtime/` and `scripts/` are not committed. Build them with
+`pnpm --filter @uselemma/openclaw build` before tests or pack.
+

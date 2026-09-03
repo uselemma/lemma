@@ -52,5 +52,6 @@ claude plugin validate plugins/lemma-claude-code --strict
 claude plugin validate .claude-plugin/marketplace.json --strict
 ```
 
-The generated runtime and setup bundles are committed because Claude copies the
-plugin directory into its installation cache.
+The generated `runtime/` and `scripts/` bundles are not committed. Build
+them before setup or a local plugin install (Claude copies this directory
+into its installation cache).
