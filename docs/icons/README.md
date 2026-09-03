@@ -20,7 +20,7 @@ Integration and product logos. Paths must **not** contain `/icons/`, or the Remi
 
 Pick one theme strategy per file and stick to it:
 
-1. **Fixed brand color** — hex `fill` on the path (LangChain, LangGraph, OpenAI Agents).
-2. **Theme-flipping monochrome** — embedded `<style>` with `@media (prefers-color-scheme)` (Vercel, Mastra). Do not also set `fill="currentColor"` on the path.
+1. **Fixed brand color** — hex `fill` on the path (LangChain, LangGraph, OpenAI Agents). Keep intrinsic size small (`width="21" height="21"` or viewBox-only).
+2. **Theme-flipping monochrome** — black `fill` in the SVG, plus a `.dark img[src*="<file>.svg"]` invert rule in `docs/style.css` (Vercel, Mastra). Do not embed `@media (prefers-color-scheme)`; Mintlify dark mode is the `.dark` class, not OS preference.
 
 Reference them as `/images/brands/<name>.svg` from page `icon` frontmatter.
