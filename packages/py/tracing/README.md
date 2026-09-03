@@ -162,12 +162,11 @@ Automatic delivery (`trace` / `async_trace`) fails open: a Lemma ingest
 the caller's application. LangChain and OpenAI Agents flush through this path.
 Use `ingest()` when you need a failed send to raise so you can retry.
 
-## One turn across processes
+## Cross-process turns
 
-`thread_id` correlates **turns** of a conversation. It is not how you glue a
-host process and an E2B-style sandbox into one turn. The host mints a versioned
-context token, the child records a serializable journal without a Lemma API key,
-and the host applies the journal then `ingest()`s once.
+When a user turn spans a host and a sandbox such as E2B, record one
+trace. Export a context token on the host. The child records a journal
+with no API key. The host applies the journal and `ingest()`s once.
 
 ```python
 import json
@@ -199,12 +198,13 @@ local.record_tool(name="search_docs", input=query, output=docs)
 print(json.dumps(local.records()))
 ```
 
-The journal uses the same camelCase schema as the TypeScript SDK so a TS host
-can apply a Python child's dump (and the reverse). `assemble_turn(token, journal)`
-builds a `TraceContext` when the coordinator already has the dump; then call
-`ingest()` once. Re-applying the same journal is idempotent (stable span ids).
-If the sandbox dies before a clean dump, end the host sandbox span as `ERROR`;
-tools that started and never ended are left incomplete.
+The journal uses the same camelCase schema as the TypeScript SDK, so a
+TypeScript host can apply a Python child's journal. `assemble_turn(token,
+journal)` builds a `TraceContext` when you already have the journal; then
+call `ingest()` once. Re-applying the same journal is idempotent (stable
+span ids). If the sandbox dies before a clean journal, end the host
+sandbox span as `ERROR`. Tools that started and never ended stay
+incomplete.
 
 ## OpenAI Agents SDK
 
