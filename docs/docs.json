@@ -120,28 +120,11 @@
               "tracing/instrumentation/generations",
               "tracing/instrumentation/tool-calls",
               "tracing/instrumentation/spans",
-              "tracing/instrumentation/context",
-              {
-                "group": "Troubleshooting",
-                "expanded": false,
-                "pages": [
-                  "tracing/troubleshooting/debug-mode",
-                  "tracing/troubleshooting/common-issues"
-                ]
-              },
-              {
-                "group": "Reference",
-                "expanded": false,
-                "pages": [
-                  "reference/trace-contract",
-                  "reference/analytics-telemetry"
-                ]
-              }
+              "tracing/instrumentation/context"
             ]
           },
           {
             "group": "Integrations",
-            "icon": "/icons/plug-zap.svg",
             "expanded": true,
             "pages": [
               "integrations/openai-agents",
@@ -149,6 +132,22 @@
               "integrations/langchain",
               "integrations/langgraph",
               "integrations/mastra"
+            ]
+          },
+          {
+            "group": "Troubleshooting",
+            "expanded": true,
+            "pages": [
+              "tracing/troubleshooting/debug-mode",
+              "tracing/troubleshooting/common-issues"
+            ]
+          },
+          {
+            "group": "Reference",
+            "expanded": true,
+            "pages": [
+              "reference/trace-contract",
+              "reference/analytics-telemetry"
             ]
           }
         ]
