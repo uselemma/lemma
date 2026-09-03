@@ -18,6 +18,7 @@ pytest.importorskip("agents")
 from agents import Agent, Runner, set_trace_processors, trace
 from agents.items import ModelResponse
 from agents.models.interface import Model
+from agents.tracing import generation_span
 from agents.usage import Usage
 from openai.types.responses import ResponseOutputMessage, ResponseOutputText
 
@@ -39,30 +40,33 @@ class ScriptedModel(Model):
         self._text = text
 
     async def get_response(self, *args: Any, **kwargs: Any) -> ModelResponse:
-        return ModelResponse(
-            output=[
-                ResponseOutputMessage(
-                    id="msg_scripted",
-                    type="message",
-                    role="assistant",
-                    status="completed",
-                    content=[
-                        ResponseOutputText(
-                            type="output_text",
-                            text=self._text,
-                            annotations=[],
-                        )
-                    ],
-                )
-            ],
-            usage=Usage(
-                requests=1,
-                input_tokens=1,
-                output_tokens=1,
-                total_tokens=2,
-            ),
-            response_id="resp_scripted",
-        )
+        # Custom models do not emit generation spans unless they open one.
+        # Use the SDK helper so Lemma sees a real generation event.
+        with generation_span(model="scripted"):
+            return ModelResponse(
+                output=[
+                    ResponseOutputMessage(
+                        id="msg_scripted",
+                        type="message",
+                        role="assistant",
+                        status="completed",
+                        content=[
+                            ResponseOutputText(
+                                type="output_text",
+                                text=self._text,
+                                annotations=[],
+                            )
+                        ],
+                    )
+                ],
+                usage=Usage(
+                    requests=1,
+                    input_tokens=1,
+                    output_tokens=1,
+                    total_tokens=2,
+                ),
+                response_id="resp_scripted",
+            )
 
     def stream_response(self, *args: Any, **kwargs: Any) -> AsyncIterator[Any]:
         async def _empty() -> AsyncIterator[Any]:
@@ -106,4 +110,10 @@ def test_instrumented_runner_sends_one_trace():
     assert trace_payload["name"] == "support-agent"
     assert trace_payload["thread_id"] == "thread-1"
     assert trace_payload["user_id"] == "user-1"
-    assert any(span["type"] == "generation" for span in trace_payload["spans"])
+    span_types = {span["type"] for span in trace_payload["spans"]}
+    assert "generation" in span_types
+    agent_types = {
+        (span.get("attributes") or {}).get("openai.agents.span_type")
+        for span in trace_payload["spans"]
+    }
+    assert "agent" in agent_types

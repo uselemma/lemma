@@ -7,7 +7,9 @@ import {
   Agent,
   run,
   setTraceProcessors,
+  setTracingDisabled,
   Usage,
+  withGenerationSpan,
   withTrace,
   type Model,
 } from "@openai/agents";
@@ -22,22 +24,26 @@ function scriptedModel(text: string): Model {
   return {
     name: "scripted",
     async getResponse() {
-      return {
-        usage: new Usage({
-          requests: 1,
-          inputTokens: 1,
-          outputTokens: 1,
-          totalTokens: 2,
+      // Custom models do not emit generation spans unless they open one.
+      return withGenerationSpan(
+        async () => ({
+          usage: new Usage({
+            requests: 1,
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+          }),
+          output: [
+            {
+              type: "message",
+              role: "assistant",
+              status: "completed",
+              content: [{ type: "output_text", text }],
+            },
+          ],
         }),
-        output: [
-          {
-            type: "message",
-            role: "assistant",
-            status: "completed",
-            content: [{ type: "output_text", text }],
-          },
-        ],
-      };
+        { data: { type: "generation", model: "scripted" } },
+      );
     },
     async *getStreamedResponse() {},
   };
@@ -51,6 +57,8 @@ describe("openAIAgents through real Agents SDK", () => {
       projectId: "10000000-0000-0000-0000-000000000001",
       fetch: fetchMock as typeof fetch,
     });
+    // The Agents SDK disables tracing when NODE_ENV=test (vitest).
+    setTracingDisabled(false);
     setTraceProcessors([processor]);
 
     const agent = new Agent({
@@ -71,10 +79,14 @@ describe("openAIAgents through real Agents SDK", () => {
 
     expect(String(result.finalOutput ?? "")).toContain("hello");
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(jsonBody(fetchMock.mock.calls[0]).trace).toMatchObject({
+    const trace = jsonBody(fetchMock.mock.calls[0]).trace;
+    expect(trace).toMatchObject({
       name: "support-agent",
       thread_id: "thread-1",
       user_id: "user-1",
     });
+    expect(
+      trace.spans.some((span: { type: string }) => span.type === "generation"),
+    ).toBe(true);
   });
 });
