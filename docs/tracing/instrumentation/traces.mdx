@@ -195,6 +195,8 @@ Detached handle calls require `traceId`. If a detached span, generation, or tool
   Across queues and workers, assemble the full tree in a coordinator and `ingest()` once when the turn is done. Do not stream partial deliveries under one `trace.id`.
 </Warning>
 
+When one user turn spans a host and a sandbox, use `startTurn` / `attachTurn` / `apply` (Python `start_turn` / `attach_turn`) so they become one root — see [One turn across processes](/tracing/instrumentation/cross-process-turns).
+
 ## Override output or record errors
 
 Return values are captured automatically. Use `trace.output()` only when the recorded output should differ from the return value.

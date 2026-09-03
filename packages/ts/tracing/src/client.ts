@@ -527,6 +527,7 @@ export class SpanHandle {
         startedAt: this.options.startedAt ?? new Date(),
         endedAt: this.options.endedAt ?? null,
       });
+    this.trace.registerSpanHandle(this);
   }
 
   end(options: Omit<SpanOptions, "id" | "name" | "type" | "startedAt"> = {}) {
@@ -695,6 +696,7 @@ export class NoopSpanHandle {
 
 export class TraceContext {
   private readonly spans: SdkTraceSpanPayload[] = [];
+  private readonly spanHandles = new Map<string, SpanHandle>();
   private traceOutput: unknown;
   private traceError: string | null = null;
   readonly id: string;
@@ -737,6 +739,31 @@ export class TraceContext {
   fail(error: unknown) {
     this.traceError = failureMessage(error);
     this.changed();
+  }
+
+  /** Root identity for a versioned turn context token. */
+  identity(): {
+    name: string;
+    threadId?: string;
+    userId?: string;
+  } {
+    return {
+      name: this.options.name ?? "trace",
+      threadId: this.options.threadId,
+      userId: this.options.userId,
+    };
+  }
+
+  registerSpanHandle(handle: SpanHandle) {
+    this.spanHandles.set(handle.id, handle);
+  }
+
+  spanHandle(id: string): SpanHandle | undefined {
+    return this.spanHandles.get(id);
+  }
+
+  hasSpan(id: string): boolean {
+    return this.spans.some((span) => span.id === id);
   }
 
   changed() {
@@ -894,7 +921,7 @@ export class TraceContext {
 export class TraceHandle extends TraceContext {
   private sendPromise: Promise<void> = Promise.resolve();
   private ended = false;
-  private readonly startedAt: Date;
+  protected readonly startedAt: Date;
 
   constructor(
     options: TraceOptions,

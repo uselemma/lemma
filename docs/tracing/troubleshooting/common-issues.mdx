@@ -125,9 +125,47 @@ If no traces are arriving, start with [Quickstart](/tracing/instrumentation/setu
   </Tab>
 </Tabs>
 
-Across queues, workers, or separate services, start a new top-level trace and pass the same `threadId` / `userId` so turns remain connected. If one logical agent execution spans multiple processes, prefer recording the final trace in the coordinator that has the complete input, output, tools, and model calls.
+Distinguish two boundaries:
 
-**Debug with Debug mode:** compare logs from the request handler and any background worker. If the child work runs after the `lemma.trace()` callback has returned, it will not attach to the root trace automatically. Move the recording into the callback, or pass trace/span IDs and use the detached `record*` helpers from the coordinator.
+- **Successive conversation turns** in different processes (request handler answers turn 1, a worker answers turn 2): start a **new** root for each turn and pass the same `threadId` / `userId`. See [Instrumenting multi-turn agents](/guides/instrumenting-multi-turn-agents).
+- **One user turn** split across a host and a sandbox (E2B-style): the host mints a context token, the child records a journal with no API key, and the host `apply`s then `ingest()`s once. See [One turn across processes](/tracing/instrumentation/cross-process-turns).
+
+**Debug with Debug mode:** compare logs from the request handler and any background worker. If the child work runs after the `lemma.trace()` callback has returned, it will not attach to the root trace automatically. Move the recording into the callback, pass trace/span IDs to detached `record*` helpers from the coordinator, or use `startTurn` / `attachTurn` when the child is a separate process of the **same** turn.
+
+## Host and sandbox show up as two traces
+
+**Cause:** each process started its own `lemma.trace()` and shared `threadId` / `thread_id`. Lemma groups those as two conversation turns, not one execution.
+
+**Fix:** for one user turn split across a host and an E2B-style sandbox, mint a context token on the host, `attachTurn` / `attach_turn` in the child (no API key), `apply` the journal on the host, and `ingest()` once. Do not put `LEMMA_API_KEY` in the sandbox or stream partial traces to Lemma.
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const turn = startTurn(lemma, {
+      name: "agent-turn",
+      input: userMessage,
+      threadId,
+    });
+    const sandbox = turn.startSpan({ name: "e2b-sandbox" });
+    turn.apply(childJournal);
+    sandbox.end();
+    await turn.end({ output });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    turn = lemma.start_turn("agent-turn", input=user_message, thread_id=thread_id)
+    sandbox = turn.start_span(name="e2b-sandbox")
+    turn.apply(child_journal)
+    sandbox.end()
+    turn.end(output=answer)
+    ```
+  </Tab>
+</Tabs>
+
+See [One turn across processes](/tracing/instrumentation/cross-process-turns). `threadId` still belongs on the host root so this turn groups with the rest of the conversation.
+
+**Debug with Debug mode:** the host should log one `sending trace` / `trace sent` with sandbox children included. The child process should not log ingest at all.
 
 ## Tool calls are missing
 
@@ -218,7 +256,7 @@ For failures, record the error before re-raising:
 
 **Cause:** the trace was delivered again with a sparse `ingest()` payload — for example a follow-up call that carries a late child span but omits root `input`/`output`. `ingest()` is not an incremental merge API, so omitted root fields do not preserve prior values, and analysis typically already ran once after the first complete delivery.
 
-**Fix:** send **one complete trace** when the execution finishes — root input/output, thread/user, and all child spans in a single `ingest()` call. Retries of that same complete payload are safe (already-stored span IDs are skipped). Across queues and workers, assemble the full tree in a coordinator and ingest once rather than streaming partial deliveries under one `trace.id`.
+**Fix:** send **one complete trace** when the execution finishes — root input/output, thread/user, and all child spans in a single `ingest()` call. Retries of that same complete payload are safe (already-stored span IDs are skipped). Across queues and workers, assemble the full tree in a coordinator and ingest once rather than streaming partial deliveries under one `trace.id`. For a host + sandbox that is one turn, `apply` the child journal on the host and ingest once — see [One turn across processes](/tracing/instrumentation/cross-process-turns).
 
 **Debug with Debug mode:** check the `sending trace` log for each delivery. If a later send has a small `spanCount` (`span_count` in Python) and no root I/O, that sparse payload is overwriting the root fields — consolidate it into the single terminal send.
 
@@ -351,5 +389,6 @@ support-agent
 - Use `trace.recordTool()` / `trace.record_tool()` for tool calls.
 - Use `trace.recordSpan()` / `trace.record_span()` for completed app work or `trace.startSpan()` / `trace.start_span()` for live app work.
 - Pass `threadId` / `thread_id` and `userId` / `user_id` for multi-turn analysis.
+- If one turn spans a host and a sandbox, use `startTurn` / `attachTurn` / `apply` — see [One turn across processes](/tracing/instrumentation/cross-process-turns).
 
 **Debug with Debug mode:** confirm the SDK logs `trace sent` with the expected trace name and child `spanCount` (`span_count` in Python), then compare the dashboard trace against the contract.

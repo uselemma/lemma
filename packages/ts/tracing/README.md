@@ -188,6 +188,48 @@ await lemma.ingest(context, { startedAt });
 
 Automatic delivery (`trace(options, fn)` and `TraceHandle.end()`) fails open: a Lemma ingest 4xx/5xx or network error is logged in debug mode and dropped so it cannot fail the caller's application. Framework integrations that close through `end()` inherit this. Use `ingest()` when you need a failed send to throw so you can retry.
 
+## One turn across processes
+
+`threadId` correlates **turns** of a conversation. It is not how you glue a host process and an E2B-style sandbox into one turn. For that, the host mints a versioned context token, the child records a serializable journal without a Lemma API key, and the host applies the journal then `ingest()`s once.
+
+```typescript
+import { Lemma, attachTurn, startTurn } from "@uselemma/tracing";
+
+const lemma = new Lemma();
+const turn = startTurn(lemma, {
+  name: "agent-turn",
+  input: userMessage,
+  threadId: conversationId,
+});
+const sandbox = turn.startSpan({ name: "e2b-sandbox" });
+
+await e2b.run({
+  env: {
+    LEMMA_TURN: JSON.stringify(turn.export({ parentSpanId: sandbox.id })),
+  },
+});
+for (const event of e2b.events) turn.apply(event);
+
+sandbox.end();
+await turn.end({ output }); // strict ingest — retry the same payload on failure
+```
+
+In the child process, do not construct `Lemma` and do not call `/traces/ingest`:
+
+```typescript
+import { attachTurn } from "@uselemma/tracing";
+
+const local = attachTurn(process.env.LEMMA_TURN);
+local.recordTool({ name: "search_docs", input: query, output: docs });
+const generation = local.startGeneration({ name: "answer", model: "gpt-4o" });
+generation.end({ output: answer });
+process.stdout.write(JSON.stringify(local.records()));
+```
+
+Re-applying the same journal is idempotent (stable span ids). If the sandbox dies before a clean dump, end the host sandbox span as `ERROR`; tools that started and never ended are left incomplete, same as coding-agent `resultMissing`. `assembleTurn(token, journal)` builds a `TraceContext` for a coordinator that already has the dump.
+
+See [`examples/cross-process-turn.ts`](./examples/cross-process-turn.ts).
+
 ## Coding Agent Harness Turns
 
 Harness adapters receive prompts, tools, and responses as separate lifecycle
@@ -472,7 +514,7 @@ Use `attributes` for raw attributes that do not yet have a native SDK prop.
 ## Examples
 
 See [`examples/`](./examples) for complete callback tracing, trace handle,
-record-by-ID, Vercel AI SDK v6/v7, OpenAI Agents SDK, LangChain, and LangGraph
+record-by-ID, cross-process turn journal, Vercel AI SDK v6/v7, OpenAI Agents SDK, LangChain, and LangGraph
 examples.
 
 ## License

@@ -24,6 +24,23 @@ export {
   toWireTokenUsage,
 } from "./client";
 export {
+  attachTurn,
+  applyTurnJournal,
+  assembleTurn,
+  parseTurnContextToken,
+  startTurn,
+  AttachedSpanHandle,
+  AttachedTurn,
+  TURN_CONTEXT_VERSION,
+  TURN_JOURNAL_VERSION,
+  TurnHandle,
+  type TurnContextToken,
+  type TurnJournal,
+  type TurnJournalInput,
+  type TurnJournalRecord,
+  type TurnJournalSpan,
+} from "./turn";
+export {
   codingAgentTurnTrace,
   completeCodingAgentTurn,
   recordCodingAgentToolResult,

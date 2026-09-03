@@ -197,6 +197,36 @@ def test_lemma_trace_omits_unspecified_child_duration():
     assert "duration_ms" not in body["trace"]["spans"][0]
 
 
+def test_record_generation_and_tool_honor_id_parent_and_timestamps():
+    context = TraceContext(id="trace-1", name="agent-turn")
+    context.record_generation(
+        name="answer",
+        model="gpt-4o",
+        id="gen-1",
+        parent_id="sandbox-1",
+        started_at="2026-09-03T00:00:02.000Z",
+        ended_at="2026-09-03T00:00:03.000Z",
+        output="patched",
+    )
+    context.record_tool(
+        name="search",
+        id="tool-1",
+        parent_id="sandbox-1",
+        started_at="2026-09-03T00:00:01.000Z",
+        ended_at="2026-09-03T00:00:02.000Z",
+        output={"hits": 1},
+    )
+    by_id = {span["id"]: span for span in context.spans}
+    assert by_id["gen-1"]["type"] == "generation"
+    assert by_id["gen-1"]["parent_id"] == "sandbox-1"
+    assert by_id["gen-1"]["started_at"] == "2026-09-03T00:00:02.000Z"
+    assert by_id["gen-1"]["ended_at"] == "2026-09-03T00:00:03.000Z"
+    assert by_id["tool-1"]["type"] == "tool"
+    assert by_id["tool-1"]["parent_id"] == "sandbox-1"
+    assert by_id["tool-1"]["started_at"] == "2026-09-03T00:00:01.000Z"
+    assert by_id["tool-1"]["ended_at"] == "2026-09-03T00:00:02.000Z"
+
+
 def test_lemma_trace_supports_record_aliases_and_live_tool_generation_handles():
     calls = []
 
