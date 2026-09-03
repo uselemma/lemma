@@ -116,6 +116,40 @@ python3 -m json.tool docs/docs.json >/dev/null
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Check existing issues, then open a pull request against `main`. The author keeps the branch current with `main`, resolves every review comment (Thermo-Nuclear Review and human review), and keeps every CI check that runs green.
 
+## Contributors
+
+Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+<table>
+  <tbody>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://colegaw.in/"><img src="https://avatars.githubusercontent.com/u/8595795?v=4?s=100" width="100px;" alt="Cole Gawin"/><br /><sub><b>Cole Gawin</b></sub></a><br /><a href="https://github.com/uselemma/lemma/commits?author=chroline" title="Code">💻</a> <a href="https://github.com/uselemma/lemma/commits?author=chroline" title="Documentation">📖</a> <a href="#maintenance-chroline" title="Maintenance">🚧</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/rayshineeeee"><img src="https://avatars.githubusercontent.com/u/139305183?v=4?s=100" width="100px;" alt="rayshineeeee"/><br /><sub><b>rayshineeeee</b></sub></a><br /><a href="https://github.com/uselemma/lemma/commits?author=rayshineeeee" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/Jacopos311"><img src="https://avatars.githubusercontent.com/u/201951981?v=4?s=100" width="100px;" alt="Jacopos311"/><br /><sub><b>Jacopos311</b></sub></a><br /><a href="https://github.com/uselemma/lemma/commits?author=Jacopos311" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://raphael-khalid.vercel.app/"><img src="https://avatars.githubusercontent.com/u/97465123?v=4?s=100" width="100px;" alt="Raphael"/><br /><sub><b>Raphael</b></sub></a><br /><a href="https://github.com/uselemma/lemma/commits?author=RaphaelKhalid" title="Code">💻</a></td>
+    </tr>
+  </tbody>
+  <tfoot>
+    <tr>
+      <td align="center" size="13px" colspan="7">
+        <img src="https://raw.githubusercontent.com/all-contributors/all-contributors-cli/1b8533af435da9854653492b1327a23a4dbd0a10/assets/logo-small.svg">
+          <a href="https://all-contributors.js.org/docs/en/bot/usage">Add your contributions</a>
+        </img>
+      </td>
+    </tr>
+  </tfoot>
+</table>
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
+This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome!
+
 ## Releases
 
 Package publishing is driven by package version changes on `main`.

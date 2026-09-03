@@ -1,0 +1,55 @@
+{
+  "projectName": "lemma",
+  "projectOwner": "uselemma",
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 100,
+  "commit": false,
+  "commitConvention": "angular",
+  "contributorsPerLine": 7,
+  "linkToUsage": true,
+  "skipCi": true,
+  "contributors": [
+    {
+      "login": "chroline",
+      "name": "Cole Gawin",
+      "avatar_url": "https://avatars.githubusercontent.com/u/8595795?v=4",
+      "profile": "https://colegaw.in/",
+      "contributions": [
+        "code",
+        "doc",
+        "maintenance"
+      ]
+    },
+    {
+      "login": "rayshineeeee",
+      "name": "rayshineeeee",
+      "avatar_url": "https://avatars.githubusercontent.com/u/139305183?v=4",
+      "profile": "https://github.com/rayshineeeee",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "Jacopos311",
+      "name": "Jacopos311",
+      "avatar_url": "https://avatars.githubusercontent.com/u/201951981?v=4",
+      "profile": "https://github.com/Jacopos311",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "RaphaelKhalid",
+      "name": "Raphael",
+      "avatar_url": "https://avatars.githubusercontent.com/u/97465123?v=4",
+      "profile": "https://raphael-khalid.vercel.app/",
+      "contributions": [
+        "code"
+      ]
+    }
+  ]
+}
