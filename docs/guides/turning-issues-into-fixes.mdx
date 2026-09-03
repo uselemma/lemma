@@ -20,22 +20,6 @@ Lemma groups repeated [trace](/platform/concepts#trace) evidence into an [issue]
   </Card>
 </CardGroup>
 
-## Separate triage from the fix
-
-Do these jobs in order. If you mix them, you ship a change you cannot verify.
-
-<CardGroup cols={3}>
-  <Card title="Triage">
-    Decide whether the finding is a real defect. Dismiss it, or accept it and set `in_progress`.
-  </Card>
-  <Card title="Root-cause analysis">
-    Name the mechanism and the code path. You are done when you can name the [span](/tracing/instrumentation/concepts#span), the path, and the change.
-  </Card>
-  <Card title="Remediation">
-    Change the code, replay the original traces, and resolve only after new traces no longer match the pattern.
-  </Card>
-</CardGroup>
-
 <Info>
   Lemma’s detection is probabilistic. An issue title is a hypothesis backed by traces, not a confirmed bug. Open the evidence before you treat the title as ground truth. See [Issues](/platform/issues) and [Product boundaries](/platform/concepts#product-boundaries).
 </Info>
@@ -83,7 +67,7 @@ Do these jobs in order. If you mix them, you ship a change you cannot verify.
 
         1. Open more than one supporting trace from the issue, not only the newest one.
         2. Read **Conversation** for what the person using the agent saw.
-        3. Read **Execution tree** for which generation, tool call, or span produced that outcome.
+        3. Read **Execution tree** for which generation, tool call, or [span](/tracing/instrumentation/concepts#span) produced that outcome.
         4. Compare the assistant text to the tool results and span outputs in the same run. A mismatch between those two panels is the defect.
 
         <Frame>
@@ -217,23 +201,14 @@ This example uses the `support-agent` from [Building high-quality traces](/guide
 </Note>
 
 <AccordionGroup>
-  <Accordion title="Triage the shipped-claim issue" defaultOpen>
-    The issue is `open` and assigned to `support-agent`. It has 12 supporting traces. You open 3 of them. Each customer asks “Where is my order #1843?” and the assistant says the order shipped. You set the issue to `in_progress`. You do not dismiss it: the same mismatch repeats.
+  <Accordion title="What the traces show" defaultOpen>
+    You open 3 of 12 supporting traces. Each customer asks “Where is my order #1843?” **Conversation** shows “It shipped yesterday and arrives Friday.” **Execution tree** shows `lookup_order` returning `{ "status": "processing" }` with no tracking number. The generation ran after that tool result. The defect is the answer ignoring the tool output, not a failed HTTP call.
   </Accordion>
-  <Accordion title="Read conversation and execution tree">
-    In each trace, **Conversation** shows “It shipped yesterday and arrives Friday.” **Execution tree** shows `lookup_order` returning `{ "status": "processing" }` with no tracking number. The generation that produced the assistant turn ran after that tool result. The defect is the answer ignoring the tool output, not a failed HTTP call.
+  <Accordion title="What you change">
+    Add a rule: if `lookup_order.status` is not `shipped`, the assistant reports the current status and does not name a ship date or tracking number. A post-generation check can reject a “shipped” claim when the last lookup disagrees, then retry or fall back to a template. The pull request quotes `{ "status": "processing" }` next to the invented “shipped yesterday” line.
   </Accordion>
-  <Accordion title="Name the missing grounded-answer rule">
-    The answer path has no rule that the ship-status sentence must match the last `lookup_order` result. When the lookup has no tracking, the model invents a shipping story.
-  </Accordion>
-  <Accordion title="Add the grounded-answer rule">
-    Add a rule: if `lookup_order.status` is not `shipped`, the assistant reports the current status and does not name a ship date or tracking number. A post-generation check can reject a “shipped” claim when the last lookup disagrees, then retry or fall back to a template. The pull request cites the issue and quotes `{ "status": "processing" }` next to the invented “shipped yesterday” line.
-  </Accordion>
-  <Accordion title="Replay the processing-order fixture">
-    Replay “Where is my order #1843?” with `lookup_order` stubbed to `processing`. The new conversation says the order is still processing. The execution tree still includes `lookup_order`. You send the run to Lemma. The new ready trace does not join the original issue.
-  </Accordion>
-  <Accordion title="Resolve after production traces no longer match">
-    After that build is in production, you resolve the issue with the pull request link. Matching evidence does not reopen it. If a later trace claims shipped against a `processing` lookup, the issue reopens. Inspect that new tree. Do not assume the first patch covered every path.
+  <Accordion title="What verification looks like">
+    Replay “Where is my order #1843?” with `lookup_order` stubbed to `processing`. The new conversation says the order is still processing. The execution tree still includes `lookup_order`. The new ready trace does not join the original issue. After that build is in production, you resolve with the pull request link. If a later trace claims shipped against a `processing` lookup, the issue reopens. Inspect that new tree.
   </Accordion>
 </AccordionGroup>
 
