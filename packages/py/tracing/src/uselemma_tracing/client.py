@@ -7,6 +7,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version as package_version
@@ -26,6 +27,7 @@ from .debug_delivery import (
     pick_response_headers,
 )
 from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_enabled
+from .error_message import describe_error as _describe_error
 from .error_message import failure_message as _failure_message
 from .release import normalize_release
 from .usage import normalize_token_usage, token_usage_attributes
@@ -911,6 +913,7 @@ class Lemma:
         self.base_url = base_url.rstrip("/")
         self._last_response_headers: dict[str, str] = {}
         self._config_logged = False
+        self._delivery_warning_logged = False
         self.transport = self._wrap_transport(transport or self._urllib_transport)
         self._log_init_config_once()
 
@@ -1033,14 +1036,22 @@ class Lemma:
         _lemma_debug("client", "trace started", name=ctx.name)
         try:
             result = fn(ctx)
-            if ctx.output_value is None:
-                ctx.output(result)
-            self._send(ctx, started_at, _now())
-            return result
         except BaseException as exc:
+            # Only the agent's own failure belongs here. Delivery is attempted
+            # but never allowed to escape: an ingest error raised from this
+            # block would replace ``exc``, and the caller would lose the
+            # failure they are handling.
             ctx.fail(exc)
-            self._send(ctx, started_at, _now())
+            self._send_without_masking(ctx, started_at, _now())
             raise
+
+        if ctx.output_value is None:
+            ctx.output(result)
+        # Delivery still raises on a non-2xx so the caller can retry, but it is
+        # no longer inside the agent's ``try``: a transport failure must not be
+        # recorded as an agent failure, or re-sent as one.
+        self._send(ctx, started_at, _now())
+        return result
 
     async def async_trace(
         self,
@@ -1070,14 +1081,15 @@ class Lemma:
                 if inspect.isawaitable(maybe_result)
                 else maybe_result
             )
-            if ctx.output_value is None:
-                ctx.output(result)
-            self._send(ctx, started_at, _now())
-            return result
         except BaseException as exc:
             ctx.fail(exc)
-            self._send(ctx, started_at, _now())
+            self._send_without_masking(ctx, started_at, _now())
             raise
+
+        if ctx.output_value is None:
+            ctx.output(result)
+        self._send(ctx, started_at, _now())
+        return result
 
     def ingest(
         self,
@@ -1110,6 +1122,38 @@ class Lemma:
         if self.release:
             payload["trace"]["release"] = self.release
         return payload
+
+    def _send_without_masking(
+        self,
+        ctx: TraceContext,
+        started_at: datetime,
+        ended_at: datetime,
+    ) -> None:
+        """Deliver a trace without letting a delivery failure replace the caller's error.
+
+        Called only from an ``except`` block that is about to re-raise. If
+        :meth:`_send` raised from there, the ingest error would propagate in place
+        of the agent's error: ``except MyAgentError`` would stop matching, and the
+        original would survive only as ``__context__``.
+
+        Only :class:`Exception` is caught. A ``BaseException`` from the transport
+        -- ``KeyboardInterrupt``, ``SystemExit``, ``CancelledError`` -- is left to
+        propagate, because suppressing an interrupt to preserve an error message
+        is the worse trade.
+        """
+        try:
+            self._send(ctx, started_at, ended_at)
+        except Exception as send_error:
+            if self._delivery_warning_logged:
+                return
+            self._delivery_warning_logged = True
+            warnings.warn(
+                f"uselemma-tracing: could not deliver the trace for a failed run "
+                f"({_describe_error(send_error)}); re-raising the original error. "
+                f"Further delivery failures on this path are not repeated.",
+                RuntimeWarning,
+                stacklevel=3,
+            )
 
     def _send(
         self,

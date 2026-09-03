@@ -18,7 +18,7 @@ import {
   isDebugVerifyEnabled,
   lemmaDebug,
 } from "./debug-mode";
-import { failureMessage } from "./error-message";
+import { describeError, failureMessage } from "./error-message";
 import { normalizeRelease } from "./release";
 import {
   attachResultUsage,
@@ -956,6 +956,7 @@ export class Lemma {
   private readonly projectId: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  private deliveryWarningLogged = false;
   private readonly release?: string;
   private readonly traces = new Map<string, TraceHandle>();
   private configLogged = false;
@@ -1123,18 +1124,24 @@ export class Lemma {
     });
 
     return (async () => {
+      let result: Awaited<T>;
       try {
-        const result = await fn(context);
-        if (traceOptions.output === undefined) {
-          context.output(result);
-        }
-        await this.flushTrace(context, startedAt, new Date());
-        return result;
+        result = await fn(context);
       } catch (error) {
+        // Only the agent's own failure belongs in this branch.
         context.fail(error);
-        await this.flushTrace(context, startedAt, new Date());
+        await this.flushWithoutMasking(context, startedAt, new Date());
         throw error;
       }
+
+      if (traceOptions.output === undefined) {
+        context.output(result);
+      }
+      // Delivery still throws on a non-2xx so the caller can retry, but it is
+      // no longer inside the agent's try block: a transport failure must not
+      // be recorded as an agent failure, or re-sent as one.
+      await this.flushTrace(context, startedAt, new Date());
+      return result;
     })();
   }
 
@@ -1418,6 +1425,29 @@ export class Lemma {
   private stampRelease(payload: SdkTracePayload): SdkTracePayload {
     if (this.release) payload.trace.release = this.release;
     return payload;
+  }
+
+  /**
+   * Deliver a trace without letting a delivery failure replace the caller's error.
+   *
+   * Called only from a `catch` block that is about to rethrow. If `flushTrace`
+   * threw from there, the ingest error would propagate in place of the agent's
+   * error and the caller would lose the failure they are handling.
+   */
+  private async flushWithoutMasking(
+    context: TraceContext,
+    startedAt: Date,
+    endedAt: Date,
+  ) {
+    try {
+      await this.flushTrace(context, startedAt, endedAt);
+    } catch (flushError) {
+      if (this.deliveryWarningLogged) return;
+      this.deliveryWarningLogged = true;
+      warnNoop(
+        `could not deliver the trace for a failed run (${describeError(flushError)}); rethrowing the original error. Further delivery failures on this path are not repeated.`,
+      );
+    }
   }
 
   private async flushTrace(
