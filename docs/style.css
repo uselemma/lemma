@@ -108,11 +108,13 @@ header li:has(> a[href*="cal.com"]) {
    SVG cannot inherit Mintlify's theme-aware wrapper color. Normalize the
    monochrome glyphs to black in light mode and white in dark mode.
    Match anywhere in src: Mintlify rewrites /icons/... to a CDN URL. */
-img[src*="/icons/"] {
+img[src*="/icons/"],
+img[src*="claude.svg"] {
   filter: brightness(0) saturate(100%);
 }
 
-.dark img[src*="/icons/"] {
+.dark img[src*="/icons/"],
+.dark img[src*="claude.svg"] {
   filter: brightness(0) saturate(100%) invert(1);
 }
 
