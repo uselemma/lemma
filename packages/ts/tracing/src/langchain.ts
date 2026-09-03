@@ -21,13 +21,11 @@ type Serialized = {
   name?: string;
   kwargs?: Record<string, unknown>;
   lc?: number;
-  [key: string]: unknown;
 };
 
 type LLMResult = {
   generations?: unknown[][];
   llmOutput?: Record<string, unknown>;
-  [key: string]: unknown;
 };
 
 export type LangChainIntegrationOptions = {
@@ -539,7 +537,11 @@ function llmProvider(
   extraParams?: Record<string, unknown>,
 ): string | undefined {
   const kwargs = serialized?.kwargs;
-  const sources = [kwargs, serialized, extraParams];
+  const sources: Array<Record<string, unknown> | undefined> = [
+    kwargs,
+    serialized as Record<string, unknown> | undefined,
+    extraParams,
+  ];
   for (const source of sources) {
     if (!source) continue;
     for (const key of [
@@ -633,6 +635,12 @@ function llmTokenUsage(result: LLMResult): TokenUsage | undefined {
 
 export class LemmaLangChainCallbackHandler {
   name = "lemma";
+  raise_error = false;
+  run_inline = false;
+  ignore_llm = false;
+  ignore_chain = false;
+  ignore_agent = false;
+  ignore_retriever = false;
   private lemma: Lemma | undefined;
   private readonly runs = new Map<RunId, StoredRun>();
   private readonly traces = new Map<string, StoredTrace>();
@@ -1047,6 +1055,7 @@ export class LemmaLangChainCallbackHandler {
     extraParams?: Record<string, unknown>,
     tags?: string[],
     metadata?: Record<string, unknown>,
+    _runName?: string,
   ) {
     const startedAt = new Date();
     const attachment = this.resolveAttachment(runId, parentRunId, () =>
@@ -1104,6 +1113,7 @@ export class LemmaLangChainCallbackHandler {
     extraParams?: Record<string, unknown>,
     tags?: string[],
     metadata?: Record<string, unknown>,
+    _runName?: string,
   ) {
     const startedAt = new Date();
     const flatMessages = messages.flat();
@@ -1270,6 +1280,8 @@ export class LemmaLangChainCallbackHandler {
     parentRunId?: RunId,
     tags?: string[],
     metadata?: Record<string, unknown>,
+    _runName?: string,
+    _toolCallId?: string,
   ) {
     const startedAt = new Date();
     const attachment = this.resolveAttachment(runId, parentRunId, () =>
@@ -1379,6 +1391,7 @@ export class LemmaLangChainCallbackHandler {
     parentRunId?: RunId,
     tags?: string[],
     metadata?: Record<string, unknown>,
+    _name?: string,
   ) {
     const startedAt = new Date();
     const attachment = this.resolveAttachment(runId, parentRunId, () =>

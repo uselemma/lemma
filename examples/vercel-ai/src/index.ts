@@ -15,17 +15,8 @@ import {
   type ChatTurn,
 } from "@lemma/examples-shared";
 import { vercelAI } from "@uselemma/tracing";
-import { generateText, stepCountIs, tool, type Telemetry } from "ai";
+import { generateText, stepCountIs, tool } from "ai";
 import { z } from "zod";
-
-/**
- * `vercelAI()` matches the runtime Telemetry integration contract. AI SDK's
- * `Telemetry` event types are a narrower compile-time shape, so the published
- * SDK cannot implement that interface without depending on `ai`.
- */
-function vercelTelemetry(integration: ReturnType<typeof vercelAI>): Telemetry {
-  return integration as Telemetry;
-}
 
 loadExampleEnv();
 requireOpenAIKey();
@@ -57,7 +48,7 @@ async function runTurn(turn: ChatTurn): Promise<string> {
       telemetry: {
         isEnabled: true,
         functionId: AGENT_NAME,
-        integrations: [vercelTelemetry(lemmaTelemetry)],
+        integrations: [lemmaTelemetry],
       },
     });
     await lemmaTelemetry.flush();

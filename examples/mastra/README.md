@@ -25,16 +25,11 @@ new Mastra({
   agents: { docsAgent },
   observability: new Observability({
     configs: {
-      default: {
-        serviceName: "lemma-docs-agent",
-        exporters: mastraExporters(lemmaExporter),
-      },
+      default: { serviceName: "lemma-docs-agent", exporters: [lemmaExporter] },
     },
   }),
 });
 ```
-
-`@uselemma/tracing` is framework-free and types Mastra events locally. The example's `mastraExporters()` helper asserts the exporter to Mastra's `ObservabilityExporter` type.
 
 Optional: pass `tracingOptions: { metadata: { threadId, userId } }` on `generate`. Call `lemmaExporter.flush()` in short-lived CLIs.
 

@@ -10,12 +10,7 @@ import { END, MessagesAnnotation, START, StateGraph } from "@langchain/langgraph
 import { createAgent } from "langchain";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import {
-  ingestFetchMock,
-  jsonBody,
-  langChainCallbacks,
-  LEMMA_PROJECT_ID,
-} from "../test-helpers";
+import { ingestFetchMock, jsonBody, LEMMA_PROJECT_ID } from "../test-helpers";
 import { langChain, langGraph } from "./langchain";
 
 function handler(
@@ -37,7 +32,7 @@ describe("langChain through real LangChain", () => {
     const model = new FakeListChatModel({ responses: ["hello from model"] });
 
     const result = await model.invoke([new HumanMessage("hi")], {
-      callbacks: langChainCallbacks(h),
+      callbacks: [h],
       metadata: { threadId: "thread-1", userId: "user-1" },
     });
     await h.flush();
@@ -63,7 +58,7 @@ describe("langChain through real LangChain", () => {
     const result = await agent.invoke(
       { messages: [new HumanMessage("ping")] },
       {
-        callbacks: langChainCallbacks(h),
+        callbacks: [h],
         metadata: { threadId: "thread-1", userId: "user-1" },
       },
     );
@@ -95,7 +90,7 @@ describe("langChain through real LangChain", () => {
     const result = await chain.invoke(
       {},
       {
-        callbacks: langChainCallbacks(h),
+        callbacks: [h],
         metadata: { threadId: "thread-1" },
       },
     );
@@ -136,7 +131,7 @@ describe("langGraph through real LangGraph", () => {
     const result = await graph.invoke(
       { messages: [new HumanMessage("hi")] },
       {
-        callbacks: langChainCallbacks(h),
+        callbacks: [h],
         metadata: { threadId: "thread-9" },
       },
     );

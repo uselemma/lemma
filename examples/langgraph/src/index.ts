@@ -1,5 +1,3 @@
-import type { CallbackHandlerMethods } from "@langchain/core/callbacks/base";
-import type { Callbacks } from "@langchain/core/callbacks/manager";
 import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { tool } from "@langchain/core/tools";
 import { ChatOpenAI } from "@langchain/openai";
@@ -69,15 +67,6 @@ const graph = new StateGraph(MessagesAnnotation)
 
 const lemmaHandler = langGraph({ agentName: AGENT_NAME });
 
-/**
- * The published SDK stays framework-free, so the handler is duck-typed rather
- * than a `BaseCallbackHandler` subclass. LangChain's invoke config still
- * requires that type.
- */
-function langChainCallbacks(handler: typeof lemmaHandler): Callbacks {
-  return [handler as unknown as CallbackHandlerMethods];
-}
-
 async function runTurn(turn: ChatTurn): Promise<string> {
   const result = await graph.invoke(
     {
@@ -86,7 +75,7 @@ async function runTurn(turn: ChatTurn): Promise<string> {
       ),
     },
     {
-      callbacks: langChainCallbacks(lemmaHandler),
+      callbacks: [lemmaHandler],
       metadata: lemmaExampleMetadata(turn.identity),
     },
   );

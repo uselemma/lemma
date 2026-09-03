@@ -480,10 +480,13 @@ export class LemmaMastraExporter {
     return endPromise;
   }
 
-  async exportTracingEvent(event: MastraTracingEvent): Promise<void> {
+  async exportTracingEvent(event: {
+    type: string;
+    exportedSpan: object;
+  }): Promise<void> {
     if (event.type === "span_updated") return;
 
-    const span = event.exportedSpan;
+    const span = event.exportedSpan as MastraExportedSpan;
 
     if (event.type === "span_started") {
       if (span.isEvent) {

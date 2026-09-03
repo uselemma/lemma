@@ -27,7 +27,7 @@ try {
     tools,
     telemetry: {
       functionId: "lemma-docs-agent",
-      integrations: [vercelTelemetry(lemmaTelemetry)],
+      integrations: [lemmaTelemetry],
     },
   });
   await lemmaTelemetry.flush();
@@ -38,7 +38,7 @@ try {
 }
 ```
 
-Create one `vercelAI()` per `generateText` call. The example's `vercelTelemetry()` helper asserts the integration to AI SDK's `Telemetry` type — the published SDK cannot implement that interface without depending on `ai`. Call `flush()` in short-lived CLIs. Mark thrown `generateText` errors with `fail()`.
+Create one `vercelAI()` per `generateText` call. Call `flush()` in short-lived CLIs. Mark thrown `generateText` errors with `fail()`.
 
 ## Trace shape
 
