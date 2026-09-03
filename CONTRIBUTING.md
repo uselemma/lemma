@@ -33,6 +33,15 @@ A merge that does not bump the version does not publish.
 
 Do not commit generated plugin `runtime/` or `scripts/` bundles. CI builds them.
 
+## Releases
+
+Package publishing is driven by package version changes on `main`.
+
+- Changes to `packages/ts/tracing/package.json` publish `@uselemma/tracing`
+  when the version is not already present on npm.
+- Changes to `packages/py/tracing/pyproject.toml` publish
+  `uselemma-tracing` when the version is not already present on PyPI.
+
 ## Development
 
 Install:
