@@ -7,6 +7,8 @@ description: >-
   audit the shape of traces already in Lemma, or whether traces match the
   high-quality traces guide. Do not use for first-time setup or missing
   delivery — that is lemma-tracing.
+metadata:
+  version: 1.0.0
 ---
 
 # Lemma Diagnostics

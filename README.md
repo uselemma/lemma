@@ -112,6 +112,15 @@ Validate the docs config:
 python3 -m json.tool docs/docs.json >/dev/null
 ```
 
+## Releases
+
+Package publishing is driven by package version changes on `main`.
+
+- Changes to `packages/ts/tracing/package.json` publish `@uselemma/tracing`
+  when the version is not already present on npm.
+- Changes to `packages/py/tracing/pyproject.toml` publish
+  `uselemma-tracing` when the version is not already present on PyPI.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -147,15 +156,6 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
 <!-- ALL-CONTRIBUTORS-LIST:END -->
 
 This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome!
-
-## Releases
-
-Package publishing is driven by package version changes on `main`.
-
-- Changes to `packages/ts/tracing/package.json` publish `@uselemma/tracing`
-  when the version is not already present on npm.
-- Changes to `packages/py/tracing/pyproject.toml` publish
-  `uselemma-tracing` when the version is not already present on PyPI.
 
 ## License
 

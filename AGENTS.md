@@ -11,5 +11,6 @@ Version fields:
 - `@uselemma/tracing` — `packages/ts/tracing/package.json`
 - `uselemma-tracing` — `packages/py/tracing/pyproject.toml` and `uv.lock`
 - Harness plugins (`@uselemma/opencode`, `@uselemma/pi`, `@uselemma/hermes`, `@uselemma/openclaw`) — `plugins/<name>/package.json`
+- Skills (`lemma-tracing`, `lemma-diagnostics`, `lemma-mcp`) — `skills/<name>/SKILL.md` `metadata.version`
 
-A merge that leaves versions unchanged does not publish. Do not land shippable SDK or plugin changes without a version bump.
+A merge that leaves versions unchanged does not publish. Do not land shippable SDK, plugin, or skill changes without a SemVer bump.

@@ -6,6 +6,8 @@ description: >-
   generations, trace handles, thread/user context, Vercel AI SDK, OpenAI
   Agents SDK, LangChain, LangGraph, Langfuse side-by-side installs, or
   debugging Lemma trace delivery and trace shape.
+metadata:
+  version: 1.0.0
 ---
 
 # Lemma Tracing

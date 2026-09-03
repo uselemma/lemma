@@ -20,13 +20,14 @@ Mark the PR **Ready for review** when you want it reviewed. Drafts skip Thermo-N
 
 On a fork PR, enable **Allow edits from maintainers** so maintainers can update the branch.
 
-If the change ships in an SDK or harness plugin, bump that package's version in the same PR:
+Changes to packages (`packages/`, `plugins/`) and skills (`skills/`) follow [SemVer](https://semver.org/). Bump every affected version in the same PR:
 
-| Package | Version field |
+| Path | Version field |
 | --- | --- |
-| `@uselemma/tracing` | `packages/ts/tracing/package.json` |
-| `uselemma-tracing` | `packages/py/tracing/pyproject.toml` and `uv.lock` |
-| `@uselemma/opencode`, `@uselemma/pi`, `@uselemma/hermes`, `@uselemma/openclaw` | `plugins/<name>/package.json` |
+| `packages/ts/tracing` | `package.json` |
+| `packages/py/tracing` | `pyproject.toml` and `uv.lock` |
+| `plugins/<name>` | `package.json` |
+| `skills/<name>` | `SKILL.md` `metadata.version` |
 
 A merge that does not bump the version does not publish.
 
