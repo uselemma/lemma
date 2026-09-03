@@ -116,25 +116,11 @@ img[src*="/icons/"] {
   filter: brightness(0) saturate(100%) invert(1);
 }
 
-/* Mark stays in Mintlify’s h-7 logo slot; “Lemma” is live Britti Sans beside it. */
-header a:has(> .nav-logo) {
-  display: flex !important;
-  align-items: center !important;
-  gap: 0.5rem !important;
-}
-
-header a:has(> .nav-logo)::after {
-  content: "Lemma";
-  font-family: "Britti Sans", sans-serif !important;
-  font-weight: 400 !important;
-  font-size: 1.25rem !important;
-  line-height: 1 !important;
-  letter-spacing: normal !important;
-  color: #322C8A !important;
-}
-
-.dark header a:has(> .nav-logo)::after {
-  color: #F2F2F2 !important;
+/* Full mark+wordmark lockup — smaller than Mintlify’s 28px default. */
+header .nav-logo {
+  height: 24px !important;
+  width: auto !important;
+  max-height: 24px !important;
 }
 
 /* Typography: body text + headings letter-spacing */
