@@ -41,6 +41,18 @@
       "href": "https://platform.uselemma.ai"
     }
   },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "mcp",
+      "cursor",
+      "vscode"
+    ]
+  },
   "navigation": {
     "tabs": [
       {
