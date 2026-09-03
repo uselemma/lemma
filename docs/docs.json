@@ -123,18 +123,6 @@
             ]
           },
           {
-            "group": "Integrations",
-            "icon": "/icons/plug-zap.svg",
-            "expanded": true,
-            "pages": [
-              "integrations/openai-agents",
-              "integrations/vercel-ai",
-              "integrations/langchain",
-              "integrations/langgraph",
-              "integrations/mastra"
-            ]
-          },
-          {
             "group": "Connections",
             "icon": "/icons/plug.svg",
             "expanded": true,
@@ -166,6 +154,18 @@
                   "guides/migrations/opentelemetry"
                 ]
               }
+            ]
+          },
+          {
+            "group": "Integrations",
+            "icon": "/icons/plug-zap.svg",
+            "expanded": true,
+            "pages": [
+              "integrations/openai-agents",
+              "integrations/vercel-ai",
+              "integrations/langchain",
+              "integrations/langgraph",
+              "integrations/mastra"
             ]
           }
         ]
