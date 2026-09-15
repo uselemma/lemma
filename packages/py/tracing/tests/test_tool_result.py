@@ -95,3 +95,48 @@ def test_tool_result_error_parses_error_object_from_content_text():
         )
         == "Error: Payment method should be the original payment method"
     )
+
+
+def test_tool_result_error_success_false_payload():
+    assert (
+        tool_result_error({"success": False, "message": "API rate limit reached"})
+        == "API rate limit reached"
+    )
+    assert (
+        tool_result_error({"success": False, "error": "Unauthorized"})
+        == "Unauthorized"
+    )
+    assert tool_result_error({"success": True, "message": "Completed"}) is None
+
+
+def test_tool_result_error_status_error_and_failed_payload():
+    assert (
+        tool_result_error({"status": "error", "message": "Connection refused"})
+        == "Connection refused"
+    )
+    assert (
+        tool_result_error({"status": "failed", "error": "Job timed out"})
+        == "Job timed out"
+    )
+    assert tool_result_error({"status": "success", "message": "Operation successful"}) is None
+
+
+def test_tool_result_error_flagged_failure_uses_structured_content():
+    assert (
+        tool_result_error(
+            {
+                "success": False,
+                "structuredContent": {"error": "Rate limit exceeded"},
+            }
+        )
+        == "Rate limit exceeded"
+    )
+    assert (
+        tool_result_error(
+            {
+                "status": "error",
+                "structuredContent": {"error": "Connection refused"},
+            }
+        )
+        == "Connection refused"
+    )
