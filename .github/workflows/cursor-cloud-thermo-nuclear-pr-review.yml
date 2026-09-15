@@ -1,0 +1,69 @@
+name: Cursor Cloud Thermo-Nuclear PR Review
+
+# Vendored from chroline/cursor-cloud-thermo-nuclear-pr-review (action pin
+# 27ea0fe) so lemma can pass review_forks. The public launcher still skips
+# forks; this copy is ENG-1204 until that SHA can land there.
+on:
+  workflow_call:
+    inputs:
+      review_forks:
+        description: Review pull requests from forks. Default is same-repository branches only.
+        type: boolean
+        default: false
+    secrets:
+      cursor_api_key:
+        description: Cursor API key with access to the caller repository
+        required: true
+      publisher_client_id:
+        description: Client ID for the repository-scoped publisher GitHub App
+        required: true
+      publisher_private_key:
+        description: Private key for the repository-scoped publisher GitHub App
+        required: true
+
+permissions: {}
+
+jobs:
+  review:
+    name: Spawn Cloud Agent
+    if: >-
+      github.event.pull_request.draft == false &&
+      (inputs.review_forks ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Mint a repository-scoped publisher token
+        id: publisher
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ secrets.publisher_client_id }}
+          private-key: ${{ secrets.publisher_private_key }}
+          permission-contents: read
+          permission-issues: write
+          permission-pull-requests: write
+          permission-statuses: write
+          # Cursor Cloud posts after this job exits. Default revoke-on-job-end
+          # would 401 the agent's GITHUB_STATUS_TOKEN.
+          skip-token-revoke: true
+
+      - name: Spawn thermo-nuclear Cloud Agent
+        # Relative ./ paths resolve against the *caller* checkout. Pin the
+        # composite action so public and private callers load it from this repo.
+        uses: chroline/cursor-cloud-thermo-nuclear-pr-review/.github/actions/launch-cursor-thermo-nuclear@27ea0fea160803aa136d8a3e57f9679f03e1f012
+        env:
+          CURSOR_API_KEY: ${{ secrets.cursor_api_key }}
+          CURSOR_VALIDATION_STATUS_TOKEN: ${{ steps.publisher.outputs.token }}
+          PUBLISHER_BOT_LOGIN: ${{ format('{0}[bot]', steps.publisher.outputs.app-slug) }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          REPO_URL: ${{ github.event.repository.html_url }}
