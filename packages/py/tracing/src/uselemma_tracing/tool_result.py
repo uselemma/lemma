@@ -10,10 +10,11 @@ def tool_result_error(output: Any) -> str | None:
     """Return an error message for MCP/Mastra-style tool failure payloads.
 
     Detects protocol flags (``{isError: true}``, ``{is_error: true}``, Mastra
-    ``{error: true, message}``) and application-level ``{error: "..."}`` /
-    ``structuredContent.error`` strings. Failures must be recorded as
-    ``error`` (with no ``output``) per the trace contract. Returns ``None``
-    when ``output`` is a normal success payload.
+    ``{error: true, message}``, ``{success: false}``, ``{status: "error"}``)
+    and application-level ``{error: "..."}`` / ``structuredContent.error``
+    strings. Failures must be recorded as ``error`` (with no ``output``) per
+    the trace contract. Returns ``None`` when ``output`` is a normal success
+    payload.
     """
     record = _as_result_record(output)
     if record is None:
@@ -29,6 +30,9 @@ def tool_result_error(output: Any) -> str | None:
         message = _non_empty_string(record.get("message"))
         if message:
             return message
+        encoded = _encoded_payload_error(record)
+        if encoded:
+            return encoded
         try:
             return json.dumps(record, default=str)
         except TypeError:
@@ -42,6 +46,8 @@ def _is_flagged_failure(record: dict[str, Any]) -> bool:
         record.get("isError") is True
         or record.get("is_error") is True
         or record.get("error") is True
+        or record.get("success") is False
+        or record.get("status") in ("error", "failed")
     )
 
 

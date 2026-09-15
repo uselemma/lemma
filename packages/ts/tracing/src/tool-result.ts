@@ -1,9 +1,9 @@
 /**
  * Detect MCP-style / framework tool results that encode failure in the payload
- * instead of throwing. Protocol flags (`isError: true`, Mastra `error: true`)
- * and application-level `{ error: "..." }` / `structuredContent.error` strings
- * are recorded as `error` (with no `output`). Returns null for a normal
- * success payload.
+ * instead of throwing. Protocol flags (`isError: true`, Mastra `error: true`,
+ * `success: false`, `status: "error"`) and application-level `{ error: "..." }`
+ * / `structuredContent.error` strings are recorded as `error` (with no `output`).
+ * Returns null for a normal success payload.
  */
 export function toolResultError(output: unknown): string | null {
   const record = asResultRecord(output);
@@ -16,6 +16,8 @@ export function toolResultError(output: unknown): string | null {
     if (flaggedError) return flaggedError;
     const message = nonEmptyString(record.message);
     if (message) return message;
+    const encoded = encodedPayloadError(record);
+    if (encoded) return encoded;
     try {
       return JSON.stringify(record);
     } catch {
@@ -30,7 +32,10 @@ function isFlaggedFailure(record: Record<string, unknown>): boolean {
   return (
     record.isError === true ||
     record.is_error === true ||
-    record.error === true
+    record.error === true ||
+    record.status === "error" ||
+    record.status === "failed" ||
+    record.success === false
   );
 }
 
