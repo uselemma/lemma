@@ -1,0 +1,97 @@
+---
+name: lemma-artifacts
+description: >-
+  Read this codebase and record what its AI agents are for in Lemma. Use when
+  the user asks to tell Lemma about their agent, set up or improve Lemma
+  artifacts or agent context, record what an agent does, describe their agent
+  to Lemma, bring Lemma's understanding up to date with the code, or fix a
+  rule Lemma still has that the codebase no longer enforces. Do not use for
+  installing tracing or fixing trace delivery and shape — that is
+  lemma-tracing and lemma-diagnostics.
+metadata:
+  version: 1.0.0
+---
+
+# Lemma Artifacts
+
+You are recording, in Lemma, what the AI agents in this codebase are for.
+
+Lemma detects failures in production agents by reading their traces. It reads
+them better when it knows what the agent was supposed to do. That knowledge
+normally accrues from traces over time, which means the earliest traces are
+judged with no context at all. This skill front-loads it from the source the
+customer already has: their own code.
+
+Two things follow from where you are standing, and they govern everything below.
+
+**The code tells you intent, not behaviour.** You are reading what the authors
+meant to build. Only traces show what actually happens. Never state a
+code-derived claim as an observation.
+
+**Nothing is written without the user saying yes to specifics.** You are about
+to put words in their vendor's mouth about their own system. They get to read
+those words first, every time.
+
+## Core rules
+
+1. **Read Lemma's current state before proposing anything.** Call
+   `list_project_artifacts` first, always — including when you expect it to be
+   empty. What is already recorded changes what is worth adding.
+2. **Never call a write tool before the user has approved that specific
+   content in this conversation.** `write_learn_agent_artifact_version`,
+   `upload_project_artifact`, `update_project_artifact` and
+   `delete_project_artifact` all wait for an explicit yes.
+3. **Itemize the claims in the confirmation.** "Write 3 artifacts?" is not a
+   confirmation. Name the agent, state the claims, and say which file each
+   would land in. See [references/record.md](references/record.md).
+4. **Never modify the user's code.** You are reading their repository to
+   describe it. No edits, no new files, no reformatting — not even to a
+   README, and not to "fix" something you noticed. Mention it and move on.
+5. **Never call `regenerate_project_artifacts`.** That starts Lemma's own
+   trace-driven learning run, which is a different thing costing real time and
+   money, and it is not how this skill writes.
+6. **Say what convinced you.** Every proposed claim cites the file that
+   supports it. A claim you cannot point at is a claim you should drop.
+7. Keep tool names exactly as written here so transport mappings stay valid.
+
+## Two kinds of artifact, and they are not interchangeable
+
+Lemma stores two things and the word "artifact" is used loosely for both. They
+behave differently and picking wrong loses information.
+
+| | Agent understanding | Project context files |
+| --- | --- | --- |
+| Holds | how the agent works | rules it must obey, facts no trace shows |
+| Written by | Lemma's learning runs, and you | the customer, and you |
+| Rewritten by Lemma | yes, from observed traces | never |
+| Tools | `write_learn_agent_artifact_version` | `upload_project_artifact`, `update_project_artifact`, `delete_project_artifact` |
+| Contract | [references/agent-artifact-contract.md](references/agent-artifact-contract.md) | [references/project-context-contract.md](references/project-context-contract.md) |
+
+The test for which one a finding belongs in: **would a run that disagreed with
+this statement be worth reporting?** If yes it is a rule — a spend cap, a
+mandatory escalation, a never-do — and it goes in a project context file, where
+Lemma will not quietly revise it to match what the traces show. If no it is a
+description, and it goes in the agent understanding document.
+
+Put a rule in the wrong place and a later learning run can normalise it away
+against the very traces that violate it.
+
+## Workflows
+
+| Step | When | Reference |
+| --- | --- | --- |
+| Discover | Find the real agents, tell them from examples and dead code, settle their names | [references/discover.md](references/discover.md) |
+| Record | Read current state, propose, confirm, write | [references/record.md](references/record.md) |
+
+Read both before acting. Run discover first.
+
+## When this is not the right skill
+
+- The user wants tracing installed, or traces are not arriving: hand off to
+  `lemma-tracing`. Do not install the SDK yourself.
+- Traces arrive but are thin or malformed: hand off to `lemma-diagnostics`.
+- The user wants to triage detected issues: that is `lemma-mcp`.
+
+This skill does not need traces to exist. Recording specification before the
+first trace is the point of it, so an empty project is a normal starting state,
+not a blocker.

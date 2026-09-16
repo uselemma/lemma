@@ -7,9 +7,10 @@ description: >-
   there issues where users get frustrated", "any urgent lemma issues", "look
   through all urgent issues and validate each", or "dismiss everything under X
   impact." Also use when browsing, ranking, or acting on Lemma detections over
-  MCP.
+  MCP. Do not use for recording what an agent does in Lemma, or for writing
+  agent context and artifacts from a codebase — that is lemma-artifacts.
 metadata:
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # Lemma MCP
