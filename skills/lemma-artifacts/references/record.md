@@ -73,13 +73,30 @@ name and `expected_latest_version` set to the latest version you read, or
 `null` if it had none. Build the document to
 [agent-artifact-contract.md](agent-artifact-contract.md).
 
-Since your evidence is source code, the contract's confidence qualifiers are
-not optional decoration. Mark code-derived claims as intent — for example
-`(intended — from source, not observed)` — so that Lemma, and the next person
-reading it, can tell which statements have been seen to happen. Omit the
-"Shape of a normal trace" section entirely: you have not seen a trace, and
-inferring one from control flow is how a document starts asserting things that
-are not true.
+### The source-only profile
+
+The contract is written for a writer that has studied production traces. You
+have not. It already allows omitting a section and skipping dimensions the
+evidence does not support, so apply it like this and do not invent a section
+to fill a gap.
+
+| Contract asks for | From source code |
+| --- | --- |
+| Agent purpose and the task | Write it. Code states intent well. |
+| Shape of a normal trace | **Omit the section entirely.** You have not seen a trace, and inferring a span sequence from control flow is how a document starts asserting things that are not true. |
+| Tool catalog — one entry per tool | Write it. This is the highest-value part and it is legible from source. |
+| Tool arguments, sequencing, idioms | Write them, marked as intent. |
+| Tool latency bands, call counts per run, result sizes | **Leave out.** These are runtime facts. A guess here calibrates the auditor against a number nobody measured. |
+| One Mermaid architecture diagram | **Required — you cannot skip it.** The API rejects a first version without one. Draw the architecture the code describes and say so; do not draw a trace you have not seen. |
+| Inline confidence qualifiers | Mark every code-derived claim, e.g. `(intended — from source, not observed)`. This is what lets Lemma and the next reader tell intent from observation, and it is why a later learning run can upgrade the claim instead of contradicting it. |
+
+**Tool names have the same binding problem as the agent name.** The contract
+says to use the name as it appears in spans, and before instrumentation runs
+there are no spans. Use the name the agent will emit — the string registered
+with the SDK or the tool schema, not the function or class symbol, when they
+differ. Where you cannot tell, say which name you used and what it was derived
+from, so a mismatch is visible rather than silent. See
+[discover.md](discover.md).
 
 **Project context files** — `upload_project_artifact` with a filename that
 says what it holds. Build each file to
