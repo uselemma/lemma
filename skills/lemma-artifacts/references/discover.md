@@ -80,7 +80,9 @@ Find the name in this order:
    and the `lemma-tracing` skill's contract pins the same string as the root
    trace `name`. If the code already passes a *different* name to the Lemma
    SDK, do not pick one silently — say both names and ask which is correct
-   before writing. If the supplied name plausibly fits more than one
+   before writing; unsettled, the run ends (see
+   [When discover ends the run](#when-discover-ends-the-run)). If the
+   supplied name plausibly fits more than one
    production candidate — an annual and a quarterly billing agent when the
    prompt says `billing-agent` — present them with the evidence for each and
    ask which one is meant. Do not pick the closer match. If the user does not
@@ -102,8 +104,8 @@ no preference, say plainly that the name has to match whatever they configure
 later, and that a mismatch means the record will not apply to their traces.
 
 If traces exist under a name close to but not identical to the one you were
-about to use, stop and ask which is correct. Unanswered, that too ends the
-run.
+about to use, stop and ask which is correct. Unanswered, the run ends: see
+[When discover ends the run](#when-discover-ends-the-run).
 
 ## When discover ends the run
 
@@ -114,6 +116,9 @@ Discover can end the whole run, not only its own step. It does so when:
   ([Several candidates](#several-candidates));
 - a supplied name fits more than one candidate, or disagrees with the
   instrumentation, and the user does not settle it
+  ([The agent's name](#the-agents-name));
+- traces already exist under a name close to but not identical to the one
+  you were about to use, and the user does not say which is correct
   ([The agent's name](#the-agents-name)).
 
 In every one of these cases, the same thing happens: say what you looked at,
