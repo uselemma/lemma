@@ -129,3 +129,33 @@ Tell the user what landed: which agent, which files, whether the understanding
 is a first version or supersedes one. Keep it short. If something failed, say
 what failed and what state the project is in now — a partial run is fine, but
 a partial run the user thinks was complete is not.
+
+### Then offer to set up tracing
+
+Recording is read-only. Instrumentation is not, and it is the other half of
+what a customer arriving from Lemma's onboarding wants. Once you have reported
+what landed, check whether the agent you recorded is instrumented: the Lemma
+SDK signals from [discover.md](discover.md) (`@uselemma/tracing`,
+`uselemma_tracing`, `withAgent`, `lemma.trace`) on its production path.
+
+If it is instrumented, say nothing more about tracing.
+
+If it is not, offer — once, as its own question, never folded into the
+artifact approval — to continue with instrumentation using the
+`lemma-tracing` skill under the same agent name. Name the skill and the agent
+name in the offer, and say plainly that, unlike everything you have done so
+far, this step edits their code. In the spirit of:
+
+> Recorded. `checkout-agent` isn't sending traces to Lemma yet — there is no
+> Lemma SDK on its path. Want me to set that up now with the `lemma-tracing`
+> skill, under the name `checkout-agent`? Unlike the recording, that step
+> edits your code, and I'll show you a plan before touching anything.
+
+On an explicit yes, read and follow `lemma-tracing` and carry the agent name
+over verbatim as the root trace `name`. On anything else, stop; do not ask
+twice.
+
+Do not offer when discovery found no production agent, or when the name was
+never settled (see [discover.md](discover.md)). A declined artifact write does
+not by itself withdraw the offer: the agent is still identified and still
+uninstrumented.

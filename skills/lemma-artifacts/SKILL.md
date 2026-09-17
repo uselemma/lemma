@@ -5,11 +5,12 @@ description: >-
   the user asks to tell Lemma about their agent, set up or improve Lemma
   artifacts or agent context, record what an agent does, describe their agent
   to Lemma, bring Lemma's understanding up to date with the code, or fix a
-  rule Lemma still has that the codebase no longer enforces. Do not use for
-  installing tracing or fixing trace delivery and shape — that is
+  rule Lemma still has that the codebase no longer enforces. After recording
+  an uninstrumented agent it offers to hand off to lemma-tracing. Do not use
+  for installing tracing or fixing trace delivery and shape — that is
   lemma-tracing and lemma-diagnostics.
 metadata:
-  version: 1.0.1
+  version: 1.1.0
 ---
 
 # Lemma Artifacts
@@ -88,7 +89,10 @@ Read both before acting. Run discover first.
 ## When this is not the right skill
 
 - The user wants tracing installed, or traces are not arriving: hand off to
-  `lemma-tracing`. Do not install the SDK yourself.
+  `lemma-tracing`. Do not install the SDK yourself. The one time this skill
+  raises tracing on its own is the offer after recording
+  ([references/record.md](references/record.md), "Then offer to set up
+  tracing"): the offer is a question, and the work is still `lemma-tracing`'s.
 - Traces arrive but are thin or malformed: hand off to `lemma-diagnostics`.
 - The user wants to triage detected issues: that is `lemma-mcp`.
 

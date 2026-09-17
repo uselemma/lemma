@@ -78,7 +78,11 @@ Find the name in this order:
    and the `lemma-tracing` skill's contract pins the same string as the root
    trace `name`. If the code already passes a *different* name to the Lemma
    SDK, do not pick one silently — say both names and ask which is correct
-   before writing.
+   before writing. If the supplied name plausibly fits more than one
+   production candidate — an annual and a quarterly billing agent when the
+   prompt says `billing-agent` — present them with the evidence for each and
+   ask which one is meant. Do not pick the closer match. If the user does not
+   settle it, write nothing, do not offer instrumentation, say why, and stop.
 2. **The instrumentation.** Whatever the code passes to the Lemma SDK as the
    agent name is authoritative, exactly as written. Copy it character for
    character — `checkout-agent` and `CheckoutAgent` are two different agents.
