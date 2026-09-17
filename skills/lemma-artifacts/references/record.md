@@ -62,7 +62,8 @@ If the user corrects you, revise and show them the revision. Confirmation
 covers the content you showed — if the content changes, ask again.
 
 If the user declines, write nothing and say what you did not write. Do not
-offer a reduced version unless they ask.
+offer a reduced version unless they ask. Then continue to the
+[closing report](#closing-report): a decline ends the write, not the run.
 
 ## 3. Write
 
@@ -123,14 +124,17 @@ situation before writing again**. Their approval was for a world that no
 longer exists. Never retry a rejected write with a refreshed token and the same
 content without asking.
 
-## Afterwards
+## Closing report
 
-Tell the user what landed: which agent, which files, whether the understanding
-is a first version or supersedes one. Keep it short. If something failed, say
-what failed and what state the project is in now — a partial run is fine, but
-a partial run the user thinks was complete is not.
+Every run ends here, whichever way step 2 and step 3 went:
 
-Then, once and only once, run the tracing offer in
-[tracing-handoff.md](tracing-handoff.md). It applies after either outcome
-above — a write, or a decline that wrote nothing — and it carries its own
-gates; do not decide here whether to offer.
+- **Wrote.** Say which agent, which files, and whether the understanding is a
+  first version or supersedes one.
+- **Declined.** Say that nothing was written and what the proposal was, so
+  the user can come back to it.
+- **Failed part-way.** Say what failed and what state the project is in now.
+  A partial run is fine; a partial run the user thinks was complete is not.
+
+Keep it short. Then, once and only once, continue to
+[tracing-handoff.md](tracing-handoff.md). It decides for itself whether to
+offer; do not decide that here.

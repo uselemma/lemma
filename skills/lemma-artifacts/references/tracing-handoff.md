@@ -6,8 +6,11 @@ this skill raises tracing on its own. The offer is a question; the work
 belongs to `lemma-tracing`, and you never install the SDK or edit code under
 this skill.
 
-Every gate for the offer lives here. [discover.md](discover.md) and
-[record.md](record.md) link to this file; they do not restate it.
+The decision to offer is made here and only here. What
+[discover.md](discover.md) decides is earlier and different: whether the run
+proceeds to record at all. A run that stopped there never reaches this file.
+[record.md](record.md) links here from its closing report and does not
+restate any of this.
 
 ## When to offer
 
