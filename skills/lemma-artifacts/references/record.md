@@ -61,9 +61,9 @@ something else, or your own confidence.
 If the user corrects you, revise and show them the revision. Confirmation
 covers the content you showed — if the content changes, ask again.
 
-If the user declines, write nothing and say what you did not write. Do not
-offer a reduced version unless they ask. Then continue to the
-[closing report](#closing-report): a decline ends the write, not the run.
+If the user declines, write nothing. Do not offer a reduced version unless
+they ask. Go straight to the [closing report](#closing-report), which is
+where you say what was not written: a decline ends the write, not the run.
 
 ## 3. Write
 
