@@ -51,7 +51,8 @@ let the user decide. Do not guess in either direction.
 If more than one production agent exists, present them all with the evidence
 for each and let the user choose what to record. Do not record several agents
 on one blanket approval — they are separate entries in Lemma and the user may
-want only one.
+want only one. If the user does not choose, the run ends: see
+[When discover ends the run](#when-discover-ends-the-run).
 
 ## Nothing to record
 
@@ -60,7 +61,8 @@ were looking for, and **write nothing**. An empty project is a correct outcome
 here. Do not record a placeholder, do not record the repository itself as an
 agent, and do not record a demo because it was the only candidate.
 
-If the repository has no AI agent in it at all, say so plainly.
+If the repository has no AI agent in it at all, say so plainly. Either way
+the run ends: see [When discover ends the run](#when-discover-ends-the-run).
 
 ## The agent's name
 
@@ -82,9 +84,8 @@ Find the name in this order:
    production candidate — an annual and a quarterly billing agent when the
    prompt says `billing-agent` — present them with the evidence for each and
    ask which one is meant. Do not pick the closer match. If the user does not
-   settle it, write nothing, say why, and stop — nothing that follows in
-   [record.md](record.md) or [tracing-handoff.md](tracing-handoff.md) runs
-   without a settled name.
+   settle it, the run ends: see
+   [When discover ends the run](#when-discover-ends-the-run).
 2. **The instrumentation.** Whatever the code passes to the Lemma SDK as the
    agent name is authoritative, exactly as written. Copy it character for
    character — `checkout-agent` and `CheckoutAgent` are two different agents.
@@ -101,4 +102,23 @@ no preference, say plainly that the name has to match whatever they configure
 later, and that a mismatch means the record will not apply to their traces.
 
 If traces exist under a name close to but not identical to the one you were
-about to use, stop and ask which is correct.
+about to use, stop and ask which is correct. Unanswered, that too ends the
+run.
+
+## When discover ends the run
+
+Discover can end the whole run, not only its own step. It does so when:
+
+- no production agent is identifiable ([Nothing to record](#nothing-to-record));
+- several candidates exist and the user does not pick one
+  ([Several candidates](#several-candidates));
+- a supplied name fits more than one candidate, or disagrees with the
+  instrumentation, and the user does not settle it
+  ([The agent's name](#the-agents-name)).
+
+In every one of these cases, the same thing happens: say what you looked at,
+what you found, and why you are stopping; **write nothing**; and do not
+continue to [record.md](record.md) or [tracing-handoff.md](tracing-handoff.md).
+A run that ended here has no settled production agent, so there is nothing to
+propose and nothing to offer instrumentation for. Do not record a placeholder
+in its place, and do not offer to instrument an agent nobody chose.
