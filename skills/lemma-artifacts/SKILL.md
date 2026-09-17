@@ -11,7 +11,7 @@ description: >-
   use for installing tracing or fixing trace delivery and shape — that is
   lemma-tracing and lemma-diagnostics.
 metadata:
-  version: 1.1.0
+  version: 1.2.0
 ---
 
 # Lemma Artifacts
@@ -49,12 +49,18 @@ those words first, every time.
 4. **Never modify the user's code.** You are reading their repository to
    describe it. No edits, no new files, no reformatting — not even to a
    README, and not to "fix" something you noticed. Mention it and move on.
-5. **Never call `regenerate_project_artifacts`.** That starts Lemma's own
+5. **Never touch the key.** You reach Lemma with `LEMMA_MCP_API_KEY`, which
+   the user sets in the environment you run in. Reference it by name only.
+   Never read, print, echo, or write its value into any file, tracked or not,
+   and never ask the user to paste it into this conversation. A placeholder
+   line such as `LEMMA_MCP_API_KEY=` in an env example is fine. If it is
+   missing, see [When Lemma refuses the connection](#when-lemma-refuses-the-connection).
+6. **Never call `regenerate_project_artifacts`.** That starts Lemma's own
    trace-driven learning run, which is a different thing costing real time and
    money, and it is not how this skill writes.
-6. **Say what convinced you.** Every proposed claim cites the file that
+7. **Say what convinced you.** Every proposed claim cites the file that
    supports it. A claim you cannot point at is a claim you should drop.
-7. Keep tool names exactly as written here so transport mappings stay valid.
+8. Keep tool names exactly as written here so transport mappings stay valid.
 
 ## Two kinds of artifact, and they are not interchangeable
 
@@ -87,6 +93,20 @@ against the very traces that violate it.
 | Hand off | After the closing report, offer tracing when the settled target agent is not instrumented — written or declined | [references/tracing-handoff.md](references/tracing-handoff.md) |
 
 Read all three before acting. Run them in that order.
+
+## When Lemma refuses the connection
+
+A `401` from any Lemma tool means the key behind `LEMMA_MCP_API_KEY` is
+missing, expired, or revoked. It is a thing for the user to fix, never a thing
+to work around.
+
+Stop there. Write nothing, offer nothing, and tell the user to set
+`LEMMA_MCP_API_KEY` in the environment this agent runs in, then run you again.
+A key comes from the **Describe your agent** step in Lemma onboarding, or from
+**Settings → API keys** in the dashboard.
+
+Do not ask them to paste the key to you. Do not read it back out of a file or
+the environment to check it. Do not retry the call until they say it is set.
 
 ## When this is not the right skill
 
