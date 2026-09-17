@@ -1001,3 +1001,5 @@ def test_trace_does_not_resend_a_successful_run_as_a_failed_one():
     assert bodies[0]["trace"].get("status") is None
     assert bodies[0]["trace"].get("error") is None
     assert bodies[0]["trace"]["output"] == "ok"
+
+

@@ -240,6 +240,18 @@ def _resolve_usage(usage: Any = None) -> dict[str, int | float] | None:
     return normalize_token_usage(usage)
 
 
+def _merge_optional_dicts(
+    base: dict[str, Any] | None, override: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    if base and override:
+        return {**base, **override}
+    if override is not None:
+        return dict(override)
+    if base is not None:
+        return dict(base)
+    return None
+
+
 def _span_build_kwargs(trace: "TraceContext", payload: dict[str, Any]) -> dict[str, Any]:
     params = inspect.signature(trace._build_span).parameters
     return {key: value for key, value in payload.items() if key in params}
@@ -311,10 +323,14 @@ class SpanHandle:
             "ended_at": kwargs.get("ended_at") or _now(),
             "open_span": False,
         }
-        if merged.get("metadata") is None:
-            merged["metadata"] = self.metadata
-        if merged.get("attributes") is None:
-            merged["attributes"] = self.attributes
+        # Shallow-merge open-time and end-time dicts: open-time keys serve as
+        # the baseline, end-time keys win on conflict, and open-time keys that
+        # end() does not mention are preserved. Applied after all spreads so
+        # neither open_kwargs (e.g. journal replay) nor kwargs clobbers the result.
+        base_attrs = self.attributes if self.attributes is not None else self.open_kwargs.get("attributes")
+        base_meta = self.metadata if self.metadata is not None else self.open_kwargs.get("metadata")
+        merged["attributes"] = _merge_optional_dicts(base_attrs, kwargs.get("attributes"))
+        merged["metadata"] = _merge_optional_dicts(base_meta, kwargs.get("metadata"))
         if not merged.get("model"):
             merged["model"] = self.model
         if not merged.get("tool_name"):
