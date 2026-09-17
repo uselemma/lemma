@@ -82,17 +82,18 @@ against the very traces that violate it.
 | Step | When | Reference |
 | --- | --- | --- |
 | Discover | Find the real agents, tell them from examples and dead code, settle their names | [references/discover.md](references/discover.md) |
-| Record | Read current state, propose, confirm, write | [references/record.md](references/record.md) |
+| Record | Read current state, propose, confirm, write, report | [references/record.md](references/record.md) |
+| Hand off | After the report, offer tracing when the recorded agent is not instrumented | [references/tracing-handoff.md](references/tracing-handoff.md) |
 
-Read both before acting. Run discover first.
+Read all three before acting. Run them in that order.
 
 ## When this is not the right skill
 
 - The user wants tracing installed, or traces are not arriving: hand off to
   `lemma-tracing`. Do not install the SDK yourself. The one time this skill
   raises tracing on its own is the offer after recording
-  ([references/record.md](references/record.md), "Then offer to set up
-  tracing"): the offer is a question, and the work is still `lemma-tracing`'s.
+  ([references/tracing-handoff.md](references/tracing-handoff.md)): the offer
+  is a question, and the work is still `lemma-tracing`'s.
 - Traces arrive but are thin or malformed: hand off to `lemma-diagnostics`.
 - The user wants to triage detected issues: that is `lemma-mcp`.
 

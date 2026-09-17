@@ -82,7 +82,9 @@ Find the name in this order:
    production candidate — an annual and a quarterly billing agent when the
    prompt says `billing-agent` — present them with the evidence for each and
    ask which one is meant. Do not pick the closer match. If the user does not
-   settle it, write nothing, do not offer instrumentation, say why, and stop.
+   settle it, write nothing, say why, and stop — nothing that follows in
+   [record.md](record.md) or [tracing-handoff.md](tracing-handoff.md) runs
+   without a settled name.
 2. **The instrumentation.** Whatever the code passes to the Lemma SDK as the
    agent name is authoritative, exactly as written. Copy it character for
    character — `checkout-agent` and `CheckoutAgent` are two different agents.
