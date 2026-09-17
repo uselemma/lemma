@@ -9,7 +9,7 @@ description: >-
   installing tracing or fixing trace delivery and shape — that is
   lemma-tracing and lemma-diagnostics.
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Lemma Artifacts

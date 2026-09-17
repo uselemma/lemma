@@ -7,7 +7,7 @@ description: >-
   Agents SDK, LangChain, LangGraph, Langfuse side-by-side installs, or
   debugging Lemma trace delivery and trace shape.
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Lemma Tracing
@@ -30,7 +30,7 @@ Every integration must satisfy this product contract:
 
 - One agent execution becomes one Lemma root trace.
 - The root trace has a stable `name`, user input, final output or error, and `threadId` / `userId` when available.
-- When the user supplies an agent name (Lemma's onboarding prompt does: "Name the agent `…`"), that exact string is the root trace `name` — the `functionId` / `agentName` / `agent_name` / `name` the integration reads. Lemma files the agent's context and artifacts under it, so do not rename or restyle it.
+- When the user supplies an agent name (Lemma's onboarding prompt does: "Name the agent `…`"), that exact string is the root trace `name` — the `functionId` / `agentName` / `agent_name` / `name` the integration reads. Lemma files the agent's context and artifacts under it, so do not rename or restyle it. The precedence between a user-supplied name, existing instrumentation, and names already in Lemma is owned by [lemma-artifacts › discover › The agent's name](../lemma-artifacts/references/discover.md#the-agents-name).
 - LLM calls are generation children: `recordGeneration(...)` / `record_generation(...)` or `startGeneration(...)` / `start_generation(...)`.
 - Tool invocations are tool children: `recordTool(...)` / `record_tool(...)` or `startTool(...)` / `start_tool(...)`.
 - Retrieval, ranking, planning, routing, and app logic are spans: `recordSpan(...)` / `record_span(...)` or `startSpan(...)` / `start_span(...)`.

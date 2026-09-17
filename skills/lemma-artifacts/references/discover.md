@@ -74,9 +74,11 @@ Find the name in this order:
 
 1. **The name the user gave you.** If the prompt or the conversation states
    the agent name (Lemma's onboarding hands over a prompt that does), use it
-   verbatim: that is the name their instrumentation is being set up to send.
-   If the code already passes a *different* name to the Lemma SDK, do not pick
-   one silently — say both names and ask which is correct before writing.
+   verbatim: that is the name their instrumentation is being set up to send,
+   and the `lemma-tracing` skill's contract pins the same string as the root
+   trace `name`. If the code already passes a *different* name to the Lemma
+   SDK, do not pick one silently — say both names and ask which is correct
+   before writing.
 2. **The instrumentation.** Whatever the code passes to the Lemma SDK as the
    agent name is authoritative, exactly as written. Copy it character for
    character — `checkout-agent` and `CheckoutAgent` are two different agents.
@@ -87,10 +89,10 @@ Find the name in this order:
    Propose a name, say it must match what the SDK will send, and let the user
    confirm or correct it.
 
-Never invent a name from a class or file name when the instrumentation states
-one. If the agent is uninstrumented and the user has no preference, say
-plainly that the name has to match whatever they configure later, and that a
-mismatch means the record will not apply to their traces.
+Never invent a name from a class or file name when the user or the
+instrumentation states one. If the agent is uninstrumented and the user has
+no preference, say plainly that the name has to match whatever they configure
+later, and that a mismatch means the record will not apply to their traces.
 
 If traces exist under a name close to but not identical to the one you were
 about to use, stop and ask which is correct.
