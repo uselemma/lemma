@@ -72,13 +72,18 @@ warn you; both will simply exist.
 
 Find the name in this order:
 
-1. **The instrumentation.** Whatever the code passes to the Lemma SDK as the
+1. **The name the user gave you.** If the prompt or the conversation states
+   the agent name (Lemma's onboarding hands over a prompt that does), use it
+   verbatim: that is the name their instrumentation is being set up to send.
+   If the code already passes a *different* name to the Lemma SDK, do not pick
+   one silently — say both names and ask which is correct before writing.
+2. **The instrumentation.** Whatever the code passes to the Lemma SDK as the
    agent name is authoritative, exactly as written. Copy it character for
    character — `checkout-agent` and `CheckoutAgent` are two different agents.
-2. **The names already in Lemma.** `list_project_artifacts` returns the agents
+3. **The names already in Lemma.** `list_project_artifacts` returns the agents
    this project knows about. If one clearly corresponds, use it rather than
    coining a variant.
-3. **Ask.** If the agent is not instrumented yet, there is no fact to find.
+4. **Ask.** If the agent is not instrumented yet, there is no fact to find.
    Propose a name, say it must match what the SDK will send, and let the user
    confirm or correct it.
 

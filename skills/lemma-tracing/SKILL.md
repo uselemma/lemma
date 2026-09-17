@@ -30,6 +30,7 @@ Every integration must satisfy this product contract:
 
 - One agent execution becomes one Lemma root trace.
 - The root trace has a stable `name`, user input, final output or error, and `threadId` / `userId` when available.
+- When the user supplies an agent name (Lemma's onboarding prompt does: "Name the agent `…`"), that exact string is the root trace `name` — the `functionId` / `agentName` / `agent_name` / `name` the integration reads. Lemma files the agent's context and artifacts under it, so do not rename or restyle it.
 - LLM calls are generation children: `recordGeneration(...)` / `record_generation(...)` or `startGeneration(...)` / `start_generation(...)`.
 - Tool invocations are tool children: `recordTool(...)` / `record_tool(...)` or `startTool(...)` / `start_tool(...)`.
 - Retrieval, ranking, planning, routing, and app logic are spans: `recordSpan(...)` / `record_span(...)` or `startSpan(...)` / `start_span(...)`.
