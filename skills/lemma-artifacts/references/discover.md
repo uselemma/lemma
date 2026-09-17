@@ -96,7 +96,8 @@ Find the name in this order:
    coining a variant.
 4. **Ask.** If the agent is not instrumented yet, there is no fact to find.
    Propose a name, say it must match what the SDK will send, and let the user
-   confirm or correct it.
+   confirm or correct it. If they do neither, the run ends: see
+   [When discover ends the run](#when-discover-ends-the-run).
 
 Never invent a name from a class or file name when the user or the
 instrumentation states one. If the agent is uninstrumented and the user has
@@ -119,6 +120,9 @@ Discover can end the whole run, not only its own step. It does so when:
   ([The agent's name](#the-agents-name));
 - traces already exist under a name close to but not identical to the one
   you were about to use, and the user does not say which is correct
+  ([The agent's name](#the-agents-name));
+- the agent is uninstrumented, no name was supplied, and the user neither
+  confirms nor corrects the name you proposed
   ([The agent's name](#the-agents-name)).
 
 In every one of these cases, the same thing happens: say what you looked at,

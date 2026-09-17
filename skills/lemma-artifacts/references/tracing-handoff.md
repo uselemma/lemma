@@ -19,10 +19,12 @@ Run this once, right after the closing report in
 user declined the proposed write and nothing was written. All of the
 following must hold:
 
-- **One production agent, under a settled name.** Discovery ended on exactly
-  one agent and the name is fixed (see "The agent's name" in
-  [discover.md](discover.md)). No production agent, or a name the user never
-  settled, means there is nothing to offer for: stop.
+- **One settled production target for this run, under a fixed name.** The
+  repository may hold several agents; what matters is that discovery settled
+  on one of them — chosen by the user when there were candidates — and that
+  its name is fixed (see "The agent's name" in [discover.md](discover.md)).
+  No production agent, or a name the user never settled, means there is
+  nothing to offer for: stop.
 - **That agent is not instrumented.** None of the Lemma SDK signals from
   [discover.md](discover.md) — `@uselemma/tracing`, `uselemma_tracing`,
   `withAgent`, `lemma.trace` — appear on its production path. If any do,
