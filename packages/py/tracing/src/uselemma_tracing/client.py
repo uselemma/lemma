@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import inspect
 import json
 import os
@@ -12,6 +13,13 @@ from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version as package_version
 from typing import TYPE_CHECKING, Any, Callable, Literal, TypeVar
 
+from .payload import (
+    BeforeSend,
+    apply_before_send,
+    apply_payload_cap,
+    apply_span_content_dedup,
+    dumps_payload,
+)
 from .debug_delivery import (
     EXPECTED_INGEST_SUCCESS_STATUS,
     INGEST_PATH,
@@ -47,6 +55,10 @@ except PackageNotFoundError:
     _SDK_VERSION = "unknown"
 
 _SDK_USER_AGENT = f"uselemma-tracing/{_SDK_VERSION}"
+
+
+def _merge_sdk_user_agent(headers: dict[str, str]) -> dict[str, str]:
+    return {"User-Agent": _SDK_USER_AGENT, **headers}
 
 
 def _now() -> datetime:
@@ -1012,6 +1024,9 @@ class Lemma:
             ]
             | None
         ) = None,
+        before_send: BeforeSend | None = None,
+        max_payload_bytes: int | None = None,
+        deduplicate_span_content: bool = False,
     ) -> None:
         self.api_key = api_key or os.environ.get("LEMMA_API_KEY")
         self.project_id = project_id or os.environ.get("LEMMA_PROJECT_ID")
@@ -1019,10 +1034,15 @@ class Lemma:
             raise ValueError("uselemma-tracing: Missing LEMMA_API_KEY")
         if not self.project_id:
             raise ValueError("uselemma-tracing: Missing LEMMA_PROJECT_ID")
+        if max_payload_bytes is not None and max_payload_bytes <= 0:
+            raise ValueError("uselemma-tracing: max_payload_bytes must be > 0")
         self.release = normalize_release(
             release if release is not None else os.environ.get("LEMMA_RELEASE")
         )
         self.base_url = base_url.rstrip("/")
+        self.before_send = before_send
+        self.max_payload_bytes = max_payload_bytes
+        self.deduplicate_span_content = deduplicate_span_content
         self._last_response_headers: dict[str, str] = {}
         self._config_logged = False
         self.transport = self._wrap_transport(transport or self._urllib_transport)
@@ -1054,7 +1074,7 @@ class Lemma:
         ctx.output("ok")
         started_at = _now()
         payload = self._stamp_release(ctx.payload(self.project_id or "", started_at, _now()))
-        body = json.dumps(payload, default=str).encode()
+        body = dumps_payload(payload).encode()
         url = f"{self.base_url}{INGEST_PATH}"
 
         try:
@@ -1287,6 +1307,23 @@ class Lemma:
             # ``_send`` already debug-logs "trace ingest failed".
             return
 
+    def _shape_payload(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Copy, optionally shrink, then let ``before_send`` redact or drop."""
+        needs_copy = (
+            self.deduplicate_span_content
+            or self.max_payload_bytes is not None
+            or self.before_send is not None
+        )
+        if needs_copy:
+            payload = copy.deepcopy(payload)
+        if self.deduplicate_span_content:
+            payload = apply_span_content_dedup(payload)
+        if self.max_payload_bytes is not None:
+            payload = apply_payload_cap(payload, self.max_payload_bytes)
+        if self.before_send is not None:
+            payload = apply_before_send(payload, self.before_send)
+        return payload
+
     def _send(
         self,
         ctx: TraceContext,
@@ -1294,7 +1331,26 @@ class Lemma:
         ended_at: datetime,
     ) -> None:
         payload = self._stamp_release(ctx.payload(self.project_id or "", started_at, ended_at))
-        body = json.dumps(payload, default=str).encode()
+        try:
+            payload = self._shape_payload(payload)
+        except Exception as exc:
+            _lemma_debug(
+                "client",
+                "trace ingest failed",
+                trace_id=ctx.id,
+                project_id=self.project_id,
+                error=_failure_message(exc),
+            )
+            raise
+        if payload is None:
+            _lemma_debug(
+                "client",
+                "trace dropped by before_send",
+                trace_id=ctx.id,
+                project_id=self.project_id,
+            )
+            return
+        body = dumps_payload(payload).encode()
         url = f"{self.base_url}{INGEST_PATH}"
         _lemma_debug(
             "client",
@@ -1387,7 +1443,7 @@ class Lemma:
         def wrapped(
             url: str, headers: dict[str, str], body: bytes
         ) -> tuple[int, str]:
-            result = transport(url, headers, body)
+            result = transport(url, _merge_sdk_user_agent(headers), body)
             if len(result) >= 3:
                 self._last_response_headers = dict(result[2])
                 return result[0], result[1]
@@ -1456,7 +1512,7 @@ class Lemma:
         request = urllib.request.Request(
             url,
             data=body,
-            headers={"User-Agent": _SDK_USER_AGENT, **headers},
+            headers=headers,
             method="POST",
         )
         try:
@@ -1475,7 +1531,7 @@ class Lemma:
     ) -> tuple[int, str, dict[str, str]]:
         request = urllib.request.Request(
             url,
-            headers={"User-Agent": _SDK_USER_AGENT, **headers},
+            headers=_merge_sdk_user_agent(headers),
             method="GET",
         )
         try:

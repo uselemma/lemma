@@ -560,12 +560,14 @@ function providerFromClassName(name: string): string | undefined {
 function llmProvider(
   serialized: Serialized | undefined,
   extraParams?: Record<string, unknown>,
+  metadata?: Record<string, unknown>,
 ): string | undefined {
   const kwargs = serialized?.kwargs;
   const sources: Array<Record<string, unknown> | undefined> = [
     kwargs,
     serialized as Record<string, unknown> | undefined,
     extraParams,
+    metadata,
   ];
   for (const source of sources) {
     if (!source) continue;
@@ -598,6 +600,21 @@ function llmProvider(
   }
 
   return undefined;
+}
+
+function resolveGenerationIdentity(
+  serialized: Serialized | undefined,
+  extraParams?: Record<string, unknown>,
+  metadata?: Record<string, unknown>,
+): { provider?: string; model?: string } {
+  return {
+    provider: llmProvider(serialized, extraParams, metadata),
+    model:
+      pickModelIdentity(serialized?.kwargs) ??
+      pickModelIdentity(serialized) ??
+      pickModelIdentity(extraParams) ??
+      pickModelIdentity(metadata),
+  };
 }
 
 function durationMs(start: Date, end: Date) {
@@ -1101,11 +1118,11 @@ export class LemmaLangChainCallbackHandler {
     this.applyIdentity(attachment.stored, metadata, tags);
     this.noteBounds(attachment.stored, startedAt, undefined);
 
-    const provider = llmProvider(serialized, extraParams);
-    const model =
-      pickModelIdentity(serialized?.kwargs) ??
-      pickModelIdentity(serialized) ??
-      pickModelIdentity(extraParams);
+    const { provider, model } = resolveGenerationIdentity(
+      serialized,
+      extraParams,
+      metadata,
+    );
     const handle = attachment.stored.handle.startGeneration({
       name: serializedName(serialized, "langchain-llm"),
       parentId: attachment.parentId,
@@ -1161,11 +1178,11 @@ export class LemmaLangChainCallbackHandler {
     this.applyIdentity(attachment.stored, metadata, tags);
     this.noteBounds(attachment.stored, startedAt, undefined);
 
-    const provider = llmProvider(serialized, extraParams);
-    const model =
-      pickModelIdentity(serialized?.kwargs) ??
-      pickModelIdentity(serialized) ??
-      pickModelIdentity(extraParams);
+    const { provider, model } = resolveGenerationIdentity(
+      serialized,
+      extraParams,
+      metadata,
+    );
     const handle = attachment.stored.handle.startGeneration({
       name: serializedName(serialized, "langchain-chat-model"),
       parentId: attachment.parentId,

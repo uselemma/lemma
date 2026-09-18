@@ -1,4 +1,5 @@
 from .client import Lemma, SpanHandle, TraceContext, TraceHandle
+from .payload import STRUCTURAL_PAYLOAD_KEYS, BeforeSend
 from .turn import (
     apply_turn_journal,
     assemble_turn,
@@ -42,6 +43,8 @@ __all__ = [
     "start_turn",
     "normalize_token_usage",
     "normalize_release",
+    "STRUCTURAL_PAYLOAD_KEYS",
+    "BeforeSend",
     # Mode flags
     "enable_experiment_mode",
     "disable_experiment_mode",
