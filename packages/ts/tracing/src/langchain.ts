@@ -405,6 +405,8 @@ function rootTraceOutput(output: unknown): unknown {
       if (value && typeof value === "object") {
         const nested = value as Record<string, unknown>;
         if (typeof nested.content === "string") return nested.content;
+        const nestedBlocks = textFromContentBlocks(nested.content);
+        if (nestedBlocks !== undefined) return nestedBlocks;
       }
     }
   }

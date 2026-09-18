@@ -833,6 +833,9 @@ def test_root_trace_output_keeps_plain_string_tool_calls_and_reasoning_only():
     assert root_trace_output({"answer": BEDROCK_REASONING_BLOCKS}) == (
         "Your cortisol is elevated."
     )
+    assert root_trace_output(
+        {"result": {"content": BEDROCK_REASONING_BLOCKS}}
+    ) == "Your cortisol is elevated."
 
 
 def test_langchain_forwards_release_onto_ingest_payload():

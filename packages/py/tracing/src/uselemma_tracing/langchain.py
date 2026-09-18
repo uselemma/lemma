@@ -385,8 +385,13 @@ def root_trace_output(output: Any) -> Any:
             display = _text_from_content_blocks(value)
             if display is not None:
                 return display
-            if isinstance(value, dict) and isinstance(value.get("content"), str):
-                return value["content"]
+            if isinstance(value, dict):
+                nested = value.get("content")
+                if isinstance(nested, str):
+                    return nested
+                nested_display = _text_from_content_blocks(nested)
+                if nested_display is not None:
+                    return nested_display
 
     return output
 
