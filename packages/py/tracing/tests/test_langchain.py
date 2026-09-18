@@ -302,7 +302,7 @@ def test_langsmith_traceable_ghost_parent_stays_one_root(monkeypatch):
         dotted_order = dotted
 
     monkeypatch.setattr(
-        "langsmith.run_helpers.get_tracing_context",
+        "uselemma_tracing.langsmith_parent._get_tracing_context",
         lambda: {"parent": _Tree()},
     )
 
@@ -346,7 +346,7 @@ def test_unknown_parent_not_active_run_tree_stays_isolated(monkeypatch):
         dotted_order = f"20240101T000000000000Z{other_id}"
 
     monkeypatch.setattr(
-        "langsmith.run_helpers.get_tracing_context",
+        "uselemma_tracing.langsmith_parent._get_tracing_context",
         lambda: {"parent": _Tree()},
     )
 
@@ -372,6 +372,48 @@ def test_unknown_parent_not_active_run_tree_stays_isolated(monkeypatch):
 
     assert len(calls) == 1
     assert calls[0]["body"]["trace"]["name"] == "ChatOpenAI"
+
+
+def test_langsmith_ghost_parent_on_nested_chain_stays_one_root(monkeypatch):
+    import uuid
+
+    root_id = str(uuid.uuid4())
+    ghost_id = str(uuid.uuid4())
+    child_id = str(uuid.uuid4())
+    dotted = (
+        f"20240101T000000000000Z{root_id}.20240101T000001000000Z{ghost_id}"
+    )
+
+    class _Tree:
+        id = ghost_id
+        dotted_order = dotted
+
+    monkeypatch.setattr(
+        "uselemma_tracing.langsmith_parent._get_tracing_context",
+        lambda: {"parent": _Tree()},
+    )
+
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+    )
+    handler.on_chain_start({"name": "support-agent"}, "hello", run_id=root_id)
+    handler.on_chain_start(
+        {"name": "inner"},
+        "hello",
+        run_id=child_id,
+        parent_run_id=ghost_id,
+    )
+    handler.on_chain_end("inner-out", run_id=child_id)
+    handler.on_chain_end("hello", run_id=root_id)
+
+    assert len(calls) == 1
+    trace = calls[0]["body"]["trace"]
+    assert trace["name"] == "support-agent"
+    assert len(trace["spans"]) == 1
+    assert trace["spans"][0]["name"] == "inner"
 
 
 def test_langchain_records_errors():
