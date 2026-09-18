@@ -540,6 +540,17 @@ def _resolve_generation_identity(
     return provider, model
 
 
+# Survives `_compact` so a successful None end is not dropped from the span.
+_NO_OUTPUT = {"result": "none"}
+
+
+def _recorded_span_output(output: Any, *, owns_trace: bool) -> Any:
+    """Keep successful non-root None outputs distinguishable from a missing field."""
+    if output is None and not owns_trace:
+        return dict(_NO_OUTPUT)
+    return output
+
+
 def _langchain_attributes(
     run_id: str, parent_run_id: str | None, run_type: str
 ) -> dict[str, Any]:
@@ -932,7 +943,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
 
         end_run_handle(
             run,
-            output=outputs,
+            output=_recorded_span_output(outputs, owns_trace=run.owns_trace),
             ended_at=ended_at,
             duration_ms=_duration_ms(run.started_at, ended_at),
         )
@@ -1252,7 +1263,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         else:
             end_run_handle(
                 run,
-                output=output,
+                output=_recorded_span_output(output, owns_trace=run.owns_trace),
                 ended_at=ended_at,
                 duration_ms=_duration_ms(run.started_at, ended_at),
             )

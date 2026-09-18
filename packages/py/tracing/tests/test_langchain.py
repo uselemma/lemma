@@ -1080,6 +1080,57 @@ def test_issue_92_payload_cap_keeps_post_under_budget():
     )
 
 
+def test_successful_none_outputs_record_explicit_marker():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+        agent_name="ProbeAgent",
+    )
+
+    handler.on_chain_start(
+        {"name": "agent"},
+        {"messages": []},
+        run_id="root",
+        metadata={"thread_id": "t"},
+    )
+    handler.on_chain_start({"name": "hook"}, {}, run_id="hook", parent_run_id="root")
+    handler.on_chain_end(None, run_id="hook")
+    handler.on_tool_start(
+        {"name": "log_event"}, "evt-1", run_id="tool", parent_run_id="root"
+    )
+    handler.on_tool_end(None, run_id="tool")
+    handler.on_chain_start(
+        {"name": "node_with_state"}, {}, run_id="node", parent_run_id="root"
+    )
+    handler.on_chain_end({}, run_id="node")
+    handler.on_chain_end({"messages": []}, run_id="root")
+
+    spans = {span["name"]: span for span in calls[0]["body"]["trace"]["spans"]}
+    assert spans["hook"]["type"] == "span"
+    assert spans["hook"]["output"] == {"result": "none"}
+    assert spans["log_event"]["type"] == "tool"
+    assert spans["log_event"]["output"] == {"result": "none"}
+    assert spans["node_with_state"]["output"] == {}
+    assert calls[0]["body"]["trace"]["output"] == {"messages": []}
+
+
+def test_root_none_output_does_not_replace_trace_answer():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+    )
+
+    handler.on_chain_start({"name": "agent"}, {"messages": []}, run_id="root")
+    handler.on_chain_end(None, run_id="root")
+
+    body = calls[0]["body"]
+    assert "output" not in body["trace"] or body["trace"].get("output") in (None, {})
+
+
 def test_excluded_intermediate_span_keeps_child_under_included_ancestor():
     calls = []
     handler = langchain(

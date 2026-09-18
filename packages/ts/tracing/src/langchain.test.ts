@@ -901,6 +901,55 @@ describe("langChain", () => {
     await h.flush();
     expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
   });
+
+  it("records an explicit marker on successful None/null child chain and tool ends", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock, { agentName: "ProbeAgent" });
+
+    h.handleChainStart(
+      { name: "agent" },
+      { messages: [] },
+      "root",
+      undefined,
+      undefined,
+      { threadId: "t" },
+    );
+    h.handleChainStart({ name: "hook" }, {}, "hook", "root");
+    await h.handleChainEnd(null, "hook");
+    h.handleToolStart({ name: "log_event" }, "evt-1", "tool", "root");
+    await h.handleToolEnd(null, "tool");
+    h.handleChainStart({ name: "node_with_state" }, {}, "node", "root");
+    await h.handleChainEnd({}, "node");
+    await h.handleChainEnd({ messages: [] }, "root");
+
+    await h.flush();
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    const spans = Object.fromEntries(
+      body.trace.spans.map((span: { name: string }) => [span.name, span]),
+    );
+    expect(spans.hook).toMatchObject({
+      type: "span",
+      output: { result: "none" },
+    });
+    expect(spans.log_event).toMatchObject({
+      type: "tool",
+      output: { result: "none" },
+    });
+    expect(spans.node_with_state.output).toEqual({});
+    expect(body.trace.output).toEqual({ messages: [] });
+  });
+
+  it("does not replace a root None end with a no-output marker", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock);
+
+    h.handleChainStart({ name: "agent" }, { messages: [] }, "root");
+    await h.handleChainEnd(null, "root");
+
+    await h.flush();
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    expect(body.trace.output ?? null).toBeNull();
+  });
 });
 
 describe("langGraph", () => {

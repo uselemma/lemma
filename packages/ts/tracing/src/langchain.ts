@@ -596,6 +596,15 @@ function durationMs(start: Date, end: Date) {
   return Math.max(0, end.getTime() - start.getTime());
 }
 
+const NO_OUTPUT = { result: "none" } as const;
+
+function recordedSpanOutput(output: unknown, ownsTrace: boolean): unknown {
+  if (output == null && !ownsTrace) {
+    return { ...NO_OUTPUT };
+  }
+  return output;
+}
+
 function langchainAttributes(
   runId: RunId,
   parentRunId: RunId | undefined,
@@ -1016,7 +1025,7 @@ export class LemmaLangChainCallbackHandler {
 
     if (run.handle) {
       run.handle.end({
-        output: outputs,
+        output: recordedSpanOutput(outputs, run.ownsTrace),
         endedAt,
         durationMs: durationMs(run.startedAt, endedAt),
       });
@@ -1355,7 +1364,7 @@ export class LemmaLangChainCallbackHandler {
       });
     } else {
       run.handle?.end({
-        output,
+        output: recordedSpanOutput(output, run.ownsTrace),
         endedAt,
         durationMs: durationMs(run.startedAt, endedAt),
       });
