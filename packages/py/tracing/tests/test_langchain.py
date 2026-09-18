@@ -1131,6 +1131,33 @@ def test_root_none_output_does_not_replace_trace_answer():
     assert "output" not in body["trace"] or body["trace"].get("output") in (None, {})
 
 
+def test_successful_llm_none_output_records_explicit_marker():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+    )
+
+    handler.on_chain_start({"name": "agent"}, "hi", run_id="root")
+    handler.on_llm_start(
+        {
+            "id": ["langchain", "chat_models", "openai", "ChatOpenAI"],
+            "kwargs": {"model": "gpt-4o"},
+        },
+        ["hi"],
+        run_id="llm",
+        parent_run_id="root",
+    )
+    handler.on_llm_end(None, run_id="llm")
+    handler.on_chain_end({"answer": "ok"}, run_id="root")
+
+    span = calls[0]["body"]["trace"]["spans"][0]
+    assert span["name"] == "ChatOpenAI"
+    assert span["type"] == "generation"
+    assert span["output"] == {"result": "none"}
+
+
 def test_excluded_intermediate_span_keeps_child_under_included_ancestor():
     calls = []
     handler = langchain(

@@ -85,8 +85,29 @@ def store_run(
     return run
 
 
+# Survives `_compact` so a successful None end is not dropped from the span.
+_NO_OUTPUT = {"result": "none"}
+
+
+def recorded_span_output(
+    output: Any,
+    *,
+    owns_trace: bool,
+    status: str | None = None,
+) -> Any:
+    """Keep successful non-root None outputs distinguishable from a missing field."""
+    if output is None and not owns_trace and status != "ERROR":
+        return dict(_NO_OUTPUT)
+    return output
+
+
 def end_run_handle(run: StoredRun, **kwargs: Any) -> None:
     """End a recorded span. No-op when the run was filtered or has no handle."""
     if run.skipped or run.handle is None:
         return
+    kwargs["output"] = recorded_span_output(
+        kwargs.get("output"),
+        owns_trace=run.owns_trace,
+        status=kwargs.get("status"),
+    )
     run.handle.end(**kwargs)

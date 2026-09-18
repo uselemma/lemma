@@ -79,3 +79,43 @@ def test_store_run_skips_and_passthrough_parent_handle():
     assert kept.handle is not parent_handle
     end_run_handle(kept, output="ok")
     assert kept.handle.ended == [{"output": "ok"}]
+
+
+def test_end_run_handle_records_none_marker_on_successful_non_root():
+    handle = _Handle()
+    run = StoredRun(
+        owning_trace_id="root",
+        root_run_id="root",
+        kind="chain",
+        started_at=datetime.now(timezone.utc),
+        owns_trace=False,
+        handle=handle,
+    )
+    end_run_handle(run, output=None)
+    assert handle.ended == [{"output": {"result": "none"}}]
+
+
+def test_end_run_handle_leaves_root_and_error_none_untouched():
+    root_handle = _Handle()
+    root = StoredRun(
+        owning_trace_id="root",
+        root_run_id="root",
+        kind="chain",
+        started_at=datetime.now(timezone.utc),
+        owns_trace=True,
+        handle=root_handle,
+    )
+    end_run_handle(root, output=None)
+    assert root_handle.ended == [{"output": None}]
+
+    error_handle = _Handle()
+    errored = StoredRun(
+        owning_trace_id="root",
+        root_run_id="root",
+        kind="tool",
+        started_at=datetime.now(timezone.utc),
+        owns_trace=False,
+        handle=error_handle,
+    )
+    end_run_handle(errored, status="ERROR", error="boom", output=None)
+    assert error_handle.ended == [{"status": "ERROR", "error": "boom", "output": None}]

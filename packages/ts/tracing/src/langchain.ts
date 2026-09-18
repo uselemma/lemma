@@ -2,6 +2,7 @@ import {
   Lemma,
   type LemmaClientOptions,
   type SpanHandle,
+  type SpanOptions,
   type TraceHandle,
 } from "./client";
 import { describeError } from "./error-message";
@@ -598,8 +599,12 @@ function durationMs(start: Date, end: Date) {
 
 const NO_OUTPUT = { result: "none" } as const;
 
-function recordedSpanOutput(output: unknown, ownsTrace: boolean): unknown {
-  if (output == null && !ownsTrace) {
+function recordedSpanOutput(
+  output: unknown,
+  ownsTrace: boolean,
+  status?: SpanOptions["status"],
+): unknown {
+  if (output == null && !ownsTrace && status !== "ERROR") {
     return { ...NO_OUTPUT };
   }
   return output;
@@ -874,6 +879,17 @@ export class LemmaLangChainCallbackHandler {
     }
   }
 
+  private endStoredRun(
+    run: StoredRun,
+    options: Omit<SpanOptions, "id" | "name" | "type" | "startedAt">,
+  ) {
+    if (!run.handle) return;
+    run.handle.end({
+      ...options,
+      output: recordedSpanOutput(options.output, run.ownsTrace, options.status),
+    });
+  }
+
   private async finalizeTrace(owningTraceId: string, stored: StoredTrace) {
     this.traces.delete(owningTraceId);
     this.forgetTraceRuns(owningTraceId);
@@ -1023,13 +1039,11 @@ export class LemmaLangChainCallbackHandler {
     const endedAt = new Date();
     const stored = this.storedTrace(run.owningTraceId);
 
-    if (run.handle) {
-      run.handle.end({
-        output: recordedSpanOutput(outputs, run.ownsTrace),
-        endedAt,
-        durationMs: durationMs(run.startedAt, endedAt),
-      });
-    }
+    this.endStoredRun(run, {
+      output: outputs,
+      endedAt,
+      durationMs: durationMs(run.startedAt, endedAt),
+    });
 
     if (stored) {
       this.noteBounds(stored, run.startedAt, endedAt);
@@ -1051,14 +1065,12 @@ export class LemmaLangChainCallbackHandler {
     const message = describeError(error);
     const stored = this.storedTrace(run.owningTraceId);
 
-    if (run.handle) {
-      run.handle.end({
-        status: "ERROR",
-        error: message,
-        endedAt,
-        durationMs: durationMs(run.startedAt, endedAt),
-      });
-    }
+    this.endStoredRun(run, {
+      status: "ERROR",
+      error: message,
+      endedAt,
+      durationMs: durationMs(run.startedAt, endedAt),
+    });
 
     if (stored) {
       this.noteBounds(stored, run.startedAt, endedAt);
@@ -1214,7 +1226,7 @@ export class LemmaLangChainCallbackHandler {
     const awaitingTools = !softError && hasToolCalls(structured);
 
     const model = pickGenerationModelIdentity(output);
-    run.handle.end({
+    this.endStoredRun(run, {
       output: softError ? undefined : structured,
       error: softError ?? undefined,
       status: softError ? "ERROR" : undefined,
@@ -1278,7 +1290,7 @@ export class LemmaLangChainCallbackHandler {
     const endedAt = new Date();
     const message = describeError(error);
 
-    run.handle?.end({
+    this.endStoredRun(run, {
       status: "ERROR",
       error: message,
       endedAt,
@@ -1356,15 +1368,15 @@ export class LemmaLangChainCallbackHandler {
     const softError = toolResultError(output);
 
     if (softError) {
-      run.handle?.end({
+      this.endStoredRun(run, {
         status: "ERROR",
         error: softError,
         endedAt,
         durationMs: durationMs(run.startedAt, endedAt),
       });
     } else {
-      run.handle?.end({
-        output: recordedSpanOutput(output, run.ownsTrace),
+      this.endStoredRun(run, {
+        output,
         endedAt,
         durationMs: durationMs(run.startedAt, endedAt),
       });
@@ -1389,7 +1401,7 @@ export class LemmaLangChainCallbackHandler {
     const endedAt = new Date();
     const message = describeError(error);
 
-    run.handle?.end({
+    this.endStoredRun(run, {
       status: "ERROR",
       error: message,
       endedAt,
@@ -1462,7 +1474,7 @@ export class LemmaLangChainCallbackHandler {
     if (!run) return;
     const endedAt = new Date();
 
-    run.handle?.end({
+    this.endStoredRun(run, {
       output: documents,
       endedAt,
       durationMs: durationMs(run.startedAt, endedAt),
@@ -1484,7 +1496,7 @@ export class LemmaLangChainCallbackHandler {
     const endedAt = new Date();
     const message = describeError(error);
 
-    run.handle?.end({
+    this.endStoredRun(run, {
       status: "ERROR",
       error: message,
       endedAt,
