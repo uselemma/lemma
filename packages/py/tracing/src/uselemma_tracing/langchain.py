@@ -338,21 +338,19 @@ def _text_from_content_blocks(content: Any) -> str | None:
     return "\n".join(texts) if texts else None
 
 
-def _structured_assistant_output(
-    message: dict[str, Any], *, flatten_text: bool = False
-) -> Any:
+def _structured_assistant_output(message: dict[str, Any]) -> Any:
     if message.get("tool_calls") is not None:
         return {
             "role": "assistant",
             "content": message.get("content"),
             "tool_calls": message["tool_calls"],
         }
-    content = message.get("content")
-    if flatten_text:
-        display = _text_from_content_blocks(content)
-        if display is not None:
-            return display
-    return content
+    return message.get("content")
+
+
+def _flatten_root_display(value: Any) -> Any:
+    display = _text_from_content_blocks(value)
+    return display if display is not None else value
 
 
 def root_trace_output(output: Any) -> Any:
@@ -374,9 +372,9 @@ def root_trace_output(output: Any) -> Any:
         for message in reversed(messages):
             normalized = normalize_message(message)
             if normalized["role"] == "assistant":
-                return _structured_assistant_output(normalized, flatten_text=True)
-        return _structured_assistant_output(
-            normalize_message(messages[-1]), flatten_text=True
+                return _flatten_root_display(_structured_assistant_output(normalized))
+        return _flatten_root_display(
+            _structured_assistant_output(normalize_message(messages[-1]))
         )
 
     if isinstance(output, dict):
@@ -384,6 +382,9 @@ def root_trace_output(output: Any) -> Any:
             value = output.get(key)
             if isinstance(value, str) and value:
                 return value
+            display = _text_from_content_blocks(value)
+            if display is not None:
+                return display
             if isinstance(value, dict) and isinstance(value.get("content"), str):
                 return value["content"]
 

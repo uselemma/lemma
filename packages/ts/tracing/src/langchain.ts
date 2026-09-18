@@ -346,9 +346,30 @@ function rootTraceInput(input: unknown): unknown {
   return input;
 }
 
+function textFromContentBlocks(content: unknown): string | undefined {
+  if (!Array.isArray(content)) return undefined;
+  const texts: string[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const record = block as Record<string, unknown>;
+    if (record.type === "text" && typeof record.text === "string") {
+      texts.push(record.text);
+    }
+  }
+  return texts.length > 0 ? texts.join("\n") : undefined;
+}
+
+function flattenRootDisplay(value: unknown): unknown {
+  const display = textFromContentBlocks(value);
+  return display !== undefined ? display : value;
+}
+
 function rootTraceOutput(output: unknown): unknown {
   if (output == null) return output;
   if (typeof output === "string") return output;
+
+  const display = textFromContentBlocks(output);
+  if (display !== undefined) return display;
 
   if (output && typeof output === "object" && !Array.isArray(output)) {
     const record = output as Record<string, unknown>;
@@ -366,11 +387,11 @@ function rootTraceOutput(output: unknown): unknown {
     for (let i = messages.length - 1; i >= 0; i--) {
       const normalized = normalizeMessage(messages[i]);
       if (normalized.role === "assistant") {
-        return structuredAssistantOutput(normalized);
+        return flattenRootDisplay(structuredAssistantOutput(normalized));
       }
     }
-    return structuredAssistantOutput(
-      normalizeMessage(messages[messages.length - 1]),
+    return flattenRootDisplay(
+      structuredAssistantOutput(normalizeMessage(messages[messages.length - 1])),
     );
   }
 
@@ -379,6 +400,8 @@ function rootTraceOutput(output: unknown): unknown {
     for (const key of ["output", "answer", "result", "text", "content"]) {
       const value = record[key];
       if (typeof value === "string" && value) return value;
+      const fromBlocks = textFromContentBlocks(value);
+      if (fromBlocks !== undefined) return fromBlocks;
       if (value && typeof value === "object") {
         const nested = value as Record<string, unknown>;
         if (typeof nested.content === "string") return nested.content;
