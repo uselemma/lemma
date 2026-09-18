@@ -1387,7 +1387,9 @@ class Lemma:
         def wrapped(
             url: str, headers: dict[str, str], body: bytes
         ) -> tuple[int, str]:
-            result = transport(url, headers, body)
+            result = transport(
+                url, {"User-Agent": _SDK_USER_AGENT, **headers}, body
+            )
             if len(result) >= 3:
                 self._last_response_headers = dict(result[2])
                 return result[0], result[1]
