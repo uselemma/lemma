@@ -129,3 +129,28 @@ def test_dedup_leaves_distinct_child_input():
     )
     apply_span_content_dedup(payload)
     assert payload["trace"]["spans"][1]["input"] == "two"
+
+
+def test_payload_cap_ledger_stays_under_budget_with_many_fields():
+    spans = [
+        {
+            "id": f"span-{index}",
+            "name": f"hook-{index}",
+            "type": "span",
+            "input": {"messages": ["x" * 2000]},
+            "output": {"messages": ["y" * 2000]},
+        }
+        for index in range(20)
+    ]
+    payload = _payload(spans)
+    original = encoded_size(payload)
+    capped = apply_payload_cap(payload, 8_000)
+    assert encoded_size(capped) <= 8_000
+    assert encoded_size(capped) < original // 4
+    truncated = sum(
+        1
+        for span in capped["trace"]["spans"]
+        for field in ("input", "output")
+        if isinstance(span.get(field), dict) and span[field].get(TRUNCATION_MARKER_KEY)
+    )
+    assert truncated >= 10

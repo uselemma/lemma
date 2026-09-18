@@ -154,21 +154,31 @@ def apply_payload_cap(payload: dict[str, Any], max_bytes: int) -> dict[str, Any]
     Structural keys are never replaced. If the structural envelope alone
     exceeds ``max_bytes``, the payload is returned with content truncated
     and may still serialize above the cap.
+
+    Size is tracked with a running byte ledger: each field and marker is
+    serialized once, then the payload total is updated by the delta so a
+    megabyte-scale trace is not re-encoded on every replacement.
     """
     if max_bytes <= 0:
         raise ValueError("uselemma-tracing: max_payload_bytes must be > 0")
-    if encoded_size(payload) <= max_bytes:
+    current = encoded_size(payload)
+    if current <= max_bytes:
         return payload
 
-    candidates = list(_iter_content_fields(payload))
-    candidates.sort(key=lambda item: encoded_size(item[2]), reverse=True)
-    for container, key, value in candidates:
-        if encoded_size(payload) <= max_bytes:
+    sized = [
+        (container, key, value, encoded_size(value))
+        for container, key, value in _iter_content_fields(payload)
+    ]
+    sized.sort(key=lambda item: item[3], reverse=True)
+    for container, key, value, value_bytes in sized:
+        if current <= max_bytes:
             break
         marker = truncation_marker(value)
-        if encoded_size(value) <= encoded_size(marker):
+        marker_bytes = encoded_size(marker)
+        if value_bytes <= marker_bytes:
             continue
         container[key] = marker
+        current += marker_bytes - value_bytes
     return payload
 
 
