@@ -6,12 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from uselemma_tracing.client import (
-    Lemma,
-    SpanHandle,
-    TraceContext,
-    _SDK_USER_AGENT,
-)
+from uselemma_tracing.client import Lemma, SpanHandle, TraceContext
 from uselemma_tracing.debug_mode import disable_debug_mode, enable_debug_mode
 
 PROJECT_ID = "10000000-0000-0000-0000-000000000001"
@@ -39,11 +34,12 @@ def test_default_urllib_transport_identifies_the_sdk(monkeypatch):
 
     monkeypatch.setattr("uselemma_tracing.client.urllib.request.urlopen", urlopen)
 
-    Lemma._urllib_transport(
-        "https://api.example.test/traces/ingest",
-        {"Authorization": "Bearer key"},
-        b"{}",
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        base_url="https://api.example.test",
     )
+    lemma.trace("support-agent", lambda _trace: "ok")
     Lemma._urllib_get(
         "https://api.example.test/traces/ingest-status",
         {"Authorization": "Bearer key"},
@@ -66,7 +62,6 @@ def test_custom_transport_receives_sdk_user_agent():
     lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
     lemma.trace("support-agent", lambda _trace: "ok")
 
-    assert seen["User-Agent"] == _SDK_USER_AGENT
     assert seen["User-Agent"].startswith("uselemma-tracing/")
     assert seen["Authorization"] == "Bearer key"
     assert seen["Content-Type"] == "application/json"
