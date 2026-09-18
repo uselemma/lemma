@@ -1120,3 +1120,228 @@ def test_excluded_intermediate_span_keeps_child_under_included_ancestor():
     names = [span["name"] for span in spans]
     assert names == ["answer", "ChatOpenAI"]
     assert spans[1]["parent_id"] == spans[0]["id"]
+
+
+def _age_idle_trace(handler, trace_id, *, hours=3):
+    from datetime import timedelta
+
+    from uselemma_tracing.client import _now
+
+    old = _now() - timedelta(hours=hours)
+    stored = handler._traces[trace_id]
+    stored.opened_at = old
+    if stored.earliest_start is not None:
+        stored.earliest_start = old
+    if stored.latest_end is not None:
+        stored.latest_end = old
+    for run in handler._runs.values():
+        if run.owning_trace_id == trace_id:
+            run.started_at = old
+
+
+def test_stale_open_traces_are_finalized_and_removed_from_handler_state(caplog):
+    import logging
+    from datetime import timedelta
+
+    from uselemma_tracing.client import _now
+
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+        open_trace_ttl=timedelta(hours=2),
+        eviction_interval=timedelta(0),
+    )
+
+    handler.on_chain_start({"name": "stale"}, "left hanging", run_id="stale-1")
+    handler.on_llm_start(
+        {"name": "ChatOpenAI"},
+        ["left hanging"],
+        run_id="llm-stale",
+        parent_run_id="stale-1",
+    )
+    handler.on_chain_start({"name": "fresh"}, "still running", run_id="fresh-1")
+
+    _age_idle_trace(handler, "stale-1", hours=3)
+    handler._traces["fresh-1"].opened_at = _now() - timedelta(minutes=5)
+    handler._runs["fresh-1"].started_at = _now() - timedelta(minutes=5)
+
+    with caplog.at_level(logging.WARNING, logger="uselemma_tracing.langchain_eviction"):
+        handler.on_chain_start({"name": "trigger"}, "sweep", run_id="trigger-1")
+
+    assert "stale-1" not in handler._traces
+    assert "stale-1" not in handler._runs
+    assert "llm-stale" not in handler._runs
+    assert "fresh-1" in handler._traces
+    assert "fresh-1" in handler._runs
+    assert "trigger-1" in handler._traces
+
+    stale_payloads = [
+        call["body"]["trace"] for call in calls if call["body"]["trace"]["name"] == "stale"
+    ]
+    assert len(stale_payloads) == 1
+    assert stale_payloads[0]["input"] == "left hanging"
+    assert stale_payloads[0].get("error") in (None, "")
+    assert "Evicting 1 stale LangChain trace" in caplog.text
+    assert "stale-1" in caplog.text
+
+    before = len(calls)
+    handler.flush()
+    assert len(calls) == before + 2
+    handler.shutdown()
+    assert len(calls) == before + 2
+    assert handler._traces == {}
+    assert handler._runs == {}
+
+
+def test_eviction_sweep_is_interval_gated():
+    from datetime import timedelta
+
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+        open_trace_ttl=timedelta(hours=2),
+        eviction_interval=timedelta(minutes=5),
+    )
+
+    handler.on_chain_start({"name": "first"}, "one", run_id="first")
+    _age_idle_trace(handler, "first", hours=3)
+    handler.on_chain_start({"name": "second"}, "two", run_id="second")
+
+    assert "first" in handler._traces
+    assert "first" in handler._runs
+    assert calls == []
+
+    handler._last_eviction = None
+    handler.on_chain_start({"name": "third"}, "three", run_id="third")
+
+    assert "first" not in handler._traces
+    assert "first" not in handler._runs
+    assert "second" in handler._traces
+    assert len(calls) == 1
+    assert calls[0]["body"]["trace"]["name"] == "first"
+
+    _age_idle_trace(handler, "second", hours=3)
+    handler.on_chain_start({"name": "fourth"}, "four", run_id="fourth")
+    assert "second" in handler._traces
+    assert len(calls) == 1
+
+
+def test_open_trace_ttl_none_disables_eviction():
+    from datetime import timedelta
+
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport([]),
+        open_trace_ttl=None,
+        eviction_interval=timedelta(0),
+    )
+    handler.on_chain_start({"name": "open"}, "hi", run_id="open-1")
+    _age_idle_trace(handler, "open-1", hours=24 * 7)
+    handler.on_chain_start({"name": "later"}, "bye", run_id="later-1")
+    assert set(handler._traces) == {"open-1", "later-1"}
+    assert set(handler._runs) == {"open-1", "later-1"}
+
+
+def test_standalone_llm_start_evicts_stale_owned_traces():
+    from datetime import timedelta
+
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+        open_trace_ttl=timedelta(hours=2),
+        eviction_interval=timedelta(0),
+    )
+    handler.on_llm_start({"name": "ChatOpenAI"}, ["stale"], run_id="llm-stale")
+    _age_idle_trace(handler, "llm-stale", hours=3)
+    handler.on_tool_start({"name": "lookup"}, "q", run_id="tool-fresh")
+
+    assert "llm-stale" not in handler._traces
+    assert "llm-stale" not in handler._runs
+    assert "tool-fresh" in handler._traces
+    assert calls[0]["body"]["trace"]["name"] == "ChatOpenAI"
+    assert calls[0]["body"]["trace"]["input"] == "stale"
+
+
+def test_chat_model_and_retriever_starts_also_sweep():
+    from datetime import timedelta
+
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport([]),
+        open_trace_ttl=timedelta(hours=2),
+        eviction_interval=timedelta(0),
+    )
+    handler.on_chat_model_start(
+        {"name": "old-chat"},
+        [[{"type": "human", "content": "hi"}]],
+        run_id="chat-stale",
+    )
+    _age_idle_trace(handler, "chat-stale", hours=3)
+    handler.on_retriever_start({"name": "retriever"}, "q", run_id="retriever-1")
+    assert "chat-stale" not in handler._traces
+    assert "retriever-1" in handler._traces
+
+
+def test_long_running_trace_with_recent_child_end_is_not_evicted():
+    from datetime import timedelta
+
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+        open_trace_ttl=timedelta(hours=2),
+        eviction_interval=timedelta(0),
+    )
+    handler.on_chain_start({"name": "long-agent"}, "hi", run_id="long-1")
+    handler.on_llm_start(
+        {"name": "ChatOpenAI"},
+        ["hi"],
+        run_id="llm-1",
+        parent_run_id="long-1",
+    )
+    handler.on_llm_end({"generations": [[{"text": "still going"}]]}, run_id="llm-1")
+    handler._traces["long-1"].opened_at = (
+        handler._traces["long-1"].opened_at - timedelta(hours=3)
+    )
+    handler._runs["long-1"].started_at = handler._traces["long-1"].opened_at
+
+    handler.on_chain_start({"name": "other"}, "later", run_id="other-1")
+    assert "long-1" in handler._traces
+    assert "long-1" in handler._runs
+    assert calls == []
+
+
+def test_long_running_trace_with_open_child_is_not_evicted():
+    from datetime import timedelta
+
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport([]),
+        open_trace_ttl=timedelta(hours=2),
+        eviction_interval=timedelta(0),
+    )
+    handler.on_chain_start({"name": "long-agent"}, "hi", run_id="long-1")
+    handler.on_llm_start(
+        {"name": "ChatOpenAI"},
+        ["hi"],
+        run_id="llm-open",
+        parent_run_id="long-1",
+    )
+    handler._traces["long-1"].opened_at = (
+        handler._traces["long-1"].opened_at - timedelta(hours=3)
+    )
+    handler._runs["long-1"].started_at = handler._traces["long-1"].opened_at
+
+    handler.on_chain_start({"name": "other"}, "later", run_id="other-1")
+    assert "long-1" in handler._traces
+    assert "llm-open" in handler._runs

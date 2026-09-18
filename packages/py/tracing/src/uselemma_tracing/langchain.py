@@ -2,10 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from .client import Lemma, SpanHandle, TraceContext, _duration_ms, _now
+from .langchain_eviction import (
+    DEFAULT_EVICTION_INTERVAL,
+    DEFAULT_OPEN_TRACE_TTL,
+    coerce_interval,
+    coerce_ttl,
+    maybe_evict_stale_traces,
+)
 from .langchain_span_filter import StoredRun, end_run_handle, store_run
 from .payload import BeforeSend
 from .error_message import describe_error
@@ -591,7 +598,17 @@ def llm_token_usage(response: Any) -> dict[str, int | float] | None:
     return None
 
 class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
-    """LangChain callback handler that owns one Lemma trace per root run."""
+    """LangChain callback handler that owns one Lemma trace per root run.
+
+    Open traces that stay idle (no child start/end) past ``open_trace_ttl``
+    (default 2 hours) are finalized and sent. The sweep runs from every
+    ``on_*_start`` callback at most once per ``eviction_interval`` (default
+    5 minutes). A long-running agent that still emits callbacks is not
+    evicted. Stale owned traces are sent the same way ``flush()`` sends them
+    — root input and any completed child spans — rather than silently
+    dropped. A cancelled run is not marked as an error. ``flush()`` /
+    ``shutdown()`` still finalize every remaining open trace immediately.
+    """
 
     name = "lemma"
 
@@ -613,6 +630,8 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         user_id_key: str | None = None,
         exclude_span_names: Iterable[str] | None = None,
         include_span: Callable[[str], bool] | None = None,
+        open_trace_ttl: float | int | timedelta | None = DEFAULT_OPEN_TRACE_TTL,
+        eviction_interval: float | int | timedelta | None = DEFAULT_EVICTION_INTERVAL,
     ) -> None:
         self.lemma = lemma or Lemma(
             api_key=api_key,
@@ -630,6 +649,9 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         self.user_id_key = user_id_key
         self.exclude_span_names = tuple(exclude_span_names or ())
         self.include_span = include_span
+        self.open_trace_ttl = coerce_ttl(open_trace_ttl)
+        self.eviction_interval = coerce_interval(eviction_interval)
+        self._last_eviction: datetime | None = None
         self._runs: dict[str, StoredRun] = {}
         self._traces: dict[str, _StoredTrace] = {}
 
@@ -812,6 +834,20 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
             if run.owning_trace_id == owning_trace_id:
                 self._runs.pop(run_id, None)
 
+    def _maybe_evict_stale_traces(self) -> None:
+        run_activity: dict[str, list[datetime]] = {}
+        for run in self._runs.values():
+            run_activity.setdefault(run.owning_trace_id, []).append(run.started_at)
+        self._last_eviction = maybe_evict_stale_traces(
+            self._traces,
+            ttl=self.open_trace_ttl,
+            interval=self.eviction_interval,
+            last_eviction=self._last_eviction,
+            now=_now(),
+            finalize=self._finalize,
+            run_activity=run_activity,
+        )
+
     def _finalize(self, owning_trace_id: str, stored: _StoredTrace) -> None:
         self._traces.pop(owning_trace_id, None)
         self._forget_trace_runs(owning_trace_id)
@@ -867,6 +903,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         name: str | None = None,
         **_: Any,
     ) -> None:
+        self._maybe_evict_stale_traces()
         started_at = _now()
         chain_name = name or _serialized_name(serialized, "langchain-chain")
         parent = self._parent_run(parent_run_id)
@@ -978,6 +1015,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         invocation_params: dict[str, Any] | None = None,
         **_: Any,
     ) -> None:
+        self._maybe_evict_stale_traces()
         started_at = _now()
         stored, parent_id, owns_trace, owning_trace_id, root_run_id = (
             self._resolve_attachment(
@@ -1040,6 +1078,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         invocation_params: dict[str, Any] | None = None,
         **_: Any,
     ) -> None:
+        self._maybe_evict_stale_traces()
         started_at = _now()
         flat_messages = [message for group in messages for message in group]
         normalized = normalize_messages(flat_messages)
@@ -1193,6 +1232,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         metadata: dict[str, Any] | None = None,
         **_: Any,
     ) -> None:
+        self._maybe_evict_stale_traces()
         started_at = _now()
         stored, parent_id, owns_trace, owning_trace_id, root_run_id = (
             self._resolve_attachment(
@@ -1302,6 +1342,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         metadata: dict[str, Any] | None = None,
         **_: Any,
     ) -> None:
+        self._maybe_evict_stale_traces()
         started_at = _now()
         stored, parent_id, owns_trace, owning_trace_id, root_run_id = (
             self._resolve_attachment(

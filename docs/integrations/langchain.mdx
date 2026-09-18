@@ -13,7 +13,16 @@ owned trace. Missing-parent events never overwrite concurrent trace state.
 
 You do not need to wrap LangChain calls in `lemma.trace()`. Pass the callback
 handler through LangChain's `callbacks` option, then `flush()` to send the
-trace. A complete docs-chat agent using this integration lives in
+trace. In a long-lived process, open traces that stay idle past
+`open_trace_ttl` (default 2 hours) are finalized and sent so handler
+state cannot grow without bound. Last activity is the latest of the root
+open time, child ends, and in-flight run starts — a long agent loop that
+still emits callbacks is not evicted. The sweep runs from every
+`on_*_start` callback at most once per `eviction_interval` (default 5
+minutes). Lemma sends the partial owned trace — the same payload
+`flush()` would — rather than dropping abandoned runs. Pass
+`open_trace_ttl=None` to disable. A complete docs-chat agent using this
+integration lives in
 [`examples/langchain`](https://github.com/uselemma/lemma/tree/main/examples/langchain)
 (TypeScript) and [`examples/python/langchain`](https://github.com/uselemma/lemma/tree/main/examples/python/langchain)
 (Python). See [Runnable examples](/guides/examples).

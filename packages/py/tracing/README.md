@@ -259,7 +259,12 @@ Install the optional integration dependency and pass `langchain()` as a callback
 handler. Each root run owns one Lemma trace with current-turn input, final
 output or root error, promoted `thread_id` / `user_id`, typed nested
 generations/tools/spans, and real wall-clock bounds. Call `flush()` /
-`shutdown()` to finalize open traces.
+`shutdown()` to finalize open traces immediately. On long-lived hosts,
+traces that stay idle (no child start/end) past `open_trace_ttl` (default
+2 hours) are finalized and sent, swept from every `on_*_start` at most
+every `eviction_interval` (default 5 minutes). A still-active long run is
+not evicted. Pass `open_trace_ttl=None` to disable. Stale traces are sent
+(same payload as `flush()`), not dropped.
 
 ```bash
 pip install "uselemma-tracing[langchain]" langchain-openai
