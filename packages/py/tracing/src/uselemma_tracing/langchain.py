@@ -726,6 +726,40 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
             return None
         return self._runs.get(str(parent_run_id))
 
+    def _adopt_traceable_ghost(self, parent_run_id: Any) -> None:
+        """Alias a LangSmith-only parent onto the nearest callback-visible ancestor.
+
+        ``langsmith.traceable`` wraps LangChain 1.x middleware hooks and never
+        emits ``on_chain_start``. Nested callback runs then arrive with that
+        ghost as ``parent_run_id``. When it is the active run-tree node, walk
+        ``dotted_order`` nearest-first and reuse the first run this handler
+        actually received.
+        """
+        if parent_run_id is None:
+            return
+        pid = str(parent_run_id)
+        if pid in self._runs:
+            return
+        try:
+            from langsmith.run_helpers import get_tracing_context
+
+            run_tree = get_tracing_context().get("parent")
+        except Exception:
+            return
+        if run_tree is None or str(getattr(run_tree, "id", "")) != pid:
+            return
+        dotted_order = getattr(run_tree, "dotted_order", None)
+        if not isinstance(dotted_order, str) or not dotted_order:
+            return
+        # dotted_order segments are "<timestamp>Z<uuid>", root first; the last
+        # one is the run tree node itself.
+        segments = dotted_order.split(".")[:-1]
+        for segment in reversed(segments):
+            stored = self._runs.get(segment[-36:])
+            if stored is not None:
+                self._runs[pid] = stored
+                return
+
     def _resolve_attachment(
         self,
         run_id: str,
@@ -805,6 +839,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         name: str | None = None,
         **_: Any,
     ) -> None:
+        self._adopt_traceable_ghost(parent_run_id)
         started_at = _now()
         chain_name = name or _serialized_name(serialized, "langchain-chain")
         parent = self._parent_run(parent_run_id)
@@ -915,6 +950,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         invocation_params: dict[str, Any] | None = None,
         **_: Any,
     ) -> None:
+        self._adopt_traceable_ghost(parent_run_id)
         started_at = _now()
         stored, parent_id, owns_trace, owning_trace_id, root_run_id = (
             self._resolve_attachment(
@@ -978,6 +1014,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         invocation_params: dict[str, Any] | None = None,
         **_: Any,
     ) -> None:
+        self._adopt_traceable_ghost(parent_run_id)
         started_at = _now()
         flat_messages = [message for group in messages for message in group]
         normalized = normalize_messages(flat_messages)
@@ -1131,6 +1168,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         metadata: dict[str, Any] | None = None,
         **_: Any,
     ) -> None:
+        self._adopt_traceable_ghost(parent_run_id)
         started_at = _now()
         stored, parent_id, owns_trace, owning_trace_id, root_run_id = (
             self._resolve_attachment(
@@ -1238,6 +1276,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         metadata: dict[str, Any] | None = None,
         **_: Any,
     ) -> None:
+        self._adopt_traceable_ghost(parent_run_id)
         started_at = _now()
         stored, parent_id, owns_trace, owning_trace_id, root_run_id = (
             self._resolve_attachment(

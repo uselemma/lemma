@@ -8,19 +8,27 @@ No network: scripted chat model + in-memory transport.
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any
 
+import pytest
 from langchain.agents import create_agent
+from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import RunnableLambda
 from langchain_core.tools import tool
 from langgraph.graph import END, START, MessagesState, StateGraph
+from langsmith.run_helpers import tracing_context
 from pydantic import PrivateAttr
 
 from helpers import PROJECT_ID, make_transport
 from uselemma_tracing import langchain, langgraph
+
+# LangSmith tracing must not phone home during the ghost-parent regression.
+os.environ.setdefault("LANGSMITH_ENDPOINT", "http://127.0.0.1:1")
+os.environ.setdefault("LANGSMITH_API_KEY", "lsv2_fake")
 
 
 class ScriptedChatModel(BaseChatModel):
@@ -145,6 +153,80 @@ def test_create_agent_ainvoke_is_one_root_with_tool_and_generation():
         if span["type"] == "tool"
     }
     assert "ping" in tool_names
+
+
+class _PassthroughMiddleware(AgentMiddleware):
+    """Identity model-call wrapper so LangSmith can wrap a real hook."""
+
+    async def awrap_model_call(self, request, handler):
+        return await handler(request)
+
+
+def _middleware_hooks(count: int) -> list[AgentMiddleware]:
+    return [
+        type(f"Hook{index}", (_PassthroughMiddleware,), {})()
+        for index in range(count)
+    ]
+
+
+def _ainvoke_agent(agent, handler, *, langsmith_enabled: bool):
+    async def _run():
+        with tracing_context(enabled=langsmith_enabled):
+            return await agent.ainvoke(
+                {"messages": [{"role": "user", "content": "hi"}]},
+                {
+                    "callbacks": [handler],
+                    "metadata": {"thread_id": "thread-1", "user_id": "user-1"},
+                },
+            )
+
+    return asyncio.run(_run())
+
+
+@pytest.mark.parametrize("hook_count", [1, 3, 5, 10])
+def test_create_agent_ainvoke_is_one_root_with_langsmith_and_middleware(
+    hook_count,
+):
+    """lemma#87: middleware traceable wrappers must not promote extra roots."""
+    calls = []
+    handler = _handler(calls, agent_name="support-agent")
+    model = ScriptedChatModel(responses=[AIMessage(content="done")])
+    agent = create_agent(
+        model=model,
+        tools=[],
+        middleware=_middleware_hooks(hook_count),
+        name="support-agent",
+    )
+
+    result = _ainvoke_agent(agent, handler, langsmith_enabled=True)
+    handler.flush()
+
+    assert result["messages"][-1].content == "done"
+    assert len(calls) == 1
+    trace = calls[0]["body"]["trace"]
+    assert trace["name"] == "support-agent"
+    assert any(span["type"] == "generation" for span in trace["spans"])
+
+
+def test_create_agent_ainvoke_is_one_root_with_langsmith_off_and_middleware():
+    calls = []
+    handler = _handler(calls, agent_name="support-agent")
+    model = ScriptedChatModel(responses=[AIMessage(content="done")])
+    agent = create_agent(
+        model=model,
+        tools=[],
+        middleware=_middleware_hooks(1),
+        name="support-agent",
+    )
+
+    result = _ainvoke_agent(agent, handler, langsmith_enabled=False)
+    handler.flush()
+
+    assert result["messages"][-1].content == "done"
+    assert len(calls) == 1
+    assert any(
+        span["type"] == "generation" for span in calls[0]["body"]["trace"]["spans"]
+    )
 
 
 def test_langgraph_ainvoke_is_one_root():
