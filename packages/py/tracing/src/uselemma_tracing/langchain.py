@@ -319,19 +319,49 @@ def root_trace_input(input_value: Any) -> Any:
     return input_value
 
 
-def _structured_assistant_output(message: dict[str, Any]) -> Any:
+def _text_from_content_blocks(content: Any) -> str | None:
+    """Join ``type == "text"`` blocks for root-trace display.
+
+    Reasoning / thinking / OpenAI reasoning items are skipped because they
+    are not ``type == "text"``. Returns ``None`` when there is no text block
+    so callers keep the original value.
+    """
+    if not isinstance(content, list):
+        return None
+    texts = [
+        block["text"]
+        for block in content
+        if isinstance(block, dict)
+        and block.get("type") == "text"
+        and isinstance(block.get("text"), str)
+    ]
+    return "\n".join(texts) if texts else None
+
+
+def _structured_assistant_output(
+    message: dict[str, Any], *, flatten_text: bool = False
+) -> Any:
     if message.get("tool_calls") is not None:
         return {
             "role": "assistant",
             "content": message.get("content"),
             "tool_calls": message["tool_calls"],
         }
-    return message.get("content")
+    content = message.get("content")
+    if flatten_text:
+        display = _text_from_content_blocks(content)
+        if display is not None:
+            return display
+    return content
 
 
 def root_trace_output(output: Any) -> Any:
     if output is None or isinstance(output, str):
         return output
+
+    display = _text_from_content_blocks(output)
+    if display is not None:
+        return display
 
     if isinstance(output, dict):
         if output.get("role") == "assistant" and (
@@ -344,8 +374,10 @@ def root_trace_output(output: Any) -> Any:
         for message in reversed(messages):
             normalized = normalize_message(message)
             if normalized["role"] == "assistant":
-                return _structured_assistant_output(normalized)
-        return _structured_assistant_output(normalize_message(messages[-1]))
+                return _structured_assistant_output(normalized, flatten_text=True)
+        return _structured_assistant_output(
+            normalize_message(messages[-1]), flatten_text=True
+        )
 
     if isinstance(output, dict):
         for key in ("output", "answer", "result", "text", "content"):
