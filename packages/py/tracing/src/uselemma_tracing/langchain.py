@@ -496,10 +496,17 @@ def _provider_from_id(ids: Any) -> str | None:
 
 
 def llm_provider(
-    serialized: Any, extra_params: dict[str, Any] | None = None
+    serialized: Any,
+    extra_params: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> str | None:
     kwargs = _get(serialized, "kwargs", {}) or {}
-    for source in (kwargs, serialized if isinstance(serialized, dict) else None, extra_params):
+    for source in (
+        kwargs,
+        serialized if isinstance(serialized, dict) else None,
+        extra_params,
+        metadata,
+    ):
         if not source:
             continue
         for key in ("provider", "ls_provider", "llm_provider", "llmProvider"):
@@ -936,11 +943,12 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         self._apply_identity(stored, metadata, tags)
         self._note_bounds(stored, started_at, None)
 
-        provider = llm_provider(serialized, invocation_params)
+        provider = llm_provider(serialized, invocation_params, metadata)
         model = (
             pick_model_identity(_get(serialized, "kwargs"))
             or pick_model_identity(serialized)
             or pick_model_identity(invocation_params)
+            or pick_model_identity(metadata)
         )
         handle = stored.context.start_generation(
             name=_serialized_name(serialized, "langchain-llm"),
@@ -1002,11 +1010,12 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         self._apply_identity(stored, metadata, tags)
         self._note_bounds(stored, started_at, None)
 
-        provider = llm_provider(serialized, invocation_params)
+        provider = llm_provider(serialized, invocation_params, metadata)
         model = (
             pick_model_identity(_get(serialized, "kwargs"))
             or pick_model_identity(serialized)
             or pick_model_identity(invocation_params)
+            or pick_model_identity(metadata)
         )
         handle = stored.context.start_generation(
             name=_serialized_name(serialized, "langchain-chat-model"),

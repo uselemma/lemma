@@ -155,6 +155,100 @@ def test_chat_model_end_stamps_response_metadata_model_name():
     assert span["attributes"]["ai.model.id"] == "gpt-4o-mini"
 
 
+def test_chat_model_reads_ls_model_name_from_run_metadata():
+    """Non-serializable chat models still get model identity from ls_* metadata."""
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+    )
+
+    handler.on_chain_start(
+        {"name": "agent"},
+        {},
+        run_id="root",
+        metadata={"thread_id": "t"},
+    )
+    handler.on_chat_model_start(
+        {
+            "lc": 1,
+            "type": "not_implemented",
+            "id": ["langchain_perplexity", "chat_models", "ChatPerplexity"],
+        },
+        [[{"role": "user", "content": "hi"}]],
+        run_id="llm",
+        parent_run_id="root",
+        invocation_params={},
+        metadata={"ls_model_name": "sonar-pro", "ls_provider": "perplexity"},
+    )
+    handler.on_llm_end(
+        {"generations": [[{"text": "ok", "message": None}]]},
+        run_id="llm",
+    )
+    handler.on_chain_end({}, run_id="root")
+
+    span = next(
+        s for s in calls[0]["body"]["trace"]["spans"] if s.get("type") == "generation"
+    )
+    assert span["model"] == "sonar-pro"
+    assert span["attributes"]["llm.model_name"] == "sonar-pro"
+    assert span["attributes"]["llm.provider"] == "perplexity"
+
+
+def test_llm_start_reads_ls_identity_from_run_metadata_when_class_id_is_unknown():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+    )
+
+    handler.on_llm_start(
+        {"lc": 1, "type": "not_implemented", "id": ["custom_pkg", "llms", "CustomLLM"]},
+        ["hello"],
+        run_id="llm-meta",
+        invocation_params={},
+        metadata={"ls_model_name": "custom-7b", "ls_provider": "acme"},
+    )
+    handler.on_llm_end(
+        {"generations": [[{"text": "hi"}]]},
+        run_id="llm-meta",
+    )
+
+    span = calls[0]["body"]["trace"]["spans"][0]
+    assert span["model"] == "custom-7b"
+    assert span["attributes"]["llm.provider"] == "acme"
+
+
+def test_serialized_kwargs_model_wins_over_run_metadata():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+    )
+
+    handler.on_chat_model_start(
+        {
+            "id": ["langchain_openai", "chat_models", "ChatOpenAI"],
+            "kwargs": {"model": "gpt-4o"},
+        },
+        [[{"type": "human", "content": "hi"}]],
+        run_id="llm-kw",
+        invocation_params={"model": "gpt-4o"},
+        metadata={"ls_model_name": "sonar-pro"},
+    )
+    handler.on_llm_end(
+        {"generations": [[{"text": "ok"}]]},
+        run_id="llm-kw",
+    )
+
+    span = calls[0]["body"]["trace"]["spans"][0]
+    assert span["model"] == "gpt-4o"
+    assert span["attributes"]["llm.provider"] == "openai"
+
+
 def test_standalone_chat_model_finalizes_one_owned_trace():
     calls = []
     handler = langchain(
