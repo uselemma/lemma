@@ -5,11 +5,13 @@ description: >-
   the user asks to tell Lemma about their agent, set up or improve Lemma
   artifacts or agent context, record what an agent does, describe their agent
   to Lemma, bring Lemma's understanding up to date with the code, or fix a
-  rule Lemma still has that the codebase no longer enforces. Do not use for
-  installing tracing or fixing trace delivery and shape — that is
+  rule Lemma still has that the codebase no longer enforces. After its
+  closing report it offers to hand off to lemma-tracing when the agent it
+  settled on is not instrumented, whether or not anything was written. Do not
+  use for installing tracing or fixing trace delivery and shape — that is
   lemma-tracing and lemma-diagnostics.
 metadata:
-  version: 1.0.1
+  version: 1.2.0
 ---
 
 # Lemma Artifacts
@@ -47,12 +49,18 @@ those words first, every time.
 4. **Never modify the user's code.** You are reading their repository to
    describe it. No edits, no new files, no reformatting — not even to a
    README, and not to "fix" something you noticed. Mention it and move on.
-5. **Never call `regenerate_project_artifacts`.** That starts Lemma's own
+5. **Never touch the key.** You reach Lemma with `LEMMA_MCP_API_KEY`, which
+   the user sets in the environment you run in. Reference it by name only.
+   Never read, print, echo, or write its value into any file, tracked or not,
+   and never ask the user to paste it into this conversation. A placeholder
+   line such as `LEMMA_MCP_API_KEY=` in an env example is fine. If it is
+   missing, see [When Lemma refuses the connection](#when-lemma-refuses-the-connection).
+6. **Never call `regenerate_project_artifacts`.** That starts Lemma's own
    trace-driven learning run, which is a different thing costing real time and
    money, and it is not how this skill writes.
-6. **Say what convinced you.** Every proposed claim cites the file that
+7. **Say what convinced you.** Every proposed claim cites the file that
    supports it. A claim you cannot point at is a claim you should drop.
-7. Keep tool names exactly as written here so transport mappings stay valid.
+8. Keep tool names exactly as written here so transport mappings stay valid.
 
 ## Two kinds of artifact, and they are not interchangeable
 
@@ -81,14 +89,32 @@ against the very traces that violate it.
 | Step | When | Reference |
 | --- | --- | --- |
 | Discover | Find the real agents, tell them from examples and dead code, settle their names | [references/discover.md](references/discover.md) |
-| Record | Read current state, propose, confirm, write | [references/record.md](references/record.md) |
+| Record | Read current state, propose, confirm, write, report | [references/record.md](references/record.md) |
+| Hand off | After the closing report, offer tracing when the settled target agent is not instrumented — written or declined | [references/tracing-handoff.md](references/tracing-handoff.md) |
 
-Read both before acting. Run discover first.
+Read all three before acting. Run them in that order.
+
+## When Lemma refuses the connection
+
+A `401` from any Lemma tool means the key behind `LEMMA_MCP_API_KEY` is
+missing, expired, or revoked. It is a thing for the user to fix, never a thing
+to work around.
+
+Stop there. Write nothing, offer nothing, and tell the user to set
+`LEMMA_MCP_API_KEY` in the environment this agent runs in, then run you again.
+A key comes from the **Describe your agent** step in Lemma onboarding, or from
+**Settings → API keys** in the dashboard.
+
+Do not ask them to paste the key to you. Do not read it back out of a file or
+the environment to check it. Do not retry the call until they say it is set.
 
 ## When this is not the right skill
 
 - The user wants tracing installed, or traces are not arriving: hand off to
-  `lemma-tracing`. Do not install the SDK yourself.
+  `lemma-tracing`. Do not install the SDK yourself. The one time this skill
+  raises tracing on its own is the offer after the closing report
+  ([references/tracing-handoff.md](references/tracing-handoff.md)): the offer
+  is a question, and the work is still `lemma-tracing`'s.
 - Traces arrive but are thin or malformed: hand off to `lemma-diagnostics`.
 - The user wants to triage detected issues: that is `lemma-mcp`.
 

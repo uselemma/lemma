@@ -283,6 +283,139 @@ def test_concurrent_roots_and_missing_parent_isolation():
     assert len(by_name["ChatOpenAI"]["spans"]) == 1
 
 
+def test_langsmith_traceable_ghost_parent_stays_one_root(monkeypatch):
+    """Unknown parent that is the active LangSmith node aliases to a known ancestor."""
+    import uuid
+
+    root_id = str(uuid.uuid4())
+    ghost_id = str(uuid.uuid4())
+    mid_ghost_id = str(uuid.uuid4())
+    llm_id = str(uuid.uuid4())
+    dotted = (
+        f"20240101T000000000000Z{root_id}"
+        f".20240101T000001000000Z{mid_ghost_id}"
+        f".20240101T000002000000Z{ghost_id}"
+    )
+
+    class _Tree:
+        id = ghost_id
+        dotted_order = dotted
+
+    monkeypatch.setattr(
+        "uselemma_tracing.langsmith_parent._get_tracing_context",
+        lambda: {"parent": _Tree()},
+    )
+
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+    )
+    handler.on_chain_start({"name": "support-agent"}, "hello", run_id=root_id)
+    handler.on_chat_model_start(
+        {
+            "id": ["langchain", "chat_models", "openai", "ChatOpenAI"],
+            "kwargs": {"model": "gpt-4o"},
+        },
+        [[{"type": "human", "content": "hello"}]],
+        run_id=llm_id,
+        parent_run_id=ghost_id,
+    )
+    handler.on_llm_end(
+        {"generations": [[{"text": "hi"}]]},
+        run_id=llm_id,
+    )
+    handler.on_chain_end("hi", run_id=root_id)
+
+    assert len(calls) == 1
+    trace = calls[0]["body"]["trace"]
+    assert trace["name"] == "support-agent"
+    assert len(trace["spans"]) == 1
+    assert trace["spans"][0]["type"] == "generation"
+
+
+def test_unknown_parent_not_active_run_tree_stays_isolated(monkeypatch):
+    import uuid
+
+    ghost_id = str(uuid.uuid4())
+    other_id = str(uuid.uuid4())
+
+    class _Tree:
+        id = other_id
+        dotted_order = f"20240101T000000000000Z{other_id}"
+
+    monkeypatch.setattr(
+        "uselemma_tracing.langsmith_parent._get_tracing_context",
+        lambda: {"parent": _Tree()},
+    )
+
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+    )
+    handler.on_llm_start(
+        {
+            "id": ["langchain", "chat_models", "openai", "ChatOpenAI"],
+            "kwargs": {"model": "gpt-4o"},
+        },
+        ["orphan"],
+        run_id="llm-orphan",
+        parent_run_id=ghost_id,
+    )
+    handler.on_llm_end(
+        {"generations": [[{"text": "orphan-out"}]]},
+        run_id="llm-orphan",
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["body"]["trace"]["name"] == "ChatOpenAI"
+
+
+def test_langsmith_ghost_parent_on_nested_chain_stays_one_root(monkeypatch):
+    import uuid
+
+    root_id = str(uuid.uuid4())
+    ghost_id = str(uuid.uuid4())
+    child_id = str(uuid.uuid4())
+    dotted = (
+        f"20240101T000000000000Z{root_id}.20240101T000001000000Z{ghost_id}"
+    )
+
+    class _Tree:
+        id = ghost_id
+        dotted_order = dotted
+
+    monkeypatch.setattr(
+        "uselemma_tracing.langsmith_parent._get_tracing_context",
+        lambda: {"parent": _Tree()},
+    )
+
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+    )
+    handler.on_chain_start({"name": "support-agent"}, "hello", run_id=root_id)
+    handler.on_chain_start(
+        {"name": "inner"},
+        "hello",
+        run_id=child_id,
+        parent_run_id=ghost_id,
+    )
+    handler.on_chain_end("inner-out", run_id=child_id)
+    handler.on_chain_end("hello", run_id=root_id)
+
+    assert len(calls) == 1
+    trace = calls[0]["body"]["trace"]
+    assert trace["name"] == "support-agent"
+    assert len(trace["spans"]) == 1
+    assert trace["spans"][0]["name"] == "inner"
+
+
 def test_langchain_records_errors():
     calls = []
     handler = langchain(

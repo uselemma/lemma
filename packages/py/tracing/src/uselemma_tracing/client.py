@@ -57,6 +57,10 @@ except PackageNotFoundError:
 _SDK_USER_AGENT = f"uselemma-tracing/{_SDK_VERSION}"
 
 
+def _merge_sdk_user_agent(headers: dict[str, str]) -> dict[str, str]:
+    return {"User-Agent": _SDK_USER_AGENT, **headers}
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -1439,7 +1443,7 @@ class Lemma:
         def wrapped(
             url: str, headers: dict[str, str], body: bytes
         ) -> tuple[int, str]:
-            result = transport(url, headers, body)
+            result = transport(url, _merge_sdk_user_agent(headers), body)
             if len(result) >= 3:
                 self._last_response_headers = dict(result[2])
                 return result[0], result[1]
@@ -1508,7 +1512,7 @@ class Lemma:
         request = urllib.request.Request(
             url,
             data=body,
-            headers={"User-Agent": _SDK_USER_AGENT, **headers},
+            headers=headers,
             method="POST",
         )
         try:
@@ -1527,7 +1531,7 @@ class Lemma:
     ) -> tuple[int, str, dict[str, str]]:
         request = urllib.request.Request(
             url,
-            headers={"User-Agent": _SDK_USER_AGENT, **headers},
+            headers=_merge_sdk_user_agent(headers),
             method="GET",
         )
         try:

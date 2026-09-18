@@ -34,11 +34,12 @@ def test_default_urllib_transport_identifies_the_sdk(monkeypatch):
 
     monkeypatch.setattr("uselemma_tracing.client.urllib.request.urlopen", urlopen)
 
-    Lemma._urllib_transport(
-        "https://api.example.test/traces/ingest",
-        {"Authorization": "Bearer key"},
-        b"{}",
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        base_url="https://api.example.test",
     )
+    lemma.trace("support-agent", lambda _trace: "ok")
     Lemma._urllib_get(
         "https://api.example.test/traces/ingest-status",
         {"Authorization": "Bearer key"},
@@ -49,6 +50,43 @@ def test_default_urllib_transport_identifies_the_sdk(monkeypatch):
         request.get_header("User-agent").startswith("uselemma-tracing/")
         for request in requests
     )
+
+
+def test_custom_transport_receives_sdk_user_agent():
+    seen = {}
+
+    def transport(_url, headers, _body):
+        seen.update(headers)
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    lemma.trace("support-agent", lambda _trace: "ok")
+
+    assert seen["User-Agent"].startswith("uselemma-tracing/")
+    assert seen["Authorization"] == "Bearer key"
+    assert seen["Content-Type"] == "application/json"
+
+
+def test_custom_transport_lets_caller_user_agent_win():
+    seen = {}
+
+    def transport(_url, headers, _body):
+        seen.update(headers)
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    lemma.transport(
+        "https://api.example.test/traces/ingest",
+        {
+            "Authorization": "Bearer key",
+            "Content-Type": "application/json",
+            "User-Agent": "my-app/1.0",
+        },
+        b"{}",
+    )
+
+    assert seen["User-Agent"] == "my-app/1.0"
+    assert seen["Authorization"] == "Bearer key"
 
 
 def test_lemma_trace_posts_completed_trace():
