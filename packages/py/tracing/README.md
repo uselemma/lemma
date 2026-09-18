@@ -298,8 +298,23 @@ result = graph.invoke(
 )
 ```
 
-Prompts, tool inputs, outputs, generated text, and error messages are always
-recorded.
+LangGraph middleware hooks often receive the full graph state, so one turn
+can POST megabytes of duplicated history. Drop hook nodes by exact name,
+fnmatch pattern, or predicate. Children nest under the nearest included
+ancestor. `before_send`, `max_payload_bytes`, and
+`deduplicate_span_content` are forwarded when the handler constructs
+`Lemma`:
+
+```python
+handler = langgraph(
+    exclude_span_names=["*.awrap_model_call"],
+    # or include_span=lambda name: "awrap_model_call" not in name,
+    max_payload_bytes=256_000,
+)
+```
+
+Prompts, tool inputs, outputs, generated text, and error messages are recorded
+unless you drop the span or redact them in `before_send`.
 
 ## Supported Contract Fields
 
@@ -322,11 +337,14 @@ Use `attributes` for raw attributes that do not yet have a native SDK keyword.
 
 ## Configuration
 
-| Option       | Environment variable | Default                   |
-| ------------ | -------------------- | ------------------------- |
-| `api_key`    | `LEMMA_API_KEY`      | Required                  |
-| `project_id` | `LEMMA_PROJECT_ID`   | Required                  |
-| `base_url`   | none                 | `https://api.uselemma.ai` |
+| Option                      | Environment variable | Default                   |
+| --------------------------- | -------------------- | ------------------------- |
+| `api_key`                   | `LEMMA_API_KEY`      | Required                  |
+| `project_id`                | `LEMMA_PROJECT_ID`   | Required                  |
+| `base_url`                  | none                 | `https://api.uselemma.ai` |
+| `before_send`               | none                 | none                      |
+| `max_payload_bytes`         | none                 | none (no cap)             |
+| `deduplicate_span_content`  | none                 | `False`                   |
 
 The SDK sends to `{base_url}/traces/ingest`.
 
@@ -340,6 +358,50 @@ lemma = Lemma(
     base_url="https://api.uselemma.ai",
 )
 ```
+
+### Redacting, dropping, and shrinking payloads
+
+`before_send` runs on the assembled ingest dict after optional SDK shaping
+(content dedup and payload cap) and before JSON serialization. Return a
+payload to send, or `None` to drop the request. Transport, User-Agent, and
+error handling stay with the SDK — you do not need a fake `transport` to
+scrub PHI.
+
+```python
+from uselemma_tracing import STRUCTURAL_PAYLOAD_KEYS, Lemma
+
+def scrub(payload):
+    # Drop a trace you must not export:
+    # return None
+    payload["trace"]["input"] = "[redacted]"
+    return payload
+
+lemma = Lemma(before_send=scrub)
+```
+
+If `before_send` raises, `ingest()` raises so you can retry; automatic
+delivery (`trace` / LangChain flush) fails open and does not send. Returning
+`None` is a successful drop on both paths.
+
+**Structural keys** identify, time, and classify the tree. Redactors must
+keep them (and should leave `__lemma_truncated__` / `__lemma_deduplicated__`
+markers in place, scrubbing only `preview` text if needed):
+
+- envelope: `project_id`
+- identities: `id`, `parent_id`, `thread_id`, `user_id`
+- names: `name`, `model`, `tool_name`, `release`
+- timing: `started_at`, `ended_at`, `duration_ms`
+- classification: `type`, `status`, message `role`
+
+`max_payload_bytes` replaces the largest `input` / `output` / `error` fields
+and oversized `metadata` / `attributes` values with an explicit marker
+(`__lemma_truncated__`, `kind`, `original_bytes`, plus `preview` or
+`item_count` / `key_count`). Structural keys are never replaced.
+
+`deduplicate_span_content=True` replaces a span `input` that is
+byte-identical to its parent's `input` with
+`{__lemma_deduplicated__: true, identical_to: "parent.input", parent_id: ...}`.
+Outputs are left alone so a rewritten hook result is not discarded.
 
 ## Debug Mode
 

@@ -1001,3 +1001,180 @@ def test_trace_does_not_resend_a_successful_run_as_a_failed_one():
     assert bodies[0]["trace"].get("status") is None
     assert bodies[0]["trace"].get("error") is None
     assert bodies[0]["trace"]["output"] == "ok"
+
+
+def test_before_send_can_scrub_without_a_custom_transport():
+    calls = []
+
+    def before_send(payload):
+        payload["trace"]["input"] = "[redacted]"
+        payload["trace"]["spans"][0]["input"] = {"query": "[redacted]"}
+        return payload
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=transport,
+        before_send=before_send,
+    )
+    lemma.trace(
+        "support-agent",
+        lambda trace: (
+            trace.record_tool(name="search_docs", input={"query": "ssn 123-45-6789"}),
+            "ok",
+        )[-1],
+        input="patient ssn 123-45-6789",
+    )
+
+    assert calls[0]["trace"]["input"] == "[redacted]"
+    assert calls[0]["trace"]["spans"][0]["input"] == {"query": "[redacted]"}
+    assert calls[0]["trace"]["output"] == "ok"
+
+
+def test_before_send_none_drops_without_calling_transport():
+    calls = []
+
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: calls.append(1) or (201, "{}"),
+        before_send=lambda _payload: None,
+    )
+
+    assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+    lemma.ingest(
+        TraceContext(name="manual", input="x"),
+        started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    assert calls == []
+
+
+def test_before_send_unchanged_uses_default_transport_user_agent(monkeypatch):
+    requests = []
+
+    class Response:
+        status = 201
+        headers = {}
+
+        def read(self):
+            return b"{}"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def urlopen(request):
+        requests.append(request)
+        return Response()
+
+    monkeypatch.setattr("uselemma_tracing.client.urllib.request.urlopen", urlopen)
+
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        base_url="https://api.example.test",
+        before_send=lambda payload: payload,
+    )
+    lemma.trace("support-agent", lambda _trace: "ok")
+
+    assert len(requests) == 1
+    assert requests[0].get_header("User-agent").startswith("uselemma-tracing/")
+    assert requests[0].get_header("Authorization") == "Bearer key"
+    assert json.loads(requests[0].data.decode())["trace"]["output"] == "ok"
+
+
+def test_before_send_exception_fails_open_on_automatic_delivery():
+    def before_send(_payload):
+        raise RuntimeError("cannot scrub")
+
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: (_ for _ in ()).throw(AssertionError("sent")),
+        before_send=before_send,
+    )
+    assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+
+
+def test_before_send_exception_raises_on_ingest():
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: (201, "{}"),
+        before_send=lambda _payload: (_ for _ in ()).throw(RuntimeError("cannot scrub")),
+    )
+    with pytest.raises(RuntimeError, match="cannot scrub"):
+        lemma.ingest(
+            TraceContext(name="manual"),
+            started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+
+def test_max_payload_bytes_truncates_before_transport():
+    calls = []
+
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda _url, _headers, body: calls.append(body) or (201, "{}"),
+        max_payload_bytes=1_500,
+    )
+    lemma.trace(
+        "support-agent",
+        lambda trace: (
+            trace.record_span(name="hook", input={"messages": ["x" * 4000]}),
+            "ok",
+        )[-1],
+        input="x" * 4000,
+    )
+
+    body = calls[0]
+    assert len(body) <= 1_500
+    payload = json.loads(body.decode())
+    assert payload["trace"]["input"]["__lemma_truncated__"] is True
+    assert payload["trace"]["name"] == "support-agent"
+    assert payload["trace"]["spans"][0]["name"] == "hook"
+
+
+def test_deduplicate_span_content_stores_parent_reference():
+    calls = []
+    history = [{"role": "user", "content": "same"}]
+
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda _url, _headers, body: calls.append(json.loads(body.decode()))
+        or (201, "{}"),
+        deduplicate_span_content=True,
+    )
+
+    def run(trace):
+        parent = trace.start_span(name="agent", input=history)
+        child = trace.start_span(
+            name="hook",
+            parent_id=parent.id,
+            input=[{"role": "user", "content": "same"}],
+        )
+        child.end(output={"rewritten": True})
+        parent.end()
+        return "ok"
+
+    lemma.trace("support-agent", run)
+    child = calls[0]["trace"]["spans"][1]
+    assert child["input"] == {
+        "__lemma_deduplicated__": True,
+        "identical_to": "parent.input",
+        "parent_id": calls[0]["trace"]["spans"][0]["id"],
+    }
+    assert child["output"] == {"rewritten": True}
+
+
+def test_rejects_non_positive_max_payload_bytes():
+    with pytest.raises(ValueError, match="max_payload_bytes"):
+        Lemma(api_key="key", project_id=PROJECT_ID, max_payload_bytes=0)

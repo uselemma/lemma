@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
+from fnmatch import fnmatch
 from typing import Any
 
 from .client import Lemma, SpanHandle, TraceContext, _duration_ms, _now
+from .payload import BeforeSend
 from .error_message import describe_error
 from .model import pick_generation_model_identity, pick_model_identity
 from .tool_result import tool_result_error
@@ -92,6 +95,9 @@ class _StoredRun:
     # Owned LLM ended with tool_calls — keep stub so later tools/generations
     # can nest, and defer finalize until a final answer or flush.
     defer_finalize: bool = False
+    # Filtered out: keep the run so children nest under the nearest included
+    # ancestor, but never end() the passthrough handle.
+    skipped: bool = False
 
 
 @dataclass
@@ -591,10 +597,15 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         release: str | None = None,
         base_url: str = "https://api.uselemma.ai",
         transport: Any = None,
+        before_send: BeforeSend | None = None,
+        max_payload_bytes: int | None = None,
+        deduplicate_span_content: bool = False,
         agent_name: str | None = None,
         metadata: dict[str, Any] | None = None,
         thread_id_key: str = "thread_id",
         user_id_key: str | None = None,
+        exclude_span_names: Iterable[str] | None = None,
+        include_span: Callable[[str], bool] | None = None,
     ) -> None:
         self.lemma = lemma or Lemma(
             api_key=api_key,
@@ -602,13 +613,62 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
             release=release,
             base_url=base_url,
             transport=transport,
+            before_send=before_send,
+            max_payload_bytes=max_payload_bytes,
+            deduplicate_span_content=deduplicate_span_content,
         )
         self.agent_name = agent_name
         self.metadata = metadata or {}
         self.thread_id_key = thread_id_key
         self.user_id_key = user_id_key
+        self.exclude_span_names = tuple(exclude_span_names or ())
+        self.include_span = include_span
         self._runs: dict[str, _StoredRun] = {}
         self._traces: dict[str, _StoredTrace] = {}
+
+    def _keep_span(self, name: str) -> bool:
+        if any(
+            name == pattern or fnmatch(name, pattern)
+            for pattern in self.exclude_span_names
+        ):
+            return False
+        if self.include_span is not None:
+            return bool(self.include_span(name))
+        return True
+
+    def _store_run(
+        self,
+        run_id: str,
+        *,
+        name: str,
+        kind: str,
+        started_at: datetime,
+        owning_trace_id: str,
+        root_run_id: str,
+        owns_trace: bool,
+        parent_run_id: str | None,
+        start_handle: Callable[[], SpanHandle],
+    ) -> _StoredRun:
+        skipped = not self._keep_span(name)
+        handle: SpanHandle | None = None
+        if skipped:
+            if not owns_trace:
+                parent = self._parent_run(parent_run_id)
+                handle = parent.handle if parent is not None else None
+        else:
+            handle = start_handle()
+        run = _StoredRun(
+            owning_trace_id=owning_trace_id,
+            root_run_id=root_run_id,
+            kind=kind,
+            started_at=started_at,
+            owns_trace=owns_trace,
+            parent_run_id=str(parent_run_id) if parent_run_id is not None else None,
+            handle=handle,
+            skipped=skipped,
+        )
+        self._runs[str(run_id)] = run
+        return run
 
     def _trace_name(self, serialized: Any, fallback: str) -> str:
         return self.agent_name or _serialized_name(serialized, fallback)
@@ -840,24 +900,25 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
 
         self._apply_identity(stored, metadata, tags)
         self._note_bounds(stored, started_at, None)
-        handle = stored.context.start_span(
+        self._store_run(
+            str(run_id),
             name=chain_name,
-            parent_id=parent.handle.id if parent.handle is not None else None,
-            input=inputs,
-            metadata=self.metadata,
-            attributes=_langchain_attributes(
-                str(run_id), parent_run_id, run_type or "chain"
-            ),
-            started_at=started_at,
-        )
-        self._runs[str(run_id)] = _StoredRun(
-            owning_trace_id=parent.owning_trace_id,
-            root_run_id=parent.root_run_id,
             kind="chain",
             started_at=started_at,
+            owning_trace_id=parent.owning_trace_id,
+            root_run_id=parent.root_run_id,
             owns_trace=False,
-            parent_run_id=str(parent_run_id) if parent_run_id is not None else None,
-            handle=handle,
+            parent_run_id=parent_run_id,
+            start_handle=lambda: stored.context.start_span(
+                name=chain_name,
+                parent_id=parent.handle.id if parent.handle is not None else None,
+                input=inputs,
+                metadata=self.metadata,
+                attributes=_langchain_attributes(
+                    str(run_id), parent_run_id, run_type or "chain"
+                ),
+                started_at=started_at,
+            ),
         )
 
     def on_chain_end(self, outputs: Any, *, run_id: str, **_: Any) -> None:
@@ -867,7 +928,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         ended_at = _now()
         stored = self._traces.get(run.owning_trace_id)
 
-        if run.handle is not None:
+        if run.handle is not None and not run.skipped:
             run.handle.end(
                 output=outputs,
                 ended_at=ended_at,
@@ -889,7 +950,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         message = describe_error(error)
         stored = self._traces.get(run.owning_trace_id)
 
-        if run.handle is not None:
+        if run.handle is not None and not run.skipped:
             run.handle.end(
                 status="ERROR",
                 error=message,
@@ -942,28 +1003,30 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
             or pick_model_identity(serialized)
             or pick_model_identity(invocation_params)
         )
-        handle = stored.context.start_generation(
-            name=_serialized_name(serialized, "langchain-llm"),
-            parent_id=parent_id,
-            input=prompts,
-            metadata=self.metadata,
-            model=model,
-            llm_provider=provider,
-            llm_input_messages=[
-                {"role": "user", "content": prompt} for prompt in prompts
-            ],
-            llm_invocation_parameters=invocation_params,
-            attributes=_langchain_attributes(str(run_id), parent_run_id, "llm"),
-            started_at=started_at,
-        )
-        self._runs[str(run_id)] = _StoredRun(
-            owning_trace_id=owning_trace_id,
-            root_run_id=root_run_id,
+        generation_name = _serialized_name(serialized, "langchain-llm")
+        self._store_run(
+            str(run_id),
+            name=generation_name,
             kind="llm",
             started_at=started_at,
+            owning_trace_id=owning_trace_id,
+            root_run_id=root_run_id,
             owns_trace=owns_trace,
-            parent_run_id=str(parent_run_id) if parent_run_id is not None else None,
-            handle=handle,
+            parent_run_id=parent_run_id,
+            start_handle=lambda: stored.context.start_generation(
+                name=generation_name,
+                parent_id=parent_id,
+                input=prompts,
+                metadata=self.metadata,
+                model=model,
+                llm_provider=provider,
+                llm_input_messages=[
+                    {"role": "user", "content": prompt} for prompt in prompts
+                ],
+                llm_invocation_parameters=invocation_params,
+                attributes=_langchain_attributes(str(run_id), parent_run_id, "llm"),
+                started_at=started_at,
+            ),
         )
 
     def on_chat_model_start(
@@ -1008,32 +1071,34 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
             or pick_model_identity(serialized)
             or pick_model_identity(invocation_params)
         )
-        handle = stored.context.start_generation(
-            name=_serialized_name(serialized, "langchain-chat-model"),
-            parent_id=parent_id,
-            input=normalized,
-            metadata=self.metadata,
-            model=model,
-            llm_provider=provider,
-            llm_input_messages=normalized,
-            llm_invocation_parameters=invocation_params,
-            attributes=_langchain_attributes(str(run_id), parent_run_id, "llm"),
-            started_at=started_at,
-        )
-        self._runs[str(run_id)] = _StoredRun(
-            owning_trace_id=owning_trace_id,
-            root_run_id=root_run_id,
+        chat_name = _serialized_name(serialized, "langchain-chat-model")
+        self._store_run(
+            str(run_id),
+            name=chat_name,
             kind="llm",
             started_at=started_at,
+            owning_trace_id=owning_trace_id,
+            root_run_id=root_run_id,
             owns_trace=owns_trace,
-            parent_run_id=str(parent_run_id) if parent_run_id is not None else None,
-            handle=handle,
+            parent_run_id=parent_run_id,
+            start_handle=lambda: stored.context.start_generation(
+                name=chat_name,
+                parent_id=parent_id,
+                input=normalized,
+                metadata=self.metadata,
+                model=model,
+                llm_provider=provider,
+                llm_input_messages=normalized,
+                llm_invocation_parameters=invocation_params,
+                attributes=_langchain_attributes(str(run_id), parent_run_id, "llm"),
+                started_at=started_at,
+            ),
         )
 
     def on_llm_end(self, response: Any, *, run_id: str, **_: Any) -> None:
         run_key = str(run_id)
         run = self._runs.get(run_key)
-        if run is None or run.handle is None:
+        if run is None:
             return
         ended_at = _now()
         structured = llm_structured_output(response)
@@ -1042,16 +1107,17 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         awaiting_tools = soft_error is None and _has_tool_calls(structured)
 
         model = pick_generation_model_identity(response)
-        run.handle.end(
-            output=structured if soft_error is None else None,
-            error=soft_error,
-            status="ERROR" if soft_error else None,
-            ended_at=ended_at,
-            duration_ms=_duration_ms(run.started_at, ended_at),
-            llm_output_messages=(output_messages if soft_error is None else None),
-            usage=llm_token_usage(response),
-            **({"model": model} if model else {}),
-        )
+        if run.handle is not None and not run.skipped:
+            run.handle.end(
+                output=structured if soft_error is None else None,
+                error=soft_error,
+                status="ERROR" if soft_error else None,
+                ended_at=ended_at,
+                duration_ms=_duration_ms(run.started_at, ended_at),
+                llm_output_messages=(output_messages if soft_error is None else None),
+                usage=llm_token_usage(response),
+                **({"model": model} if model else {}),
+            )
 
         stored = self._traces.get(run.owning_trace_id)
         if stored is not None:
@@ -1103,7 +1169,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
             return
         ended_at = _now()
         message = describe_error(error)
-        if run.handle is not None:
+        if run.handle is not None and not run.skipped:
             run.handle.end(
                 status="ERROR",
                 error=message,
@@ -1153,23 +1219,24 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         self._note_bounds(stored, started_at, None)
 
         name = _serialized_name(serialized, "langchain-tool")
-        handle = stored.context.start_tool(
+        self._store_run(
+            str(run_id),
             name=name,
-            parent_id=parent_id,
-            tool_name=name,
-            input=input_str,
-            metadata=self.metadata,
-            attributes=_langchain_attributes(str(run_id), parent_run_id, "tool"),
-            started_at=started_at,
-        )
-        self._runs[str(run_id)] = _StoredRun(
-            owning_trace_id=owning_trace_id,
-            root_run_id=root_run_id,
             kind="tool",
             started_at=started_at,
+            owning_trace_id=owning_trace_id,
+            root_run_id=root_run_id,
             owns_trace=owns_trace,
-            parent_run_id=str(parent_run_id) if parent_run_id is not None else None,
-            handle=handle,
+            parent_run_id=parent_run_id,
+            start_handle=lambda: stored.context.start_tool(
+                name=name,
+                parent_id=parent_id,
+                tool_name=name,
+                input=input_str,
+                metadata=self.metadata,
+                attributes=_langchain_attributes(str(run_id), parent_run_id, "tool"),
+                started_at=started_at,
+            ),
         )
 
     def on_tool_end(self, output: Any, *, run_id: str, **_: Any) -> None:
@@ -1178,7 +1245,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
             return
         ended_at = _now()
         soft_error = tool_result_error(output)
-        if run.handle is not None:
+        if run.handle is not None and not run.skipped:
             if soft_error is not None:
                 run.handle.end(
                     status="ERROR",
@@ -1210,7 +1277,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
             return
         ended_at = _now()
         message = describe_error(error)
-        if run.handle is not None:
+        if run.handle is not None and not run.skipped:
             run.handle.end(
                 status="ERROR",
                 error=message,
@@ -1259,22 +1326,24 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         self._apply_identity(stored, metadata, tags)
         self._note_bounds(stored, started_at, None)
 
-        handle = stored.context.start_span(
-            name=_serialized_name(serialized, "langchain-retriever"),
-            parent_id=parent_id,
-            input=query,
-            metadata=self.metadata,
-            attributes=_langchain_attributes(str(run_id), parent_run_id, "retriever"),
-            started_at=started_at,
-        )
-        self._runs[str(run_id)] = _StoredRun(
-            owning_trace_id=owning_trace_id,
-            root_run_id=root_run_id,
+        retriever_name = _serialized_name(serialized, "langchain-retriever")
+        self._store_run(
+            str(run_id),
+            name=retriever_name,
             kind="retriever",
             started_at=started_at,
+            owning_trace_id=owning_trace_id,
+            root_run_id=root_run_id,
             owns_trace=owns_trace,
-            parent_run_id=str(parent_run_id) if parent_run_id is not None else None,
-            handle=handle,
+            parent_run_id=parent_run_id,
+            start_handle=lambda: stored.context.start_span(
+                name=retriever_name,
+                parent_id=parent_id,
+                input=query,
+                metadata=self.metadata,
+                attributes=_langchain_attributes(str(run_id), parent_run_id, "retriever"),
+                started_at=started_at,
+            ),
         )
 
     def on_retriever_end(self, documents: list[Any], *, run_id: str, **_: Any) -> None:
@@ -1282,7 +1351,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         if run is None:
             return
         ended_at = _now()
-        if run.handle is not None:
+        if run.handle is not None and not run.skipped:
             run.handle.end(
                 output=documents,
                 ended_at=ended_at,
@@ -1303,7 +1372,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
             return
         ended_at = _now()
         message = describe_error(error)
-        if run.handle is not None:
+        if run.handle is not None and not run.skipped:
             run.handle.end(
                 status="ERROR",
                 error=message,

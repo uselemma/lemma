@@ -721,3 +721,175 @@ def test_handler_is_langchain_base_callback_handler():
         project_id=PROJECT_ID,
     )
     assert isinstance(handler, BaseCallbackHandler)
+
+
+def _issue_92_history():
+    return [{"type": "human", "content": "x" * 4000}, {"type": "ai", "content": "y" * 4000}] * 12
+
+
+def _issue_92_turn(handler, history):
+    import uuid
+
+    root = str(uuid.uuid4())
+    handler.on_chain_start(
+        {"name": "agent"},
+        {"messages": history},
+        run_id=root,
+        parent_run_id=None,
+        metadata={"thread_id": "t"},
+    )
+    for index in range(11):
+        hook_id = str(uuid.uuid4())
+        llm_id = str(uuid.uuid4())
+        handler.on_chain_start(
+            {"name": f"Middleware{index}.awrap_model_call"},
+            {"messages": history},
+            run_id=hook_id,
+            parent_run_id=root,
+        )
+        handler.on_chat_model_start(
+            {
+                "id": ["langchain", "chat_models", "openai", "ChatOpenAI"],
+                "kwargs": {"model": "gpt-4o"},
+            },
+            [[{"type": "human", "content": "latest"}]],
+            run_id=llm_id,
+            parent_run_id=hook_id,
+        )
+        handler.on_llm_end({"generations": [[{"text": "ok"}]]}, run_id=llm_id)
+        handler.on_chain_end({"messages": history}, run_id=hook_id, parent_run_id=root)
+    handler.on_chain_end({"messages": history}, run_id=root, parent_run_id=None)
+
+
+def test_exclude_span_names_drops_middleware_hooks_and_nests_children():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+        exclude_span_names=["*.awrap_model_call"],
+    )
+    history = _issue_92_history()
+    _issue_92_turn(handler, history)
+
+    body = calls[0]["body"]
+    names = [span["name"] for span in body["trace"]["spans"]]
+    assert all("awrap_model_call" not in name for name in names)
+    assert names.count("ChatOpenAI") == 11
+    assert all(span.get("parent_id") is None for span in body["trace"]["spans"])
+
+
+def test_include_span_predicate_drops_middleware_hooks():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+        include_span=lambda name: "awrap_model_call" not in name,
+    )
+    _issue_92_turn(handler, _issue_92_history())
+
+    names = [span["name"] for span in calls[0]["body"]["trace"]["spans"]]
+    assert all("awrap_model_call" not in name for name in names)
+    assert names.count("ChatOpenAI") == 11
+
+
+def test_issue_92_filtered_hooks_are_not_a_2mb_post():
+    posted = []
+
+    def transport(_url, _headers, body):
+        posted.append(body)
+        return 201, '{"ok":true}'
+
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=transport,
+        exclude_span_names=["*.awrap_model_call"],
+    )
+    _issue_92_turn(handler, _issue_92_history())
+
+    assert posted
+    assert len(posted[0]) < 200_000
+
+
+def test_issue_92_payload_cap_keeps_post_under_budget():
+    posted = []
+
+    def transport(_url, _headers, body):
+        posted.append(body)
+        return 201, '{"ok":true}'
+
+    unfiltered = []
+
+    def measure(_url, _headers, body):
+        unfiltered.append(body)
+        return 201, '{"ok":true}'
+
+    baseline = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=measure,
+    )
+    _issue_92_turn(baseline, _issue_92_history())
+    assert len(unfiltered[0]) > 1_000_000
+
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=transport,
+        max_payload_bytes=64_000,
+    )
+    _issue_92_turn(handler, _issue_92_history())
+
+    assert posted
+    assert len(posted[0]) <= 64_000
+    payload = json.loads(posted[0].decode())
+    assert payload["trace"]["name"]
+    assert payload["trace"]["spans"]
+    assert any(
+        isinstance(span.get("input"), dict) and span["input"].get("__lemma_truncated__")
+        for span in payload["trace"]["spans"]
+    )
+
+
+def test_excluded_intermediate_span_keeps_child_under_included_ancestor():
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+        exclude_span_names=["Middleware0.awrap_model_call"],
+    )
+
+    handler.on_chain_start({"name": "agent"}, {"input": "hi"}, run_id="root")
+    handler.on_chain_start(
+        {"name": "answer"},
+        {"input": "hi"},
+        run_id="node",
+        parent_run_id="root",
+    )
+    handler.on_chain_start(
+        {"name": "Middleware0.awrap_model_call"},
+        {"input": "hi"},
+        run_id="hook",
+        parent_run_id="node",
+    )
+    handler.on_chat_model_start(
+        {
+            "id": ["langchain", "chat_models", "openai", "ChatOpenAI"],
+            "kwargs": {"model": "gpt-4o"},
+        },
+        [[{"type": "human", "content": "hi"}]],
+        run_id="llm",
+        parent_run_id="hook",
+    )
+    handler.on_llm_end({"generations": [[{"text": "ok"}]]}, run_id="llm")
+    handler.on_chain_end({"output": "ok"}, run_id="hook")
+    handler.on_chain_end({"output": "ok"}, run_id="node")
+    handler.on_chain_end({"output": "ok"}, run_id="root")
+
+    spans = calls[0]["body"]["trace"]["spans"]
+    names = [span["name"] for span in spans]
+    assert names == ["answer", "ChatOpenAI"]
+    assert spans[1]["parent_id"] == spans[0]["id"]
