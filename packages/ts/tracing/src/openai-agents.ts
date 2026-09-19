@@ -9,6 +9,9 @@ const INTEGRATION_ATTRS = {
   "lemma.sdk.integration": "openai-agents",
 } as const;
 
+const NO_OUTPUT = { result: "none" } as const;
+
+
 export type OpenAIAgentsTrace = {
   traceId: string;
   name: string;
@@ -445,9 +448,17 @@ export function openAIAgents(
       noteRootOutput(storedTrace, parsedOutput);
     }
 
+    const recordedOutput =
+      !errorMessage &&
+      parsedOutput == null &&
+      (data.type === "function" ||
+        (span.parentId != null && !isGenerationType(data.type)))
+        ? { ...NO_OUTPUT }
+        : parsedOutput;
+
     handle.end({
       // Failures must not invent an output — record error instead.
-      output: parsedOutput,
+      output: recordedOutput,
       error: errorMessage,
       status: errorMessage ? "ERROR" : undefined,
       model: pickModelIdentity(data),
