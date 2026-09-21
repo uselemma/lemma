@@ -23,7 +23,7 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 
 ### Planning & content type
 
-- Every page has a plan (overview, goal, audience, content plan, open questions) referenced or linked
+- Every page carries its plan in frontmatter: `meta.goal` (verb-driven outcome), `meta.audience`, `meta.contentType`. Do not require a separate linked content-plan page
 - Content type declared in `meta.contentType`: `Tutorial`, `How-to`, `Reference`, `Conceptual`, `Troubleshooting`, or `Landing`
 - Title is user-shaped (the user's question), not feature-shaped (the engineer's name)
 - Page does one job: tutorial OR how-to OR reference, not three at once
@@ -38,7 +38,7 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 - Sentences under 20 words target
 - Contractions encouraged (`you'll`, `it's`) for warmth
 - Present tense unless describing future behavior
-- Limit `we`: only for deliberate Vercel actions ("we recommend", "we deprecated"), never as a stand-in for "you"
+- Limit `we`: only for deliberate product actions ("we recommend", "we deprecated"), never as a stand-in for "you"
 - No rhetorical questions (sounds like marketing)
 - Second-read test: read each sentence once at speech pace; if you re-read to parse it, name the subject, the action, and the consequence (kill metaphor verbs and pronouns reaching back several sentences)
 
@@ -138,7 +138,7 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 ### Punctuation & typography
 
 - Never em dashes (`—`) or dashes (`-`) as punctuation; use colons, commas, periods, or rephrase
-- Curly quotes `"` `"` and `'` `'`, not straight `"` or `'`
+- Curly quotes in Markdown prose (`“ ”`, `’`). Straight quotes in YAML, JSX, fenced/inline code, and JSX/HTML demo data
 - Ellipsis `…`, not three dots `...`
 - Loading states end with `…`: `Loading…`, `Saving…`
 - Non-breaking spaces in `10&nbsp;MB`, `⌘&nbsp;K`, brand names
@@ -155,9 +155,7 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 
 - Define every term the first time it appears, link to its conceptual page
 - Anchor text names the destination; never bare URLs or `here`/`link`
-- Dashboard deep links use the standard format: `https://vercel.com/d?to=%2F%5Bteam%5D%2F~%2Fai-gateway%2Fapi-keys&title=AI+Gateway+API+Keys`
-- Link to canonical product docs where relevant: `https://vercel.com/docs/vercel-sandbox`, `https://vercel.com/docs/ai-gateway`
-- AI Gateway model catalog: `https://vercel.com/ai-gateway/models`
+- Do not require Vercel dashboard deep links, AI Gateway catalog URLs, or `vercel/examples` sample repos
 
 ### Models in examples
 
@@ -180,15 +178,15 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 ### Quality checklist (required boxes are non-negotiable)
 
 - **Findability**: sidebar bucket set via Mintlify `sidebarTitle` / docs.json groups; do not require `meta.category`
-- **Accuracy**: code samples actually run; screenshots map 1:1 to current UI and use the ACME demo account
+- **Accuracy**: code samples actually run; screenshots map 1:1 to current UI. Do not require ACME demo screenshots
 - **Relevance**: code samples included where applicable (TypeScript first; `<Steps/>` for multi-step flows)
-- **Clarity**: overview addresses who/what/where/why; high-level use cases laid out; quickstart for new products; prerequisites listed on tutorials; sample repo in `vercel/examples` for multi-step tutorials; steps detailed not vague; visual aids in confusing sections; simplest path recommended when multiple exist
-- **Completeness**: limits documented; all-limits tables updated; content plan followed and goals addressed
+- **Clarity**: overview addresses who/what/where/why; high-level use cases laid out; quickstart for new products; prerequisites listed on tutorials; steps detailed not vague; visual aids in confusing sections; simplest path recommended when multiple exist. Do not require a `vercel/examples` sample repo
+- **Completeness**: limits documented; frontmatter `meta.goal` addressed
 - **Readability**: nav names scannable and use action verbs; content types accurately used; subheadings descriptive; topics start with summaries; code blocks formatted correctly; active voice where warranted
 
 ### Review
 
-- PR description links to the content plan, lists what to review, and links the preview URL
+- PR description lists what to review and links the preview URL when one exists
 - Ping the team via the PR link (not the plan or preview directly)
 - Author is accountable, not the reviewer; reviewers are liberal with approvals
 - Suggestion comments for small text fixes; preview comments for anything bigger
@@ -209,7 +207,7 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 - Subheadings that are single generic words: `Overview`, `Caveats`, `Notes`
 - Bold used for emphasis instead of UI element or critical fact
 - Page or section without an opening summary
-- Straight quotes (`"`, `'`) instead of curly (`"`, `'`)
+- Straight quotes in Markdown prose instead of curly (`“ ”`, `’`). Do not flag straight quotes in YAML, JSX, or code
 - Three dots (`...`) instead of ellipsis (`…`)
 - Acronyms used before being spelled out
 - Bare unit numbers (`64KB`, `5kb`, `200MS`) instead of `64 KB`, `5 KB`, `200 ms`
@@ -256,7 +254,7 @@ content/docs/sandbox.mdx:118 - em dash in prose, replace with colon/comma
 content/docs/ai-gateway.mdx:5 - title case in H1; sentence case only
 content/docs/ai-gateway.mdx:18 - acronym AI Gateway used before being spelled out
 content/docs/ai-gateway.mdx:34 - bold for emphasis, not UI element
-content/docs/ai-gateway.mdx:52 - `anthropic/claude-sonnet-4` outdated; use `anthropic/claude-opus-4-7`
+content/docs/ai-gateway.mdx:52 - straight quotes in Markdown prose; use curly quotes
 content/docs/ai-gateway.mdx:71 - hard-wrapped paragraph (lines 71-74)
 
 ## content/docs/cron.mdx
