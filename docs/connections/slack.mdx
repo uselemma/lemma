@@ -3,6 +3,8 @@ title: "Slack"
 description: "Issue alerts and Issue Briefs in your Slack workspace, plus the Lemma support channel"
 meta:
   contentType: "How-to"
+  goal: "Configure Slack issue alerts and the Lemma support channel"
+  audience: "Organization owners, admins, and project members"
 ---
 
 Lemma has two separate Slack setups that don’t share configuration: a product integration that delivers alerts into your workspace, and a support channel that connects you directly to the Lemma team. Open a project’s **Settings** in the [Lemma dashboard](https://platform.uselemma.ai) and find **Slack** and **Lemma support channel** to configure either one.
@@ -15,7 +17,7 @@ This delivers issue alerts, and optionally Issue Briefs, into your Slack workspa
   <Step title="Connect the Slack workspace">
     Have an organization owner or admin connect the Slack workspace through OAuth. This connection applies to the whole organization, not one project.
   </Step>
-  <Step title="Choose this project's alert channel">
+  <Step title="Choose this project’s alert channel">
     Select the alert channel for this project. Channel binding is project-scoped, so a connected workspace without a channel selected won’t deliver anything.
   </Step>
   <Step title="Send a test message">
@@ -37,7 +39,7 @@ The Lemma support channel is a private Slack Connect channel owned by Lemma, for
     In Project Settings, find **Lemma support channel**. An organization owner or admin enters the email they use for Slack and requests the channel.
   </Step>
   <Step title="Accept the invitation">
-    Accept Slack's emailed Connect invitation. Status moves from creating to invited to connected.
+    Accept Slack’s emailed Connect invitation. Status moves from creating to invited to connected.
   </Step>
 </Steps>
 

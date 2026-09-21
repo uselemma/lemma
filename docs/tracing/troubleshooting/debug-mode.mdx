@@ -3,6 +3,8 @@ title: "Debug mode"
 description: "Use SDK runtime logs to debug trace delivery and trace shape"
 meta:
   contentType: "Troubleshooting"
+  goal: "Diagnose whether the SDK created, sent, and ingested a trace"
+  audience: "Engineers whose traces are missing, delayed, or malformed"
 ---
 
 Debug mode prints SDK logs from the same runtime where your agent runs. Use it when a trace is missing, delayed, attached incorrectly, or missing child work.
@@ -210,7 +212,7 @@ If a parent span exists but its children appear as siblings, debug the order of 
   </Tab>
 </Tabs>
 
-The child call should happen before `retrieve.end(...)`. In TypeScript, make it from the parent span handle. In Python, pass the parent handle's `id` as `parent_id` when starting the child.
+The child call should happen before `retrieve.end(...)`. In TypeScript, make it from the parent span handle. In Python, pass the parent handle’s `id` as `parent_id` when starting the child.
 
 ### Serverless or streaming handlers
 

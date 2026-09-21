@@ -7,8 +7,9 @@ When writing or reviewing `docs/`, follow [`.agents/skills/writing-guidelines/SK
 Lemma-specific adaptations:
 
 - Mintlify frontmatter uses `title` (H1), `sidebarTitle` (nav label), and `meta.contentType` (`Tutorial`, `How-to`, `Reference`, `Conceptual`, `Troubleshooting`, or `Landing`)
-- Keep straight quotes in MDX source. YAML, JSX, and code fences cannot use curly quotes
-- Example model strings should match the integration's provider, not Vercel AI Gateway catalog IDs
+- Every page’s content plan lives on the page: `meta.goal` (verb-driven) and `meta.audience`. Fill both when you add or rewrite a page
+- Curly quotes in prose (`“ ”`, `’`). Keep straight quotes as YAML, JSX, and code delimiters, and inside fenced/inline code
+- Example model strings should match the integration’s provider, not Vercel AI Gateway catalog IDs
 
 ## Publish protocol
 

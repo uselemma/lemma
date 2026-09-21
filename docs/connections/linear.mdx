@@ -3,6 +3,8 @@ title: "Linear"
 description: "Create, link, and unlink Linear tickets from Lemma issues"
 meta:
   contentType: "How-to"
+  goal: "Create, link, and unlink Linear tickets from Lemma issues"
+  audience: "People who file tickets from Lemma issues"
 ---
 
 Connecting Linear never creates or links a ticket by itself. It makes those actions available at three scopes: organization, project, and person. Set each one up before you expect ticket creation to work end to end.
@@ -13,7 +15,7 @@ Connecting Linear never creates or links a ticket by itself. It makes those acti
 
 You’ll configure this from three places: **Manage organization → Integrations** for the workspace connection, **Settings → Linear** on the project for defaults, and **Account → Profile → Connected accounts** for your own identity.
 
-## Connect the organization's Linear workspace
+## Connect the organization’s Linear workspace
 
 <Steps>
   <Step title="Open organization integrations">
@@ -30,7 +32,7 @@ If the connection starts failing, reconnect from organization settings. Lemma ke
 
 <Steps>
   <Step title="Open project Linear settings">
-    Open the project's **Settings → Linear**.
+    Open the project’s **Settings → Linear**.
   </Step>
   <Step title="Choose team and optional project">
     Select a default Linear team, required before ticket creation works, and optionally a Linear project under that team.
@@ -49,7 +51,7 @@ Ordinary issue assignment inside Lemma doesn’t write to Linear. Combined assig
 
 A Lemma issue can have at most one active Linear ticket, and a Linear ticket can back at most one active Lemma issue. From there:
 
-- **Create** a ticket explicitly, one issue at a time, using the project's team and project defaults. Lemma writes a safe summary and a link back to the issue, never raw prompts or tool output.
+- **Create** a ticket explicitly, one issue at a time, using the project’s team and project defaults. Lemma writes a safe summary and a link back to the issue, never raw prompts or tool output.
 - **Link** to an exact Linear URL or identifier, with a preview and confirmation step. There’s no workspace-wide browsing or backfill.
 - **Unlink** explicitly when you need to replace a link; unlink first, then create or link again.
 

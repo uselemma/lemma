@@ -3,6 +3,8 @@ title: "Cross-process turns"
 description: "Record a host and sandbox as one Lemma trace"
 meta:
   contentType: "How-to"
+  goal: "Record a host and sandbox as one Lemma turn"
+  audience: "Engineers whose agent turn spans processes such as E2B"
 ---
 
 When a user turn spans a host and a sandbox such as E2B, record one Lemma [trace](/tracing/instrumentation/traces). The host owns the root and the API key. The child records a journal (local span, tool, and generation records). You apply that journal on the host and `ingest()` once.
@@ -30,7 +32,7 @@ Export a token on the host, attach in the child, apply the journal, then end onc
     Call `startTurn` / `start_turn`, start a sandbox span, and export with that span as `parentSpanId`. In a sandbox, pass the token as env (for example `LEMMA_TURN`).
   </Step>
   <Step title="Attach in the child and record locally">
-    Call `attachTurn` / `attach_turn` with the token. Record generations, tools, and spans on the local handle. Emit `local.records()` on the app's existing event channel. Do not set `LEMMA_API_KEY` in the child.
+    Call `attachTurn` / `attach_turn` with the token. Record generations, tools, and spans on the local handle. Emit `local.records()` on the app’s existing event channel. Do not set `LEMMA_API_KEY` in the child.
   </Step>
   <Step title="Apply the journal and ingest once">
     On the host, `apply` the journal, end the sandbox span, then `turn.end()` or `ingest()`. Do not call `/traces/ingest` from the child. Lemma ingest happens once at the end.
@@ -168,7 +170,7 @@ If the sandbox dies before a complete journal, apply whatever records arrived. E
 | Assemble without a live handle | `assembleTurn(token, journal)` | `assemble_turn(token, journal)` |
 | Send once | `await turn.end(...)` or `lemma.ingest(...)` | `turn.end(...)` or `lemma.ingest(...)` |
 
-Journal fields are camelCase in both languages (`traceId`, `parentSpanId`, `parentId`, `startedAt`, …). A TypeScript host can apply a Python child's journal. A Python host can apply a TypeScript child's journal.
+Journal fields are camelCase in both languages (`traceId`, `parentSpanId`, `parentId`, `startedAt`, …). A TypeScript host can apply a Python child’s journal. A Python host can apply a TypeScript child’s journal.
 
 ## Related pages
 

@@ -3,6 +3,8 @@ title: "From OpenTelemetry to Lemma"
 description: "Keep your existing OpenTelemetry instrumentation and add Lemma SDK tracing alongside it to produce the Lemma trace contract"
 meta:
   contentType: "How-to"
+  goal: "Keep OpenTelemetry and add Lemma SDK tracing beside it"
+  audience: "Engineers with existing OpenTelemetry instrumentation"
 ---
 
 If you already trace with OpenTelemetry, you do not have to tear anything out to adopt Lemma. The Lemma SDK is **additive**: it runs alongside your existing observability and delivers its own trace shape to Lemma. What it does *not* do is read your OTel spans and turn them into Lemma traces for you.
@@ -45,8 +47,8 @@ The mental model transfers cleanly. What changes is that Lemma needs its childre
 
 **Transfers**: the structural intuition you already have:
 
-- Nesting: parent/child span trees map directly onto Lemma's `parent_id` nesting.
-- Timing: start/end timestamps map onto Lemma's `started_at` / `ended_at` / `duration_ms`.
+- Nesting: parent/child span trees map directly onto Lemma’s `parent_id` nesting.
+- Timing: start/end timestamps map onto Lemma’s `started_at` / `ended_at` / `duration_ms`.
 - One logical run: the idea that a single agent execution is one unit maps onto one Lemma trace.
 
 **Does not transfer automatically**: Lemma needs these produced explicitly:
@@ -162,7 +164,7 @@ If your run is coordinated across streaming callbacks or helpers rather than one
 
 The Lemma SDK delivers its trace JSON over its own HTTP path; it does not register as an exporter or span processor in your OpenTelemetry pipeline. That means your existing OTel exporters can stay untouched: the two run independently and neither depends on the other.
 
-The one place the two pipelines meet today is the **Vercel AI SDK**, which is built on OpenTelemetry. There you add `vercelAI()` to the AI SDK's telemetry `integrations` alongside any exporters you already use, and it produces the Lemma trace from AI SDK lifecycle events. See [Vercel AI SDK](/integrations/vercel-ai).
+The one place the two pipelines meet today is the **Vercel AI SDK**, which is built on OpenTelemetry. There you add `vercelAI()` to the AI SDK’s telemetry `integrations` alongside any exporters you already use, and it produces the Lemma trace from AI SDK lifecycle events. See [Vercel AI SDK](/integrations/vercel-ai).
 
 For frameworks with a first-class Lemma integration, prefer the integration over hand-rolling the mapping:
 
@@ -184,7 +186,7 @@ Outside those framework integrations, treat OTel and Lemma as separate additive 
 | Assuming OTel spans already satisfy Lemma | They usually do not carry the Lemma contract. Emit it explicitly with the Lemma SDK. |
 | No Lemma root trace | Wrap each agent execution in `lemma.trace()` so children have one root to attach to. |
 | Untyped children | Record LLM calls with `recordGeneration` and tools with `recordTool` so they render and filter as generations and tools. |
-| Missing message history | Put the full ordered message list on each generation's `input` and `llmInputMessages` / `llm_input_messages`, not only the latest user string. |
+| Missing message history | Put the full ordered message list on each generation’s `input` and `llmInputMessages` / `llm_input_messages`, not only the latest user string. |
 
 ## Related pages
 

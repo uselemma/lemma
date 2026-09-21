@@ -3,6 +3,8 @@ title: "Tool calls"
 description: "Record tool invocations as child spans with arguments and results"
 meta:
   contentType: "How-to"
+  goal: "Record tool invocations with arguments and results"
+  audience: "Engineers using the Lemma SDK directly"
 ---
 
 A **tool call** is a single tool invocation inside a trace. Record it with `trace.recordTool()` / `trace.record_tool()` after the tool returns.
@@ -92,7 +94,7 @@ lemma.recordTool({
 ```
 
 `traceId` is required for detached tools. When the tool belongs under a span, `parentSpanId` is required; missing IDs warn and no-op.
-Pass `durationMs` when you already measured the tool call. If you omit it, Lemma splits the parent span's remaining unclaimed duration equally across siblings that also omitted duration.
+Pass `durationMs` when you already measured the tool call. If you omit it, Lemma splits the parent span’s remaining unclaimed duration equally across siblings that also omitted duration.
 
 ### Show a tool call as an assistant message
 
@@ -129,7 +131,7 @@ assistant message while preserving complete input and output in the span detail.
   </Tab>
 </Tabs>
 
-Lemma does not inspect your tool's input schema. Omit this field for internal
+Lemma does not inspect your tool’s input schema. Omit this field for internal
 tools or unsuccessful sends; their existing rendering remains unchanged.
 
 ## Measure a live tool call

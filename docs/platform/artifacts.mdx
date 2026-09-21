@@ -3,6 +3,8 @@ title: "Artifacts"
 description: "Per-agent context, understanding documents, and decision-flow diagrams"
 meta:
   contentType: "Conceptual"
+  goal: "Give Lemma per-agent context that sharpens detection"
+  audience: "People tuning how Lemma interprets one agent"
 ---
 
 Artifacts are agent-scoped context that sharpen how Lemma interprets traces and issues for one agent. They aren’t instrumentation, and they don’t substitute for sending complete traces in the first place. Open **Artifacts** in a project in the [Lemma dashboard](https://platform.uselemma.ai).
@@ -19,7 +21,7 @@ You supply **provided context**: text, or a supported text file, describing beha
 
 Lemma generates the second layer, an **understanding document** and a **decision-flow diagram**, from observed traces plus whatever context you provided. Both are versioned, so review a new version after you regenerate rather than assuming the latest draft is automatically correct.
 
-## Setting up an agent's artifacts
+## Setting up an agent’s artifacts
 
 <Steps>
   <Step title="Send named traces">

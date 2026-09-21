@@ -4,6 +4,8 @@ description: "Record Mastra agent and workflow runs with Lemma"
 icon: "/images/brands/invert/mastra.svg"
 meta:
   contentType: "How-to"
+  goal: "Record Mastra agent and workflow runs with Lemma"
+  audience: "Engineers on Mastra"
 ---
 
 Use Lemma’s Mastra integration when your app runs agents or workflows through Mastra observability. The integration implements a Mastra `ObservabilityExporter` that creates one Lemma trace for each Mastra `agent_run` / `workflow_run`, maps model generations to Lemma generations, maps tool calls to tools, and preserves nesting (with orphan-safe parent fallback when Mastra hides internal spans).

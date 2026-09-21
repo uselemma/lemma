@@ -3,11 +3,13 @@ title: "Runnable examples"
 description: "The same Lemma docs chat agent, instrumented once per first-party stack"
 meta:
   contentType: "How-to"
+  goal: "Run the sample docs-chat agent instrumented per first-party stack"
+  audience: "Engineers copying a working Lemma setup"
 ---
 
 The [examples directory](https://github.com/uselemma/lemma/tree/main/examples) is a copy-paste guide: every folder is the same chat agent, and the only thing that changes is how Lemma tracing is wired.
 
-The agent answers questions about Lemma by calling two tools against the live docs (`https://docs.uselemma.ai/llms.txt` and each page's `.md` URL). Run a folder, ask a question, then open [Traces](/platform/traces) and confirm one root with nested tools and generations.
+The agent answers questions about Lemma by calling two tools against the live docs (`https://docs.uselemma.ai/llms.txt` and each page’s `.md` URL). Run a folder, ask a question, then open [Traces](/platform/traces) and confirm one root with nested tools and generations.
 
 <Note>
   Package-level snippets in `packages/ts/tracing/examples` and `packages/py/tracing/examples` are SDK API samples. Use this directory when you want a complete agent.

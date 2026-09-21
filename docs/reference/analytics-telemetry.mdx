@@ -3,6 +3,8 @@ title: "Analytics telemetry"
 description: "Required SDK attributes for Analytics widgets, coverage semantics, and upgrade behavior"
 meta:
   contentType: "Reference"
+  goal: "List the SDK attributes Analytics widgets consume"
+  audience: "Engineers shipping usage, model, and latency telemetry"
 ---
 
 Lemma Analytics widgets consume source telemetry from ingested traces. The SDK emits that telemetry; the backend computes windowed aggregates. The SDK must **not** derive user-facing totals or estimated cost.

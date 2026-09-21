@@ -3,6 +3,8 @@ title: "Building high-quality traces"
 description: "The ideal instrumentation path, with bad → better → best examples for structure, timing, nesting, generations, and tools"
 meta:
   contentType: "Conceptual"
+  goal: "Show the ideal nested trace shape with bad, better, and best examples"
+  audience: "Engineers improving instrumentation quality"
 ---
 
 A high-quality Lemma trace is more than data arriving. It is a complete, nested record of one agent execution: every span has real timing, every successful span has input and output, generations carry the full message list sent to the model, and tools show what they were asked and what they returned.
@@ -25,8 +27,8 @@ This page is the ideal instrumentation path. For the exact ingest fields, valida
       <span style={{ color: "#9ca3af", fontSize: 11, whiteSpace: "nowrap" }}>2.41s</span>
     </div>
     <div style={{ marginTop: 2, fontSize: 11, color: "#6b7280" }}>
-      <div><span style={{ color: "#9ca3af" }}>input:&nbsp;&nbsp;</span>"Where is my order #1843?"</div>
-      <div><span style={{ color: "#9ca3af" }}>output:&nbsp;</span>"It ships tomorrow and arrives Friday."</div>
+      <div><span style={{ color: "#9ca3af" }}>input:&nbsp;&nbsp;</span>“Where is my order #1843?”</div>
+      <div><span style={{ color: "#9ca3af" }}>output:&nbsp;</span>“It ships tomorrow and arrives Friday.”</div>
     </div>
   </div>
 
@@ -85,7 +87,7 @@ This page is the ideal instrumentation path. For the exact ingest fields, valida
       <div style={{ marginTop: 2, fontSize: 11, color: "#6b7280" }}>
         <div><span style={{ color: "#9ca3af" }}>model:&nbsp;&nbsp;&nbsp;&nbsp;</span>gpt-4o</div>
         <div><span style={{ color: "#9ca3af" }}>messages:&nbsp;</span>[system, prior turns, user, tool results]</div>
-        <div><span style={{ color: "#9ca3af" }}>output:&nbsp;&nbsp;&nbsp;</span>"It ships tomorrow and arrives Friday."</div>
+        <div><span style={{ color: "#9ca3af" }}>output:&nbsp;&nbsp;&nbsp;</span>“It ships tomorrow and arrives Friday.”</div>
       </div>
     </div>
 

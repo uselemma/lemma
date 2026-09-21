@@ -3,6 +3,8 @@ title: "Common issues"
 description: "Troubleshoot missing traces and trace-quality issues: lost context, invisible tools, blank input/output, and unsupported shapes"
 meta:
   contentType: "Troubleshooting"
+  goal: "Fix missing traces and trace-shape problems by symptom"
+  audience: "Engineers debugging ingest or dashboard display"
 ---
 
 This page is organized by **symptom**. Most issues are trace-shape problems: the data arrives, but it does not match the [trace contract](/reference/trace-contract). For the ideal happy path and bad → better → best examples, see [Building high-quality traces](/guides/building-high-quality-traces).
@@ -326,7 +328,7 @@ See [Generations](/tracing/instrumentation/generations).
 
 **Cause:** long-running subtasks are recorded as sibling observations when they should have their own parent span.
 
-**Fix:** use `trace.startSpan()` / `trace.start_span()` when a subtask has nested work. In TypeScript, record children from the span handle. In Python, pass the parent span handle's `id` as `parent_id` when starting child work.
+**Fix:** use `trace.startSpan()` / `trace.start_span()` when a subtask has nested work. In TypeScript, record children from the span handle. In Python, pass the parent span handle’s `id` as `parent_id` when starting child work.
 
 <Tabs>
   <Tab title="TypeScript">

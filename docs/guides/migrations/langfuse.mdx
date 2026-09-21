@@ -3,6 +3,8 @@ title: "From Langfuse to Lemma"
 description: "Keep your existing Langfuse instrumentation and add Lemma SDK tracing alongside it to produce the Lemma trace contract"
 meta:
   contentType: "How-to"
+  goal: "Keep Langfuse and add Lemma SDK tracing beside it"
+  audience: "Engineers with existing Langfuse instrumentation"
 ---
 
 If you already trace with Langfuse, you do not have to tear anything out to adopt Lemma. The Lemma SDK is **additive**: it runs alongside your existing observability and delivers its own trace shape to Lemma. What it does *not* do is read your Langfuse observations and turn them into Lemma traces for you.
@@ -47,8 +49,8 @@ The mental model transfers cleanly. What changes is that Lemma needs its childre
 
 **Transfers**: the structural intuition you already have:
 
-- Nesting: parent/child observation trees map directly onto Lemma's `parent_id` nesting.
-- Timing: start/end timestamps map onto Lemma's `started_at` / `ended_at` / `duration_ms`.
+- Nesting: parent/child observation trees map directly onto Lemma’s `parent_id` nesting.
+- Timing: start/end timestamps map onto Lemma’s `started_at` / `ended_at` / `duration_ms`.
 - One logical run: the idea that a single agent execution is one unit maps onto one Lemma trace.
 
 **Does not transfer automatically**: Lemma needs these produced explicitly:
@@ -172,7 +174,7 @@ If your run is coordinated across streaming callbacks or helpers rather than one
 | Routing Lemma work through Langfuse | Do not. Add Lemma SDK tracing directly alongside Langfuse; keep Langfuse only for what still needs it. |
 | No Lemma root trace | Wrap each agent execution in `lemma.trace()` so children have one root to attach to. |
 | Untyped children | Record LLM calls with `recordGeneration` and tools with `recordTool` so they render and filter as generations and tools. |
-| Missing message history | Put the full ordered message list on each generation's `input` and `llmInputMessages` / `llm_input_messages`, not only the latest user string. |
+| Missing message history | Put the full ordered message list on each generation’s `input` and `llmInputMessages` / `llm_input_messages`, not only the latest user string. |
 
 ## Related pages
 

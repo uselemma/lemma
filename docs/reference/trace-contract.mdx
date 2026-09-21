@@ -3,6 +3,8 @@ title: "Trace contract"
 description: "What clients send to Lemma, what ingest requires, and which fields unlock product behavior"
 meta:
   contentType: "Reference"
+  goal: "Specify what ingest accepts and which fields unlock product behavior"
+  audience: "Engineers and coding agents implementing or debugging ingest"
 ---
 
 Lemma traces are JSON trees delivered to `POST /traces/ingest`. A **trace** is one agent execution: the root record carries the current input, final output or error, agent name, optional thread/user context, and timing. All other work is **child spans** in `trace.spans[]`, typed as `span`, `generation`, or `tool`, optionally nested via `parent_id`.
