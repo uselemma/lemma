@@ -75,7 +75,7 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 
 - Sentence case for page headings (`H1` `H2` `H3`): "Configure environment variables", not "Configure Environment Variables"
 - Title case for nav labels: "Configuring Environment Variables"
-- `meta.title` becomes the `H1`; `meta.navLabel` becomes the sidebar entry
+- Mintlify: `title` becomes the `H1`; `sidebarTitle` becomes the sidebar entry
 - Subheadings descriptive, not cute: "Caveats when self-hosting on Cloudflare", not "Caveats"
 - Reader should be able to guess section content from the heading alone
 
@@ -161,8 +161,8 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 
 ### Models in examples
 
-- Always use the latest model strings: `anthropic/claude-opus-4-7`, not `anthropic/claude-sonnet-4` or older
-- For image generation default: `google/gemini-3.1-flash-image-preview`
+- Use the model string the integration’s provider actually calls. For OpenAI, LangChain, LangGraph, Mastra, and the direct SDK, `gpt-4o` / `gpt-4o-mini` are valid
+- Do not rewrite those pages to Vercel AI Gateway catalog IDs such as `anthropic/claude-opus-4-7`
 
 ### AI workflow
 
@@ -179,7 +179,7 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 
 ### Quality checklist (required boxes are non-negotiable)
 
-- **Findability**: sidebar bucket set via `meta.category`; UI links to docs from any dashboard surface that exposes the feature
+- **Findability**: sidebar bucket set via Mintlify `sidebarTitle` / docs.json groups; do not require `meta.category`
 - **Accuracy**: code samples actually run; screenshots map 1:1 to current UI and use the ACME demo account
 - **Relevance**: code samples included where applicable (TypeScript first; `<Steps/>` for multi-step flows)
 - **Clarity**: overview addresses who/what/where/why; high-level use cases laid out; quickstart for new products; prerequisites listed on tutorials; sample repo in `vercel/examples` for multi-step tutorials; steps detailed not vague; visual aids in confusing sections; simplest path recommended when multiple exist
@@ -217,7 +217,7 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 - Rhetorical questions
 - Filler words: `very`, `just`, `really`, `simply`
 - References to "the full example file at the end of the guide" rather than inlining the code
-- Outdated model strings in examples (`anthropic/claude-sonnet-4`, `gpt-4o`, DALL-E)
+- Outdated model strings in examples (`anthropic/claude-sonnet-4`, DALL-E). Do not flag `gpt-4o` / `gpt-4o-mini` on provider-native Lemma pages
 - Hardcoded date/number formats instead of `Intl.DateTimeFormat` / `Intl.NumberFormat` in code samples
 - "Loading..." instead of "Loading…"
 - Summary-style transitions recapping the previous paragraph (`With this setup complete…`)
