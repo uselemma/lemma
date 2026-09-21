@@ -873,4 +873,60 @@ describe("openAIAgents", () => {
       },
     });
   });
+
+  it("records no-output marker for successful function runs returning null/undefined", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "lemma_key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await processor.onTraceStart({
+      traceId: "trace_none",
+      name: "support-agent",
+    });
+    await processor.onSpanStart({
+      traceId: "trace_none",
+      spanId: "span_gen",
+      spanData: { type: "generation" },
+      startedAt: "2026-06-29T10:00:00.000Z",
+    });
+    await processor.onSpanStart({
+      traceId: "trace_none",
+      spanId: "span_tool",
+      parentId: "span_gen",
+      spanData: { type: "function", name: "log_event" },
+      startedAt: "2026-06-29T10:00:00.010Z",
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_none",
+      spanId: "span_tool",
+      parentId: "span_gen",
+      spanData: { type: "function", name: "log_event", output: null },
+      startedAt: "2026-06-29T10:00:00.010Z",
+      endedAt: "2026-06-29T10:00:00.020Z",
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_none",
+      spanId: "span_gen",
+      spanData: {
+        type: "generation",
+        output: [{ role: "assistant", content: "done" }],
+      },
+      startedAt: "2026-06-29T10:00:00.000Z",
+      endedAt: "2026-06-29T10:00:00.030Z",
+    });
+    await processor.onTraceEnd({
+      traceId: "trace_none",
+      name: "support-agent",
+    });
+    await processor.forceFlush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    const toolSpan = body.trace.spans.find((s: any) => s.id === "span_tool");
+    expect(toolSpan).toHaveProperty("output");
+    expect(toolSpan.output).toEqual({ result: "none" });
+  });
 });
+
