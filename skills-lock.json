@@ -1,10 +1,10 @@
 {
   "version": 1,
   "skills": {
-    "writing-guidelines": {
-      "source": "./.agents/skills/writing-guidelines",
+    "lemma-writing-guidelines": {
+      "source": "./.agents/skills/lemma-writing-guidelines",
       "sourceType": "local",
-      "computedHash": "81e92a4ea8a701d574737478fbb3b524bf3e00d3428a044e8eb088b795f7e3e1"
+      "computedHash": "e7b9072eacd6e6088828701e197ae1bdbcf11cae46884aa9bbb6f10d4f0d47e7"
     }
   }
 }

@@ -1,5 +1,5 @@
 ---
-name: writing-guidelines
+name: lemma-writing-guidelines
 description: Review docs/prose for Writing Guidelines compliance. Use when asked to "review my docs", "check writing style", "audit prose", "review docs voice and tone", or "check this page against the writing handbook".
 metadata:
   author: vercel
@@ -11,7 +11,7 @@ metadata:
 
 Review files for compliance with Writing Guidelines.
 
-This skill is a Lemma-owned pin at `.agents/skills/writing-guidelines/` (project agent skills). It is not a Lemma product skill; do not copy it into `skills/`. Do not reinstall it from `vercel-labs/agent-skills` with `npx skills add` / `update` / `check`: upstream ships only `SKILL.md` and that overwrite deletes the pinned `command.md`.
+This skill is a Lemma-owned pin at `.agents/skills/lemma-writing-guidelines/` (project agent skills). It is not a Lemma product skill; do not copy it into `skills/`. Do not install upstream `writing-guidelines` from `vercel-labs/agent-skills` into this folder: that skill name is different on purpose so `npx skills add vercel-labs/agent-skills --skill writing-guidelines` cannot overwrite this pin.
 
 ## How It Works
 
@@ -25,7 +25,7 @@ This skill is a Lemma-owned pin at `.agents/skills/writing-guidelines/` (project
 The pinned copy is the source of truth for reviews in this repo:
 
 ```
-.agents/skills/writing-guidelines/command.md
+.agents/skills/lemma-writing-guidelines/command.md
 ```
 
 `skills-lock.json` tracks this folder as a **local** skill so the skills CLI will not fetch GitHub and replace the pin. Optional handbook refresh (manual only):
