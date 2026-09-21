@@ -101,14 +101,14 @@ Ingest accepts a name-only trace. Semantic fields are not HTTP-required, but wit
 | `trace.name` | Required non-empty string |
 | `trace.spans[].name` | Required non-empty string for each span |
 | Span `id` values | Must be unique within the payload when provided |
-| `status` | Exact `"OK"` or `"ERROR"` on the trace or a span. Any other value is ignored |
+| `status` | Exact `"OK"` or `"ERROR"` on the trace or a span. Ingest ignores any other value |
 | Authorization | Required; missing credentials return `401` |
 
 Successful ingest returns **201**. Invalid shape returns **400**. Missing `trace.id` or span `id` values are generated server-side. Missing or invalid `spans[].type` defaults to `"span"`. Missing `parent_id` attaches the child under the synthetic root.
 
-Ingest keeps `status` when it is the exact string `"OK"` or `"ERROR"`, on the trace and on each span. Ingest ignores every other value, including `"UNSET"`, `"ok"`, and `null`, and still returns **201**. An omitted status stays unset. A non-empty `error` forces `ERROR` on the same trace or span, including when `status` is `"OK"`.
+Ingest stores `"OK"` or `"ERROR"` on the trace and on each span. Ingest ignores every other value, including `"UNSET"`, `"ok"`, and `null`, and returns **201**. Ingest stores an omitted status as unset. A non-empty `error` forces `ERROR` on the trace or span that contains it, even when `status` is `"OK"`.
 
-The tracing SDKs leave root `status` omitted on success and send `"ERROR"` when the run fails.
+When the tracing SDKs build the payload, they omit root `status` on success and send `"ERROR"` on failure.
 
 ### Delivery and retries
 
@@ -129,7 +129,7 @@ Deliver **one complete trace** when the execution (agent turn) finishes. This is
 | `name` | Agent / workflow name used for grouping and filtering |
 | `input` | Current user turn or execution entry point |
 | `output` | Final answer on success |
-| `error` / `status` | Failure message, and exact `"OK"` or `"ERROR"`. Ingest ignores any other status and still returns **201**. A non-empty `error` forces `ERROR`. Omitted status stays unset |
+| `error` / `status` | Failure message, plus exact `"OK"` or `"ERROR"`. Ingest ignores any other status and returns **201**. A non-empty `error` forces `ERROR`. Ingest stores an omitted status as unset |
 | `started_at` / `ended_at` / `duration_ms` | Trace timing |
 | `thread_id` | Groups multi-turn conversation traces |
 | `user_id` | Per-user slicing |
@@ -152,7 +152,7 @@ Every child is a named object in `trace.spans[]`.
 | `name` | Human-readable operation name |
 | `type` | `"span"`, `"generation"`, or `"tool"` |
 | `input` / `output` | Operation arguments and result |
-| `error` / `status` | Same `"OK"` and `"ERROR"` rule as the trace. Prefer `error` over inventing an output |
+| `error` / `status` | Same `"OK"` and `"ERROR"` rule as the trace record. Prefer `error` over inventing an output |
 | `started_at` / `ended_at` / `duration_ms` | Timing |
 | `model` | Generation model name |
 | `usage` | Token counts when the provider supplied them (omit when unknown) |
@@ -346,7 +346,7 @@ Clients send first-class JSON fields. Ingest generates display and analysis alia
 | generation `input` / `output` | `input.value` / `output.value` |
 | tool `input` / `output` | `input.value`, `output.value`, `ai.toolCall.args`, `ai.toolCall.result` |
 | `error` | `error.message`. A non-empty value forces `ERROR` |
-| `status` | `OK`, `ERROR`, or unset |
+| `status` | `OK` or `ERROR`; otherwise unset |
 | native props / `attributes` | Flattened OpenInference-style attribute keys |
 
 Do not hand-build the normalized aliases unless you are bypassing the SDK. Prefer native SDK props and first-class fields.
