@@ -1,9 +1,11 @@
 ---
 title: "Threads & context"
 description: "Group multi-turn conversations, attach users, and add custom metadata"
+meta:
+  contentType: "How-to"
 ---
 
-Set trace-level context when you open the trace.
+Set `threadId`, `userId`, and custom metadata when you open a trace so Lemma can group turns, filter by person, and search extra attributes.
 
 ## Threads
 
@@ -39,7 +41,9 @@ When one user has a back-and-forth with your agent, each turn is its own trace. 
   </Tab>
 </Tabs>
 
-## Users
+## Attach a user id
+
+Set `userId` / `user_id` on the trace so Lemma can filter conversations by person.
 
 <Tabs>
   <Tab title="TypeScript">
@@ -73,9 +77,9 @@ When one user has a back-and-forth with your agent, each turn is its own trace. 
   </Tab>
 </Tabs>
 
-## Metadata
+## Attach custom metadata
 
-Attach any custom keys on the trace or a child span. There is no reserved set — `firm.slug`, `plan`, or any other key works. Ingest copies each key onto that span as an attribute, so you can filter with `attr.<key>:<value>`.
+Attach any custom keys on the trace or a child span. Keys such as `firm.slug` and `plan` work; ingest copies each key onto that span as an attribute, so you can filter with `attr.<key>:<value>`.
 
 Use dotted string keys, not nested objects. `metadata: { "firm.slug": "acme" }` becomes the attribute `firm.slug`. `metadata: { firm: { slug: "acme" } }` becomes one object-valued `firm` attribute and will not filter cleanly.
 
@@ -113,7 +117,7 @@ Filter those traces with `attr.firm.slug:acme`.
   To keep staging data out of production, use a separate Lemma project. The SDK ingest path always stores `service_name: "lemma-sdk"`; set a custom service name through the OTLP resource `service.name`.
 </Note>
 
-## Reference
+## Context fields
 
 | Context | SDK option | Client field | Ingest normalizes to |
 | --- | --- | --- | --- |

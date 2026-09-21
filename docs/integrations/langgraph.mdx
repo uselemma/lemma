@@ -2,20 +2,13 @@
 title: "LangGraph"
 description: "Record LangGraph graph runs with Lemma callback handlers"
 icon: "/images/brands/langgraph.svg"
+meta:
+  contentType: "How-to"
 ---
 
-LangGraph uses LangChain's callback system, so Lemma's LangGraph integration is
-an explicit LangChain callback adapter with LangGraph defaults (default trace
-name `langgraph-agent`). It creates one owned Lemma trace per graph invocation,
-records graph nodes as nested child spans, model calls as generations, tools as
-tool calls, extracts current-turn input from graph message state, and preserves
-parent run IDs with orphan-safe fallback.
+LangGraph uses LangChain's callback system, so Lemma's LangGraph integration is an explicit LangChain callback adapter with LangGraph defaults (default trace name `langgraph-agent`). It creates one owned Lemma trace per graph invocation, records graph nodes as nested child spans, model calls as generations, tools as tool calls, extracts current-turn input from graph message state, and preserves parent run IDs with orphan-safe fallback.
 
-You do not need to wrap graph calls in `lemma.trace()`. Pass the callback
-handler through the graph invoke config. A complete docs-chat agent using this
-integration lives in [`examples/langgraph`](https://github.com/uselemma/lemma/tree/main/examples/langgraph)
-(TypeScript) and [`examples/python/langgraph`](https://github.com/uselemma/lemma/tree/main/examples/python/langgraph)
-(Python). See [Runnable examples](/guides/examples).
+You do not need to wrap graph calls in `lemma.trace()`. Pass the callback handler through the graph invoke config. A complete docs-chat agent using this integration lives in [`examples/langgraph`](https://github.com/uselemma/lemma/tree/main/examples/langgraph) (TypeScript) and [`examples/python/langgraph`](https://github.com/uselemma/lemma/tree/main/examples/python/langgraph) (Python). See [Runnable examples](/guides/examples).
 
 ## TypeScript
 
@@ -124,16 +117,13 @@ def call_graph(user_message: str):
 | Tool call | Tool span with input, output **or** soft/hard error, timing, and parent ID |
 | Retriever | Span with query input, output, timing, and parent ID |
 
-`langGraph()` / `langgraph()` is an explicit LangChain-callback adapter — LangGraph
-emits LangChain callback events; Lemma does not use a separate LangGraph tracer.
+`langGraph()` / `langgraph()` is an explicit LangChain-callback adapter. LangGraph emits LangChain callback events; Lemma does not use a separate LangGraph tracer.
 
-Prompts, tool inputs, outputs, model output text, and error messages are always
-recorded. Redact secrets and sensitive user data before they reach the graph.
+Prompts, tool inputs, outputs, model output text, and error messages are always recorded. Redact secrets and sensitive user data before they reach the graph.
 
-## Debugging
+## Debug this integration
 
-Enable debug mode while developing to confirm that spans arrive live and parent
-IDs are attached:
+Enable debug mode while developing to confirm that spans arrive live and parent IDs are attached:
 
 ```typescript
 import { enableDebugMode } from "@uselemma/tracing";

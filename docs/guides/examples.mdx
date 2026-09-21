@@ -1,6 +1,8 @@
 ---
 title: "Runnable examples"
 description: "The same Lemma docs chat agent, instrumented once per first-party stack"
+meta:
+  contentType: "How-to"
 ---
 
 The [examples directory](https://github.com/uselemma/lemma/tree/main/examples) is a copy-paste guide: every folder is the same chat agent, and the only thing that changes is how Lemma tracing is wired.
@@ -37,7 +39,7 @@ Pass the framework adapter (callback, processor, exporter, or telemetry helper).
 
 Vercel AI SDK and Mastra are TypeScript-only.
 
-## Run
+## Run an example
 
 Copy [`examples/.env.example`](https://github.com/uselemma/lemma/blob/main/examples/.env.example) to `examples/.env` and set `LEMMA_API_KEY`, `LEMMA_PROJECT_ID`, and `OPENAI_API_KEY`.
 

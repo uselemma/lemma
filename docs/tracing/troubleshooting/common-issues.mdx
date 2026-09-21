@@ -1,6 +1,8 @@
 ---
 title: "Common issues"
 description: "Troubleshoot missing traces and trace-quality issues: lost context, invisible tools, blank input/output, and unsupported shapes"
+meta:
+  contentType: "Troubleshooting"
 ---
 
 This page is organized by **symptom**. Most issues are trace-shape problems: the data arrives, but it does not match the [trace contract](/reference/trace-contract). For the ideal happy path and bad → better → best examples, see [Building high-quality traces](/guides/building-high-quality-traces).
@@ -254,7 +256,7 @@ For failures, record the error before re-raising:
 
 ## Root input/output is null after a second delivery
 
-**Cause:** the trace was delivered again with a sparse `ingest()` payload, for example a follow-up call that carries a late child span but omits root `input`/`output`. `ingest()` is not an incremental merge API, so omitted root fields do not preserve prior values, and analysis typically already ran once after the first complete delivery.
+**Cause:** the trace was delivered again with a sparse `ingest()` payload, for example a follow-up call that carries a late child span but omits root `input`/`output`. `ingest()` is not an incremental merge API, so omitted root fields do not preserve prior values, and analysis already ran once after the first complete delivery.
 
 **Fix:** send **one complete trace** when the execution finishes: root input/output, thread/user, and all child spans in a single `ingest()` call. Retries of that same complete payload are safe (already-stored span IDs are skipped). Across queues and workers, assemble the full tree in a coordinator and ingest once rather than streaming partial deliveries under one `trace.id`. For a host and sandbox that are one turn, apply the child journal on the host and ingest once. See [Cross-process turns](/tracing/instrumentation/cross-process-turns).
 
@@ -320,7 +322,7 @@ See [Generations](/tracing/instrumentation/generations).
 
 **Debug with Debug mode:** check the `name` on `trace started` or `sending trace`. It should be the stable workflow name you expect, not a generated fallback.
 
-## Trace Nesting Is Flat
+## Trace nesting is flat
 
 **Cause:** long-running subtasks are recorded as sibling observations when they should have their own parent span.
 

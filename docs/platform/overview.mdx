@@ -1,5 +1,6 @@
 ---
-title: "Overview"
+title: "What happens after traces arrive"
+sidebarTitle: "Overview"
 description: "How Lemma turns a trace into an issue, and where projects and agents fit"
 meta:
   contentType: "Conceptual"
@@ -9,7 +10,7 @@ Lemma turns each agent execution into a [trace](/tracing/instrumentation/concept
 
 For software development kit (SDK) vocabulary, see [SDK concepts](/tracing/instrumentation/concepts). For dashboard vocabulary, see [Platform concepts](/platform/concepts). To send your first trace, see [Quickstart](/tracing/instrumentation/setup). See [Product boundaries](/platform/concepts#product-boundaries) for what Lemma evaluates and which surfaces are not shipped.
 
-## How a trace moves through Lemma
+## How a trace becomes an issue
 
 1. An instrumented agent emits a trace for one execution, or one conversation turn when you set a thread ID.
 2. Lemma stores the spans and marks the trace **ready** when you can open it in the dashboard. An API key, an SDK dependency, or an ingest attempt alone does not prove observability.
@@ -19,7 +20,7 @@ For software development kit (SDK) vocabulary, see [SDK concepts](/tracing/instr
 
 ## Projects, agents, and scope
 
-You **create projects**. A project holds traces, issues, artifacts, and project settings. Each project has its own dashboard. Use separate projects to isolate environments (dev, staging, prod) or distinct products.
+You create **projects**. A project holds traces, issues, artifacts, and project settings. Each project has its own dashboard. Use separate projects to isolate environments (dev, staging, prod) or distinct products.
 
 **Agents appear when named traces arrive.** Lemma does not ask you to register an application entity. The agent name on a trace is how Lemma groups Artifacts, Analytics scorecards, and issue scope. Traces without a usable agent name still ingest, but agent-scoped features have nothing to attach to.
 
@@ -55,7 +56,7 @@ Each surface answers a different question about the same traces:
 | **[Artifacts](/platform/artifacts)** | Per-agent context you provide, plus Lemma’s generated understanding document and decision-flow diagram. |
 | **[Analytics](/platform/analytics)** | Project-level volume, latency, errors, tools, models, and cost over a timeframe. Feature-gated; it may not appear in your workspace yet. |
 
-A typical investigation starts on Analytics or Issues, where you spot a trend. From there you open the supporting traces, ask Inspect what’s going on, and add Artifacts context if detection missed the mark. Alert or ticket the finding through [Connections](/connections/overview). Close the issue only after [Turning issues into fixes](/guides/turning-issues-into-fixes).
+Start on Analytics or Issues to spot a trend. From there you open the supporting traces, ask Inspect what’s going on, and add Artifacts context if detection missed the mark. Alert or ticket the finding through [Connections](/connections/overview). Close the issue only after [Turning issues into fixes](/guides/turning-issues-into-fixes).
 
 ## Related pages
 

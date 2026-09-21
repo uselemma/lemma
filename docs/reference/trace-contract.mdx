@@ -1,6 +1,8 @@
 ---
 title: "Trace contract"
 description: "What clients send to Lemma, what ingest requires, and which fields unlock product behavior"
+meta:
+  contentType: "Reference"
 ---
 
 Lemma traces are JSON trees delivered to `POST /traces/ingest`. A **trace** is one agent execution: the root record carries the current input, final output or error, agent name, optional thread/user context, and timing. All other work is **child spans** in `trace.spans[]`, typed as `span`, `generation`, or `tool`, optionally nested via `parent_id`.
@@ -105,7 +107,7 @@ Successful ingest returns **201**. Invalid shape returns **400**. Missing `trace
 
 Deliver **one complete trace** when the execution (agent turn) finishes. This is required; patching a trace over time is not currently supported. Treat `ingest` as a single delivery, not an incremental merge API.
 
-- **Required:** one complete delivery per execution — root input/output, thread/user, and all child spans in one payload, sent when the turn is done.
+- **Required:** one complete delivery per execution: root input/output, thread/user, and all child spans in one payload, sent when the turn is done.
 - **Retries:** re-sending the same payload with the same span IDs is idempotent; spans whose IDs already exist are skipped.
 - **Not a merge API:** omitted root fields do **not** preserve prior values. There is no field-level upsert, and patching a trace across calls is not supported.
 - **Processing:** after an idle window Lemma processes the trace once; a later successful re-delivery does not restart `processTrace` / `extractSignals`. Late new span IDs may still append for display.
@@ -177,10 +179,10 @@ support-agent              ← trace record
 
 Prefer both:
 
-- `input` — the prompt payload for that call
-- `llmInputMessages` / `llm_input_messages` — structured messages flattened into `llm.input_messages.{index}.message.*`
+- `input`: the prompt payload for that call
+- `llmInputMessages` / `llm_input_messages`: structured messages flattened into `llm.input_messages.{index}.message.*`
 
-`model` is the primary model identifier. Native generation props such as `llmProvider`, `llmInvocationParameters`, and `llmOutputMessages` populate OpenInference-style attributes. Pass `usage` (camelCase in TypeScript, snake_case kwargs in Python) when the provider returns token counts — see [Token usage](#token-usage).
+`model` is the primary model identifier. Native generation props such as `llmProvider`, `llmInvocationParameters`, and `llmOutputMessages` populate OpenInference-style attributes. Pass `usage` (camelCase in TypeScript, snake_case kwargs in Python) when the provider returns token counts: see [Token usage](#token-usage).
 
 ## Token usage
 
@@ -209,7 +211,7 @@ Healthy zero ≠ missing instrumentation. Analytics uses absence vs explicit zer
 
 All fields are optional. Only include fields the provider actually returned.
 
-### TypeScript DX
+### TypeScript
 
 ```typescript
 trace.recordGeneration({
@@ -226,7 +228,7 @@ trace.recordGeneration({
 });
 ```
 
-### Python DX
+### Python
 
 ```python
 trace.record_generation(
@@ -244,20 +246,20 @@ trace.record_generation(
 
 The SDK also flattens usage into span attributes using OTel GenAI names (`gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.usage.cache_read.input_tokens`, `gen_ai.usage.cache_creation.input_tokens`, `gen_ai.usage.reasoning.output_tokens`) plus OpenInference compatibility keys (`llm.token_count.prompt`, `llm.token_count.completion`).
 
-Do **not** derive user-facing aggregates or estimated cost in the SDK — the backend computes windowed Analytics quantities from this source telemetry.
+Do **not** derive user-facing aggregates or estimated cost in the SDK: the backend computes windowed Analytics quantities from this source telemetry.
 
 ## Tools
 
 Tool spans should carry:
 
-- `name` — stable tool identifier
-- `input` — arguments
-- `output` or `error` — result or failure
+- `name`: stable tool identifier
+- `input`: arguments
+- `output` or `error`: result or failure
 - optional `toolParameters` / `tool_parameters` for the schema
 
 Ingest uses `tool_name` when present, otherwise the span `name`, and normalizes tool I/O into tool-call aliases for display.
 
-## Errors
+## Record failures
 
 Record a failure on the exact span, generation, or tool where it happened:
 
@@ -302,7 +304,7 @@ For callback traces, uncaught exceptions automatically fail the root. If you cat
   </Tab>
 </Tabs>
 
-## Timing
+## Measure duration
 
 Duration resolution order:
 
@@ -466,7 +468,7 @@ These are Lemma-specific extensions (not OpenTelemetry GenAI canonical names).
 
 Complete, correctly typed trees improve classification and automated issue extraction. Root I/O, model fields, and tool payloads are **not** general ingest gates. Some environments may further restrict issue extraction to specific framework shapes; treat that as an environment policy, not as the base SDK contract.
 
-## Privacy
+## Redact before ingest
 
 Redact secrets, credentials, and sensitive user data before tracing them. Framework integrations always record inputs, outputs, and error messages: without them a trace cannot show what a run consumed, produced, or why it failed.
 

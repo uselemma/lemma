@@ -1,5 +1,6 @@
 ---
-title: "Quickstart"
+title: "Send your first trace"
+sidebarTitle: "Quickstart"
 description: "Install the Lemma SDK and send your first complete agent trace"
 meta:
   contentType: "Tutorial"
@@ -14,8 +15,8 @@ One agent execution is one [trace](/tracing/instrumentation/concepts). Record mo
 Find these in [Lemma project settings](https://platform.uselemma.ai), or in the project get-started flow.
 
 ```bash
-export LEMMA_API_KEY="lma_..."
-export LEMMA_PROJECT_ID="proj_..."
+export LEMMA_API_KEY="lma_your_api_key_here"
+export LEMMA_PROJECT_ID="proj_your_project_id_here"
 export LEMMA_RELEASE="1.8.3" # optional
 ```
 
@@ -23,7 +24,7 @@ Keep `LEMMA_API_KEY` **server-side**. Never commit it. Never put it in browser o
 
 ## What a ready trace is
 
-Creating an API key, adding an SDK dependency, or seeing an ingest attempt **does not** prove observability. Observability is proven when a real production-like path produces a **ready** trace you can open in the dashboard: inspectable, with a root, nested work, and input and output you recognize.
+Creating an API key, adding an SDK dependency, or seeing an ingest attempt is not proof of observability. Observability is proven when a real production-like path produces a **ready** trace you can open in the dashboard: inspectable, with a root, nested work, and input and output you recognize.
 
 A key, an SDK install, or a failed or empty ingest is not a ready trace.
 

@@ -1,14 +1,16 @@
 ---
 title: "Building high-quality traces"
 description: "The ideal instrumentation path, with bad → better → best examples for structure, timing, nesting, generations, and tools"
+meta:
+  contentType: "Conceptual"
 ---
 
-A high-quality Lemma trace is not just “data arrived.” It is a complete, nested record of one agent execution: every span has real timing, every successful span has input and output, generations carry the full message list sent to the model, and tools show what they were asked and what they returned.
+A high-quality Lemma trace is more than data arriving. It is a complete, nested record of one agent execution: every span has real timing, every successful span has input and output, generations carry the full message list sent to the model, and tools show what they were asked and what they returned.
 
-This page is the pedagogical ideal path. For the exact ingest fields, validation rules, and client-vs-normalization mapping, see the [trace contract](/reference/trace-contract). Use [Common issues](/tracing/troubleshooting/common-issues) when something is missing or malformed.
+This page is the ideal instrumentation path. For the exact ingest fields, validation rules, and client-vs-normalization mapping, see the [trace contract](/reference/trace-contract). Use [Common issues](/tracing/troubleshooting/common-issues) when something is missing or malformed.
 
 <Note>
-  **One agent execution = one trace.** Child LLM calls, tool calls, retrieval, and app logic belong inside that root — not as separate top-level traces.
+  **One agent execution = one trace.** Child LLM calls, tool calls, retrieval, and app logic belong inside that root, not as separate top-level traces.
 </Note>
 
 ## The ideal trace
@@ -93,9 +95,9 @@ This page is the pedagogical ideal path. For the exact ingest fields, validation
 
 What “ideal” means on each node:
 
-- **Root** — current user input, final answer (or error), measured duration
-- **Spans / tools** — real input and output, nested under the step that caused them, measured start → end
-- **Generations** — model name plus the **full message list** sent to that call (system, prior turns, tool results, current user), not just the latest user string
+- **Root**: current user input, final answer (or error), measured duration
+- **Spans / tools**: real input and output, nested under the step that caused them, measured start → end
+- **Generations**: model name plus the **full message list** sent to that call (system, prior turns, tool results, current user), not only the latest user string
 
 ## Quality checklist
 
@@ -117,7 +119,7 @@ What “ideal” means on each node:
 
 ## Structure and nesting
 
-**Bad** — each call is its own top-level trace:
+**Bad**: each call is its own top-level trace:
 
 ```text
 draft-reply                ← separate trace
@@ -125,7 +127,7 @@ search_docs                ← separate trace
 final-answer               ← separate trace
 ```
 
-**Better** — one root, but everything is flat under it:
+**Better**: one root, but everything is flat under it:
 
 ```text
 support-agent
@@ -136,7 +138,7 @@ support-agent
 └── final-answer
 ```
 
-**Best** — one root, children nested under the step that performed them:
+**Best**: one root, children nested under the step that performed them:
 
 ```text
 support-agent
@@ -152,19 +154,19 @@ Wrap the run with `lemma.trace()` and record children from the trace or span han
 
 ## Input / output
 
-**Bad** — named span with nothing useful:
+**Bad**: named span with nothing useful:
 
 ```text
 retrieve-context           ← no input, no output
 ```
 
-**Better** — partial payload:
+**Better**: partial payload:
 
 ```text
 retrieve-context           ← input only (or output only)
 ```
 
-**Best** — every successful span carries both sides:
+**Best**: every successful span carries both sides:
 
 ```text
 retrieve-context           ← input + output
@@ -172,21 +174,21 @@ retrieve-context           ← input + output
 
 Failures should still keep the input and record the error instead of an output. Opaque spans hide what happened; input and output make the tree inspectable.
 
-## Timing
+## Measure duration
 
-**Bad** — no duration at all:
+**Bad**: no duration at all:
 
 ```text
 retrieve-context           ← duration missing
 ```
 
-**Better** — duration inferred from the parent:
+**Better**: duration inferred from the parent:
 
 ```text
 retrieve-context           ← duration inferred
 ```
 
-**Best** — measured from real start → end:
+**Best**: measured from real start → end:
 
 ```text
 retrieve-context           ← duration from start → end
@@ -194,24 +196,24 @@ retrieve-context           ← duration from start → end
 
 Prefer live handles (`startSpan` / `start_span`, and the matching tool and generation helpers) so `.end(...)` establishes duration after the work completes. Pass `durationMs` / `duration_ms` only when you already measured the operation externally. Lemma can infer missing child durations from a parent, but measured bounds are better.
 
-## Errors
+## Record failures
 
 Record a failure on the exact span, generation, or tool where it happened. Keep the input, pass the error instead of an output, and end the span so timing remains accurate.
 
-**Bad** — the exception is swallowed and the failed operation is missing:
+**Bad**: the exception is swallowed and the failed operation is missing:
 
 ```text
 support-agent              ← lookup_order failed, but no failed span
 ```
 
-**Better** — the root fails, but the source is unclear:
+**Better**: the root fails, but the source is unclear:
 
 ```text
 support-agent              ← error: "Order service unavailable"
 └── lookup_order           ← no error recorded here
 ```
 
-**Best** — the child records its input, error, and duration; the root also fails when the execution cannot recover:
+**Best**: the child records its input, error, and duration; the root also fails when the execution cannot recover:
 
 ```text
 support-agent              ← error: "Order service unavailable"
@@ -220,25 +222,25 @@ support-agent              ← error: "Order service unavailable"
 
 With a live handle, call `tool.end({ error })` / `tool.end(error=error)` and rethrow when the whole execution should fail. Callback traces automatically record uncaught exceptions on the root. If you catch an error at the root boundary, call `trace.fail(error)`. If the agent recovers, keep the child marked as failed and let the root complete successfully.
 
-See [Errors in the trace contract](/reference/trace-contract#errors) for the exact recording rules and SDK examples.
+See [Record failures in the trace contract](/reference/trace-contract#record-failures) for the exact recording rules and SDK examples.
 
 ## Generations
 
-For each LLM call, record the **full ordered message list sent to that call** — system prompt, prior conversation turns, tool results, and the current user message — not only the latest user string. That list is what the model saw; the root trace input is only the current user turn.
+For each LLM call, record the **full ordered message list sent to that call**: system prompt, prior conversation turns, tool results, and the current user message, not only the latest user string. That list is what the model saw; the root trace input is only the current user turn.
 
-**Bad** — little more than a name:
+**Bad**: little more than a name:
 
 ```text
 answer                     ← generation (name only)
 ```
 
-**Better** — model and latest user string only:
+**Better**: model and latest user string only:
 
 ```text
 answer                     ← model + current message + output
 ```
 
-**Best** — model, complete message history for this call, and the response:
+**Best**: model, complete message history for this call, and the response:
 
 ```text
 answer                     ← model + full messages + output + duration
@@ -258,7 +260,7 @@ In the SDK, pass that full list as both `input` and `llmInputMessages` / `llm_in
 
 ## Tool calls
 
-**Bad** — tools ran but were never recorded:
+**Bad**: tools ran but were never recorded:
 
 ```text
 support-agent
@@ -266,13 +268,13 @@ support-agent
 └── final-answer           ← search_docs ran, but no tool span
 ```
 
-**Better** — tool span exists, but opaque:
+**Better**: tool span exists, but opaque:
 
 ```text
 search_docs                ← tool (name only)
 ```
 
-**Best** — typed tool under the correct parent, with args and result:
+**Best**: typed tool under the correct parent, with args and result:
 
 ```text
 retrieve-context

@@ -1,6 +1,8 @@
 ---
 title: "Debug mode"
 description: "Use SDK runtime logs to debug trace delivery and trace shape"
+meta:
+  contentType: "Troubleshooting"
 ---
 
 Debug mode prints SDK logs from the same runtime where your agent runs. Use it when a trace is missing, delayed, attached incorrectly, or missing child work.
@@ -12,7 +14,7 @@ It helps answer four questions:
 3. Did the ingest request succeed or fail?
 4. How many child spans did the SDK include?
 
-## Enable it
+## Enable debug mode
 
 Enable debug mode before creating the Lemma client.
 
@@ -61,7 +63,7 @@ After init, debug mode prints a one-time config banner:
 
 If `baseUrl` is not production or `projectId` is not a valid UUID, the banner includes `warnings`.
 
-Verify logs and `debugSmokeTest().ingestStatus` reflect whether **this specific trace** was enqueued / ingested / ready — not whether the project has any ready traces.
+Verify logs and `debugSmokeTest().ingestStatus` reflect whether **this specific trace** was enqueued / ingested / ready: not whether the project has any ready traces.
 
 ## Run a smoke test
 
@@ -133,15 +135,15 @@ With both enabled, the SDK calls `GET /traces/ingest-status?project_id=...&otel_
 [LEMMA:verify] ingest accepted (201), ingest-status check failed (status/network)
 ```
 
-`enqueued` means the OTLP worker accepted the payload and wrote it to the ingest queue — it does **not** require the dashboard to show the trace yet (useful during backlog).
+`enqueued` means the OTLP worker accepted the payload and wrote it to the ingest queue: it does **not** require the dashboard to show the trace yet (useful during backlog).
 
 ## Confirming delivery reached Lemma
 
 | SDK log | Server-side (Dash0) | Meaning |
 | --- | --- | --- |
 | `trace sent` status 201 | `otlp.ingest.received` → `enqueued` | Full success |
-| `trace sent` status 201 | No `otlp.ingest.*` logs | Not hitting Lemma production — wrong URL or proxy |
-| `trace sent` status 200 | — | Wrong endpoint (`/otel/v1/traces` or mock) |
+| `trace sent` status 201 | No `otlp.ingest.*` logs | Not hitting Lemma production: wrong URL or proxy |
+| `trace sent` status 200 | none | Wrong endpoint (`/otel/v1/traces` or mock) |
 | `trace sent` status 201 | `received` but no `enqueued` | Worker-side failure after accept |
 | `trace sent` status 201 + verify `status=enqueued` | `enqueued` | Accepted into ingest queue (may still be backlog) |
 | `trace sent` status 201 + verify `not_found` | missing enqueue index / CH row | Downstream lag or failure |

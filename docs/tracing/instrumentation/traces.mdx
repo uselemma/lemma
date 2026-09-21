@@ -1,6 +1,8 @@
 ---
 title: "Agent traces"
 description: "Wrap one agent execution in one trace with input and output"
+meta:
+  contentType: "How-to"
 ---
 
 A **trace** is one end-to-end agent execution, from the user's input to the final response. Everything your agent does inside that execution (LLM calls, tool calls, retrieval, app logic) is recorded as child work inside the trace.
@@ -187,9 +189,9 @@ Detached handle calls require `traceId`. If a detached span, generation, or tool
   </Tab>
 </Tabs>
 
-`ingest()` POSTs one payload. Deliver **one complete trace** when the execution (agent turn) finishes: root input/output, thread/user, and all child spans in one call. This is required — patching a trace over time is not currently supported.
+`ingest()` POSTs one payload. Deliver **one complete trace** when the execution (agent turn) finishes: root input/output, thread/user, and all child spans in one call. This is required: patching a trace over time is not currently supported.
 
-`ingest()` is not an incremental merge API: omitted root fields do not preserve prior values, and after Lemma processes the trace once, a later re-delivery does not re-run issue extraction (occasional late child spans may still append to the tree for display). Retries of the same complete payload are safe — already-stored span IDs are skipped — so a failed send can be retried as-is. It raises on a non-2xx response and never mutates the trace's status.
+`ingest()` is not an incremental merge API: omitted root fields do not preserve prior values, and after Lemma processes the trace once, a later re-delivery does not re-run issue extraction (occasional late child spans may still append to the tree for display). Retries of the same complete payload are safe, because already-stored span IDs are skipped, so a failed send can be retried as-is. It raises on a non-2xx response and never mutates the trace's status.
 
 <Warning>
   Across queues and workers, assemble the full tree in a coordinator and `ingest()` once when the turn is done. Do not stream partial deliveries under one `trace.id`.

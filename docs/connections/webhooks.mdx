@@ -9,7 +9,7 @@ Project webhooks send a signed HTTP POST request whenever an issue changes state
 
 Lemma doesn’t emit `incident.*` events. Customer alerting follows issues instead. If you find incident-named events in older samples or docs, they’re stale.
 
-## Events
+## Webhook events
 
 | Event | When it fires |
 | -- | -- |
@@ -111,9 +111,9 @@ The envelope always includes `event`, `timestamp`, `projectId`, and an `issue` o
 {
   "event": "issue.created",
   "timestamp": "2026-08-28T12:00:00.000Z",
-  "projectId": "39e9c46a-...",
+  "projectId": "12345678-1234-1234-1234-123456789012",
   "issue": {
-    "id": "abc123",
+    "id": "iss_1234567890123",
     "status": "open"
   }
 }

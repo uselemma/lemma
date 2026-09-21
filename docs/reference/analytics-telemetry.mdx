@@ -1,6 +1,8 @@
 ---
 title: "Analytics telemetry"
 description: "Required SDK attributes for Analytics widgets, coverage semantics, and upgrade behavior"
+meta:
+  contentType: "Reference"
 ---
 
 Lemma Analytics widgets consume source telemetry from ingested traces. The SDK emits that telemetry; the backend computes windowed aggregates. The SDK must **not** derive user-facing totals or estimated cost.
@@ -51,7 +53,7 @@ Use these to attribute sparse coverage to an integration or SDK language without
 | LangChain / LangGraph | `llmOutput.tokenUsage` / `token_usage`, message `usage_metadata` |
 | OpenAI Agents | `spanData.usage` or `response.usage` when present |
 | Mastra | `output.usage` / `attributes.usage` when input/output tokens are distinguishable (`totalTokens` alone is omitted) |
-| Vercel AI SDK | Extracts `usage` when present on finish/step-end events; many AI SDK versions do not expose usage on telemetry callbacks today |
+| Vercel AI SDK | Extracts `usage` when present on finish/step-end events; AI SDK telemetry callbacks do not always include usage |
 
 Manual `recordGeneration` / `record_generation` always accepts usage when you have it from the provider response.
 
