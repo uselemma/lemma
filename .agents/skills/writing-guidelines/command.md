@@ -3,6 +3,16 @@ description: Review docs/prose for Vercel Writing Guidelines compliance
 argument-hint: <file-or-pattern>
 ---
 
+# Lemma overlay
+
+This pin is Vercel’s writing handbook. For Lemma `docs/`, these rules supersede the rest of this file:
+
+- Mintlify: `title` is the H1, `sidebarTitle` is the nav label. Do not require `meta.title`, `meta.navLabel`, or `meta.category`
+- Model strings in examples must match the integration’s provider. Do not flag `gpt-4o` or `gpt-4o-mini` when the page is OpenAI, LangChain, LangGraph, Mastra, or the direct SDK
+- Ignore Vercel dashboard deep links, AI Gateway catalog IDs (`anthropic/claude-opus-4-7`), ACME screenshots, and `vercel/examples`
+- Curly quotes in Markdown prose only. Straight quotes in YAML, JSX, fenced/inline code, and JSX/HTML demo data
+- `meta.goal` is the verb-driven plan; `description` is the nav/SEO blurb and must not copy `goal`
+
 # Writing Guidelines
 
 Review these files for compliance: $ARGUMENTS

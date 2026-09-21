@@ -34,7 +34,7 @@ Optional refresh (do not treat as required for a review):
 https://raw.githubusercontent.com/vercel-labs/writing-guidelines/main/command.md
 ```
 
-If you fetch the URL and it differs from the pin, update `command.md` in the same PR and leave the lockfile hash to `npx skills` / the folder hash in `skills-lock.json`.
+If you fetch the URL and it differs from the pin, merge the Lemma overlay at the top of `command.md` before updating the pin, then refresh `skills-lock.json` `computedHash` with the skills CLI folder hash.
 
 ## Usage
 
