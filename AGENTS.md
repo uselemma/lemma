@@ -1,5 +1,15 @@
 # Lemma SDK — Agent Instructions
 
+## Docs
+
+When writing or reviewing `docs/`, follow [`.agents/skills/writing-guidelines/SKILL.md`](.agents/skills/writing-guidelines/SKILL.md). Fetch the latest rules from that skill's guidelines source before each review.
+
+Lemma-specific adaptations:
+
+- Mintlify frontmatter uses `title` (H1), `sidebarTitle` (nav label), and `meta.contentType` (`Tutorial`, `How-to`, `Reference`, `Conceptual`, `Troubleshooting`, or `Landing`)
+- Keep straight quotes in MDX source. YAML, JSX, and code fences cannot use curly quotes
+- Example model strings should match the integration's provider, not Vercel AI Gateway catalog IDs
+
 ## Publish protocol
 
 npm and PyPI publish only when a package version field changes on `main`.
