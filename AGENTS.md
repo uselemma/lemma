@@ -2,9 +2,9 @@
 
 ## Docs
 
-When writing or reviewing `docs/`, follow [`.agents/skills/writing-guidelines/SKILL.md`](.agents/skills/writing-guidelines/SKILL.md). Lemma-specific writing rules live only in the overlay at the top of [`.agents/skills/writing-guidelines/command.md`](.agents/skills/writing-guidelines/command.md); do not duplicate them here.
+When writing or reviewing `docs/`, follow [`.agents/skills/writing-guidelines/SKILL.md`](.agents/skills/writing-guidelines/SKILL.md). Lemma-specific writing rules live only in [`.agents/skills/writing-guidelines/command.md`](.agents/skills/writing-guidelines/command.md); do not duplicate them here.
 
-That directory is the only local copy of this skill; do not put it under `skills/` (that tree is Lemma product skills). `skills-lock.json` `skillPath` is the path in `vercel-labs/agent-skills`; `computedHash` is the SHA-256 of this local skill folder.
+That directory is a Lemma-owned pin, not a Lemma product skill (`skills/`) and not a GitHub-managed skills CLI install. `skills-lock.json` records it as `sourceType: local` so `npx skills add` / `update` / `check` will not fetch `vercel-labs/agent-skills` and delete `command.md`. To refresh the handbook, follow the procedure in the skill `SKILL.md`, then re-hash the folder.
 
 ## Publish protocol
 

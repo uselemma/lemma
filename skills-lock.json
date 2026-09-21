@@ -2,10 +2,9 @@
   "version": 1,
   "skills": {
     "writing-guidelines": {
-      "source": "vercel-labs/agent-skills",
-      "sourceType": "github",
-      "skillPath": "skills/writing-guidelines/SKILL.md",
-      "computedHash": "1f84d3630053658dd8ecee6bc3e4a39076f42be07b1f7dec65e93e0ad0863634"
+      "source": "./.agents/skills/writing-guidelines",
+      "sourceType": "local",
+      "computedHash": "81e92a4ea8a701d574737478fbb3b524bf3e00d3428a044e8eb088b795f7e3e1"
     }
   }
 }

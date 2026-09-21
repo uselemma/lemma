@@ -1,15 +1,14 @@
 ---
-description: Review docs/prose for Vercel Writing Guidelines compliance
+description: Review Lemma docs/prose for writing-guidelines compliance
 argument-hint: <file-or-pattern>
 ---
 
 # Lemma overlay
 
-This pin is Vercel’s writing handbook. For Lemma `docs/`, these rules supersede the rest of this file:
+These rules are the Lemma-specific contract for `docs/`. The rest of this file is only the writing rules that apply here. Do not re-import Vercel-only sections (pricing pages, dashboard deep links, ACME screenshots, AI Gateway catalog IDs, `vercel/examples`).
 
 - Mintlify: `title` is the H1, `sidebarTitle` is the nav label. Do not require `meta.title`, `meta.navLabel`, or `meta.category`
 - Model strings in examples must match the integration’s provider. Do not flag `gpt-4o` or `gpt-4o-mini` when the page is OpenAI, LangChain, LangGraph, Mastra, or the direct SDK
-- Ignore Vercel dashboard deep links, AI Gateway catalog IDs (`anthropic/claude-opus-4-7`), ACME screenshots, and `vercel/examples`
 - Curly quotes in Markdown prose only. Straight quotes in YAML, JSX, fenced/inline code, and JSX/HTML demo data
 - `meta.goal` is the verb-driven plan; `description` is the nav/SEO blurb and must not copy `goal`
 
@@ -34,7 +33,7 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 
 - Active voice. Mental test: append "by monkeys". If the sentence parses, rewrite
 - Direct address: `you`, never `the user` or `one can`
-- Imperative for steps: "Click **Add Project**", not "You will need to click **Add Project**"
+- Imperative for steps: "Pass `api_key` to `init`", not "You will need to pass `api_key` to `init`"
 - Sentences under 20 words target
 - Contractions encouraged (`you'll`, `it's`) for warmth
 - Present tense unless describing future behavior
@@ -51,7 +50,7 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 
 - Earn every detail: cut a number, name, or implementation detail if a more general phrasing wouldn't change the reader's understanding or action
 - Weasel words: replace vague qualifiers (`significantly`, `many`, `often`, `typically`, `generally`) with a specific number or claim
-- Vague quantifiers: no `near-zero`, `sub-second`, `most requests`; give the figure and cite it (`99.37% of requests see zero cold starts`)
+- Vague quantifiers: no `near-zero`, `sub-second`, `most requests`; give the figure and cite it
 - Filler/metaphor verbs: name the action instead of reaching for cadence (`moves through`, `lands`, `carries`, `hits` → the literal step)
 
 ### AI-generated tells (flag these)
@@ -121,13 +120,6 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 - Exception: seconds is bare: `30s`
 - Consistent across the corpus so readers can develop scanning habits
 
-### Money & pricing pages
-
-- Uncompromising detail: err on "too much"
-- Use tables for pricing
-- Never assume reader knows the pricing model or whether their workload counts as one invocation or several
-- Clarity and transparency above all else
-
 ### Emphasis
 
 - **Bold** means UI element or critical fact, never emphasis-for-emphasis-sake
@@ -155,27 +147,13 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 
 - Define every term the first time it appears, link to its conceptual page
 - Anchor text names the destination; never bare URLs or `here`/`link`
-- Do not require Vercel dashboard deep links, AI Gateway catalog URLs, or `vercel/examples` sample repos
 
 ### Models in examples
 
 - Use the model string the integration’s provider actually calls. For OpenAI, LangChain, LangGraph, Mastra, and the direct SDK, `gpt-4o` / `gpt-4o-mini` are valid
 - Do not rewrite those pages to Vercel AI Gateway catalog IDs such as `anthropic/claude-opus-4-7`
 
-### AI workflow
-
-- You are accountable for the content you produce, however it is created
-- You are the final arbiter; the model proposes, you dispose
-- Hold technical accuracy to a high standard: docs are also consumed by LLMs, wrong docs train wrong models
-- Use only enterprise models that do not train on your data (especially for unreleased products)
-- Disclose AI use in the PR (model + prompts if useful)
-- Plan first by hand; the plan is the spec the model works against
-- Use plan-mode in your editor (Cursor, Claude) before letting the model write
-- Tell the model to follow `AGENTS.md` and the linting checklist
-- Run a test prompt against the preview: "given this plan's goal, can the model complete the task using only this page?"
-- Final human review always
-
-### Quality checklist (required boxes are non-negotiable)
+### Quality checklist
 
 - **Findability**: sidebar bucket set via Mintlify `sidebarTitle` / docs.json groups; do not require `meta.category`
 - **Accuracy**: code samples actually run; screenshots map 1:1 to current UI. Do not require ACME demo screenshots
@@ -183,14 +161,6 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 - **Clarity**: overview addresses who/what/where/why; high-level use cases laid out; quickstart for new products; prerequisites listed on tutorials; steps detailed not vague; visual aids in confusing sections; simplest path recommended when multiple exist. Do not require a `vercel/examples` sample repo
 - **Completeness**: limits documented; frontmatter `meta.goal` addressed
 - **Readability**: nav names scannable and use action verbs; content types accurately used; subheadings descriptive; topics start with summaries; code blocks formatted correctly; active voice where warranted
-
-### Review
-
-- PR description lists what to review and links the preview URL when one exists
-- Ping the team via the PR link (not the plan or preview directly)
-- Author is accountable, not the reviewer; reviewers are liberal with approvals
-- Suggestion comments for small text fixes; preview comments for anything bigger
-- Disagreement is fine; reject with a one-line reason and move on
 
 ### Anti-patterns (flag these)
 
@@ -236,28 +206,28 @@ Read files, check against rules below. Output concise but comprehensive: sacrifi
 Group by file. Use `file:line` format (VS Code clickable). Terse findings.
 
 ```text
-## content/docs/sandbox.mdx
+## docs/getting-started/introduction.mdx
 
-content/docs/sandbox.mdx:1 - missing meta.contentType
-content/docs/sandbox.mdx:12 - title "Vercel Sandbox" is feature-shaped, not user-question
-content/docs/sandbox.mdx:24 - passive voice ("the sandbox is created...")
-content/docs/sandbox.mdx:31 - banned word "easy"
-content/docs/sandbox.mdx:47 - "..." → "…"
-content/docs/sandbox.mdx:58 - code block missing language tag
-content/docs/sandbox.mdx:71 - placeholder <TOKEN> → your_access_token_here
-content/docs/sandbox.mdx:89 - "64KB" → "64 KB"
-content/docs/sandbox.mdx:102 - H2 "Caveats" too generic; add specificity
-content/docs/sandbox.mdx:118 - em dash in prose, replace with colon/comma
+docs/getting-started/introduction.mdx:1 - missing meta.contentType
+docs/getting-started/introduction.mdx:12 - title is feature-shaped, not user-question
+docs/getting-started/introduction.mdx:24 - passive voice ("the tracer is created...")
+docs/getting-started/introduction.mdx:31 - banned word "easy"
+docs/getting-started/introduction.mdx:47 - "..." → "…"
+docs/getting-started/introduction.mdx:58 - code block missing language tag
+docs/getting-started/introduction.mdx:71 - placeholder <TOKEN> → your_access_token_here
+docs/getting-started/introduction.mdx:89 - "64KB" → "64 KB"
+docs/getting-started/introduction.mdx:102 - H2 "Caveats" too generic; add specificity
+docs/getting-started/introduction.mdx:118 - em dash in prose, replace with colon/comma
 
-## content/docs/ai-gateway.mdx
+## docs/integrations/openai-agents.mdx
 
-content/docs/ai-gateway.mdx:5 - title case in H1; sentence case only
-content/docs/ai-gateway.mdx:18 - acronym AI Gateway used before being spelled out
-content/docs/ai-gateway.mdx:34 - bold for emphasis, not UI element
-content/docs/ai-gateway.mdx:52 - straight quotes in Markdown prose; use curly quotes
-content/docs/ai-gateway.mdx:71 - hard-wrapped paragraph (lines 71-74)
+docs/integrations/openai-agents.mdx:5 - title case in H1; sentence case only
+docs/integrations/openai-agents.mdx:18 - acronym used before being spelled out
+docs/integrations/openai-agents.mdx:34 - bold for emphasis, not UI element
+docs/integrations/openai-agents.mdx:52 - straight quotes in Markdown prose; use curly quotes
+docs/integrations/openai-agents.mdx:71 - hard-wrapped paragraph (lines 71-74)
 
-## content/docs/cron.mdx
+## docs/guides/building-high-quality-traces.mdx
 
 ✓ pass
 ```
