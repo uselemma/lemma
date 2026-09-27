@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "lemma-changelog": {
+      "source": "./.agents/skills/lemma-changelog",
+      "sourceType": "local",
+      "computedHash": "8de7e25d37d55dfdf40bf5c88e513cfd6488a3ef640ee1c4b104699904654e45"
+    },
     "lemma-writing-guidelines": {
       "source": "./.agents/skills/lemma-writing-guidelines",
       "sourceType": "local",
