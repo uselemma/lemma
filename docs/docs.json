@@ -189,7 +189,10 @@
           {
             "group": "Changelog",
             "pages": [
-              "changelog"
+              "changelog",
+              "changelog/typescript",
+              "changelog/python",
+              "changelog/docs"
             ]
           }
         ]

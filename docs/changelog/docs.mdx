@@ -1,0 +1,266 @@
+---
+title: "Docs"
+sidebarTitle: "Docs"
+description: "Changes to the Lemma docs, listed by the day they were published."
+rss: true
+meta:
+  contentType: "Reference"
+  goal: "Find which documentation changes were published on a given day"
+  audience: "People reading the Lemma docs"
+---
+
+<Update label="September 27, 2026" tags={["New releases", "[Changelog]"]} rss={{ title: "Changelog pages for platform, SDKs, and docs" }}>
+
+  ## Changelog
+
+  - **Platform:** The [platform changelog](/changelog) lists user-facing product changes by day.
+  - **SDKs:** The [TypeScript SDK](/changelog/typescript) and [Python SDK](/changelog/python) changelogs list changes by version.
+  - **Docs:** This page lists documentation changes by day.
+
+</Update>
+
+<Update label="September 21, 2026" tags={["Improvements", "[Reference]", "[Getting started]"]} rss={{ title: "Ingest status rules and clearer page titles" }}>
+
+  ## Reference
+
+  - **Ingest status:** The [trace contract](/reference/trace-contract) says ingest keeps exact `OK` and `ERROR`, ignores every other value, and lets a non-empty error force `ERROR`.
+
+  ## Getting started
+
+  - **Page titles:** Page titles name the task. The introduction title is “Production monitoring for AI agents.”
+
+</Update>
+
+<Update label="September 17, 2026" tags={["Improvements", "[Integrations]"]} rss={{ title: "LangChain idle-trace behavior" }}>
+
+  ## Integrations
+
+  - **LangChain:** The LangChain guide documents that an idle open trace is finalized and sent after the open-trace TTL.
+
+</Update>
+
+<Update label="September 14, 2026" tags={["New releases", "[Guides]", "[Platform]"]} rss={{ title: "Turning issues into fixes" }}>
+
+  ## Guides
+
+  - **From issue to fix:** [Turning issues into fixes](/guides/turning-issues-into-fixes) walks one production issue from the evidence through a code change and a check that it does not recur.
+
+  ## Platform
+
+  - **Issues:** The issues and overview pages link that guide.
+
+</Update>
+
+<Update label="September 3, 2026" tags={["New releases", "[Guides]", "[Integrations]"]} rss={{ title: "Runnable examples for each stack" }}>
+
+  ## Guides
+
+  - **Runnable examples:** [Runnable examples](/guides/examples) points at one docs-chat agent implemented for each first-party stack, plus a direct SDK path.
+
+  ## Integrations
+
+  - **Wiring:** The LangChain, LangGraph, Mastra, OpenAI Agents, and Vercel AI SDK pages show the handler, exporter, or telemetry helper for that example.
+
+</Update>
+
+<Update label="September 2, 2026" tags={["New releases", "Improvements", "[Tracing]", "[Platform]", "[Connections]", "[Navigation]"]} rss={{ title: "Cross-process turns, product pages, and the page menu" }}>
+
+  ## Tracing
+
+  - **Cross-process turns:** [Cross-process turns](/tracing/instrumentation/cross-process-turns) explains how a host and a sandbox record one trace.
+  - **Fail open:** The traces page says automatic SDK delivery catches network errors, and `ingest()` still raises.
+
+  ## Platform
+
+  - **Product pages:** Platform and connection pages match the public product: workspace sequence, ready traces, and the coding-agent setup path.
+
+  ## Connections
+
+  - **Webhooks and MCP:** Webhook and MCP pages replace the previous incident and monitor copy.
+
+  ## Navigation
+
+  - **Page menu:** Each page can be copied, opened as markdown, sent to the docs MCP, or opened in Cursor or Claude Code.
+  - **Introduction:** The introduction screenshot sits under the opening paragraph.
+
+</Update>
+
+<Update label="August 31, 2026" tags={["New releases", "[Platform]", "[Connections]"]} rss={{ title: "Platform and connection guides" }}>
+
+  ## Platform
+
+  - **Platform guides:** Pages for overview, concepts, traces, issues, Inspect, artifacts, and analytics describe the dashboard.
+
+  ## Connections
+
+  - **Connections:** Pages for overview, Slack, Linear, MCP, and webhooks describe how Lemma connects to your tools.
+
+</Update>
+
+<Update label="August 28, 2026" tags={["Improvements", "[Integrations]"]} rss={{ title: "Vercel AI provider system" }}>
+
+  ## Integrations
+
+  - **Vercel AI SDK:** The integration page says a generation records the provider system when the call sets messages.
+
+</Update>
+
+<Update label="August 24, 2026" tags={["Improvements", "[Navigation]", "[Tracing]", "[Platform]"]} rss={{ title: "Instrumentation and platform guides split" }}>
+
+  ## Navigation
+
+  - **Setup path:** Instrumentation setup is the getting-started path for the SDK. The standalone quickstart and tracing overview pages were folded into that guide.
+  - **Platform group:** Platform pages have their own nav group, separate from tracing.
+
+</Update>
+
+<Update label="August 20, 2026" tags={["Improvements", "[Tracing]"]} rss={{ title: "Release setup, including CI identifiers" }}>
+
+  ## Tracing
+
+  - **Release:** Setup explains how to set `release`, including identifiers produced in CI.
+
+</Update>
+
+<Update label="August 19, 2026" tags={["New releases", "[Getting started]"]} rss={{ title: "Diagnostics skill in getting started" }}>
+
+  ## Getting started
+
+  - **Trace quality:** Getting started documents the diagnostics skill for reviewing trace quality.
+
+</Update>
+
+<Update label="August 18, 2026" tags={["Improvements", "[Tracing]"]} rss={{ title: "Any metadata key is searchable" }}>
+
+  ## Tracing
+
+  - **Metadata:** The context page says any metadata key is searchable.
+
+</Update>
+
+<Update label="August 15, 2026" tags={["Improvements", "[Integrations]"]} rss={{ title: "Token usage on integration pages" }}>
+
+  ## Integrations
+
+  - **Token usage:** LangChain, LangGraph, Mastra, OpenAI Agents, and Vercel AI SDK pages document generation token usage.
+
+</Update>
+
+<Update label="August 14, 2026" tags={["Improvements", "[Tracing]", "[Integrations]", "[Reference]"]} rss={{ title: "Release on the tracing client" }}>
+
+  ## Tracing
+
+  - **Release:** Setup, the trace contract, and the integration pages document the client `release` field.
+
+</Update>
+
+<Update label="August 11, 2026" tags={["New releases", "Improvements", "[Tracing]", "[Reference]", "[Integrations]"]} rss={{ title: "Always-on inputs and analytics attributes" }}>
+
+  ## Tracing
+
+  - **Inputs and outputs:** Integration pages and the trace contract say prompts, tool payloads, model output, and error messages are always recorded.
+
+  ## Reference
+
+  - **Analytics attributes:** [Analytics telemetry](/reference/analytics-telemetry) lists the generation attributes the SDK emits, and the generations page documents them.
+
+</Update>
+
+<Update label="August 7, 2026" tags={["New releases", "[Tracing]"]} rss={{ title: "User-facing tool messages" }}>
+
+  ## Tracing
+
+  - **Tool messages:** [Tool calls](/tracing/instrumentation/tool-calls) documents `userFacingMessage` and `user_facing_message`.
+
+</Update>
+
+<Update label="August 6, 2026" tags={["Improvements", "[Integrations]"]} rss={{ title: "Mastra trace names" }}>
+
+  ## Integrations
+
+  - **Mastra:** The Mastra page says the trace name comes from the agent entity.
+
+</Update>
+
+<Update label="July 22, 2026" tags={["Improvements", "[Integrations]"]} rss={{ title: "Integration pages match the trace contract" }}>
+
+  ## Integrations
+
+  - **Trace contract:** The Vercel AI SDK, OpenAI Agents, LangChain, and LangGraph pages describe current-turn input and output, thread and user, and nested tool calls.
+
+</Update>
+
+<Update label="July 17, 2026" tags={["New releases", "[Integrations]"]} rss={{ title: "Mastra integration guide" }}>
+
+  ## Integrations
+
+  - **Mastra:** A Mastra page documents `LemmaMastraExporter`.
+
+</Update>
+
+<Update label="July 14, 2026" tags={["Improvements", "[Tracing]", "[Guides]", "[Reference]"]} rss={{ title: "One delivery per execution" }}>
+
+  ## Tracing
+
+  - **One delivery:** Traces, context, and troubleshooting say each execution sends one complete trace. `TraceHandle.flush` is no longer documented.
+  - **Second delivery:** Troubleshooting describes a root whose input and output are null after a second delivery.
+
+  ## Guides
+
+  - **Quality guide:** Building high-quality traces lives under Guides.
+
+</Update>
+
+<Update label="July 13, 2026" tags={["New releases", "[Reference]", "[Guides]", "[Tracing]"]} rss={{ title: "Trace contract, quality guide, and migrations" }}>
+
+  ## Reference
+
+  - **Trace contract:** The trace contract specifies what clients send and which fields unlock product behavior. The undocumented environment field is gone from the contract.
+
+  ## Guides
+
+  - **Quality:** A guide covers what makes a trace useful to Lemma.
+  - **Migrations:** Guides cover moving from Raindrop, Langfuse, and OpenTelemetry.
+
+</Update>
+
+<Update label="July 9, 2026" tags={["Improvements", "[Tracing]"]} rss={{ title: "Debug mode checks ingest status" }}>
+
+  ## Tracing
+
+  - **Debug verify:** The debug mode page says verification reads per-trace ingest status.
+
+</Update>
+
+<Update label="July 8, 2026" tags={["New releases", "[Tracing]"]} rss={{ title: "Debug mode delivery diagnostics" }}>
+
+  ## Tracing
+
+  - **Debug mode:** The debug mode page documents delivery logs and the smoke test.
+  - **Debug flag:** `LEMMA_DEBUG=1` is documented as the preferred value. `true` still works.
+
+</Update>
+
+<Update label="July 6, 2026" tags={["Improvements", "[Getting started]"]} rss={{ title: "Shorter skill install path" }}>
+
+  ## Getting started
+
+  - **Skill install:** Getting started shortens the tracing skill install path.
+
+</Update>
+
+<Update label="June 30, 2026" tags={["New releases", "[Getting started]", "[Tracing]", "[Integrations]"]} rss={{ title: "Public docs open" }}>
+
+  ## Getting started
+
+  - **Public docs:** The docs site opens with an introduction and the tracing skill install path.
+
+  ## Tracing
+
+  - **Instrumentation:** Tracing pages cover setup, traces, generations, tool calls, spans, and context.
+
+  ## Integrations
+
+  - **First-party stacks:** Pages cover LangChain, OpenAI Agents, and the Vercel AI SDK.
+
+</Update>
