@@ -76,9 +76,9 @@ meta:
 
 </Update>
 
-<Update label="7.11.0" description="September 2, 2026" tags={["New releases", "[Cross-process turns]"]} rss={{ title: "Stitch one turn across processes" }}>
+<Update label="7.11.0" description="September 2, 2026" tags={["New releases", "[Tracing]"]} rss={{ title: "Stitch one turn across processes" }}>
 
-  ## Cross-process turns
+  ## Tracing
 
   - **One turn, two processes:** [start_turn](/tracing/instrumentation/cross-process-turns), `attach_turn`, and `apply` record a host and a sandbox as one trace. The child keeps a journal and does not call ingest. The host sends once. `turn.end()` still raises on failure.
 
