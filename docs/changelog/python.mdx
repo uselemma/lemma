@@ -1,0 +1,234 @@
+---
+title: "Python SDK"
+sidebarTitle: "Python SDK"
+description: "Changes to uselemma-tracing, listed by version."
+rss: true
+meta:
+  contentType: "Reference"
+  goal: "Find what changed in a published version of uselemma-tracing"
+  audience: "Engineers using the Python tracing SDK"
+---
+
+<Update label="7.12.2" description="September 17, 2026" tags={["Bug fixes", "[LangChain]"]} rss={{ title: "LangChain root output and empty results" }}>
+
+  ## LangChain
+
+  - **Root output:** Reasoning content blocks become the answer string on the root trace output. The generation span keeps the full block list. Tool-call payloads stay unchanged.
+  - **Empty results:** A successful non-root chain or tool that returns `None` ends with `{"result": "none"}`. Root traces and errors are unchanged.
+
+</Update>
+
+<Update label="7.12.1" description="September 17, 2026" tags={["Improvements", "[LangChain]"]} rss={{ title: "Idle LangChain traces are sent" }}>
+
+  ## LangChain
+
+  - **Idle traces:** An open trace with no activity for `open_trace_ttl` (default 2 hours) is finalized and sent. A long-running loop is not closed mid-run. The sweep runs from chain, model, and tool starts, at most once per eviction interval.
+
+</Update>
+
+<Update label="7.12.0" description="September 17, 2026" tags={["New releases", "Bug fixes", "[Tracing]", "[LangChain]", "[Ingest]"]} rss={{ title: "Payload controls and LangChain span filters" }}>
+
+  ## Tracing
+
+  - **Before send:** `before_send` can redact or drop an ingest payload without a custom HTTP transport.
+  - **Payload cap:** `max_payload_bytes` caps the payload. `deduplicate_span_content` shrinks repeated history before the cap is applied.
+
+  ## LangChain
+
+  - **Span filter:** `exclude_span_names` and `include_span` drop spans, including noisy LangGraph middleware, while children stay attached to the nearest kept ancestor.
+  - **Model name:** When a chat model is not serializable, the handler reads `ls_model_name` from run metadata after invocation params.
+
+  ## Ingest
+
+  - **User-Agent:** A custom `transport` sends `uselemma-tracing/<version>` unless you set `User-Agent` yourself.
+
+</Update>
+
+<Update label="7.11.4" description="September 17, 2026" tags={["Bug fixes", "[LangChain]"]} rss={{ title: "One LangChain turn under LangSmith middleware" }}>
+
+  ## LangChain
+
+  - **LangSmith middleware:** When LangSmith wraps LangChain middleware and skips `on_chain_start`, nested callbacks stay on the active turn instead of becoming extra root traces.
+
+</Update>
+
+<Update label="7.11.3" description="September 14, 2026" tags={["Bug fixes", "[Tool calls]"]} rss={{ title: "Structured tool-failure payloads" }}>
+
+  ## Tool calls
+
+  - **Failure payloads:** A tool result with `success: false` or `status` of `error` or `failed` is recorded as an error. The span uses `structuredContent.error` when that field is set.
+
+</Update>
+
+<Update label="7.11.2" description="September 3, 2026" tags={["Bug fixes", "[LangChain]"]} rss={{ title: "LangChain 1.x callback flags" }}>
+
+  ## LangChain
+
+  - **Callback flags:** The handler subclasses LangChain’s callback base when `langchain_core` is installed, and sets `run_inline` plus the other 1.x flags. LangChain 1.6 can call the handler without crashing before a span is recorded.
+
+</Update>
+
+<Update label="7.11.1" description="September 3, 2026" tags={["Bug fixes", "[Generations]"]} rss={{ title: "Non-finite token counts stay out of payloads" }}>
+
+  ## Generations
+
+  - **Token counts:** Non-finite numbers, including infinity, are dropped from numeric usage fields.
+
+</Update>
+
+<Update label="7.11.0" description="September 2, 2026" tags={["New releases", "[Tracing]"]} rss={{ title: "Stitch one turn across processes" }}>
+
+  ## Tracing
+
+  - **One turn, two processes:** [start_turn](/tracing/instrumentation/cross-process-turns), `attach_turn`, and `apply` record a host and a sandbox as one trace. The child keeps a journal and does not call ingest. The host sends once. `turn.end()` still raises on failure.
+
+</Update>
+
+<Update label="7.10.3" description="September 2, 2026" tags={["Improvements", "[Ingest]"]} rss={{ title: "Automatic ingest fails open" }}>
+
+  ## Ingest
+
+  - **Fail open:** `trace()`, `async_trace()`, and `TraceHandle.end()` catch HTTP and network errors, log them, and do not rethrow. [ingest()](/tracing/instrumentation/traces) still raises. A delivery failure does not replace your agent’s error.
+
+</Update>
+
+<Update label="7.10.2" description="August 31, 2026" tags={["Improvements", "[Generations]"]} rss={{ title: "Model identity on generation spans" }}>
+
+  ## Generations
+
+  - **Model identity:** A typed generation span copies the model from the invocation, the response, or response metadata when params omit it. The model is omitted on end when it is still unset. Completion text is not used as a model id.
+
+</Update>
+
+<Update label="7.10.1" description="August 28, 2026" tags={["Bug fixes", "[Tool calls]"]} rss={{ title: "Payload tool failures" }}>
+
+  ## Tool calls
+
+  - **Encoded failures:** A tool payload that encodes a failure is stored as a span error.
+
+</Update>
+
+<Update label="7.10.0" description="August 20, 2026" tags={["New releases", "[Generations]", "[Tracing]", "[LangChain]", "[OpenAI Agents]"]} rss={{ title: "Token usage, provider, and release" }}>
+
+  ## Generations
+
+  - **Token usage:** LangChain and OpenAI Agents record token usage, including cache and reasoning tokens from Agents SDK details.
+  - **Provider:** Generation spans set the provider system from the model provider.
+
+  ## Tracing
+
+  - **Release:** Pass `release` to the client, or set `LEMMA_RELEASE`, to stamp the running revision on each trace.
+  - **Provenance:** Spans record the SDK language and integration so missing usage is distinct from a real zero.
+
+</Update>
+
+<Update label="7.8.0" description="August 11, 2026" tags={["New releases", "[Tracing]"]} rss={{ title: "Inputs and outputs are always recorded" }}>
+
+  ## Tracing
+
+  - **Inputs and outputs:** Prompts, tool inputs, tool outputs, model output, and error messages are always recorded. The `record_inputs` and `record_outputs` arguments are removed. Passing them raises `TypeError`. Redact sensitive values before they reach the agent.
+
+</Update>
+
+<Update label="7.7.2" description="August 11, 2026" tags={["Bug fixes", "[Tracing]"]} rss={{ title: "Normalized error messages" }}>
+
+  ## Tracing
+
+  - **Error messages:** Empty and missing failure text uses the same message in the Python and TypeScript SDKs. Serialized payloads use compact JSON.
+
+</Update>
+
+<Update label="7.7.1" description="August 7, 2026" tags={["Improvements", "[Ingest]"]} rss={{ title: "Python requests identify the SDK" }}>
+
+  ## Ingest
+
+  - **User-Agent:** SDK HTTP requests send `uselemma-tracing/<version>`.
+
+</Update>
+
+<Update label="7.7.0" description="August 6, 2026" tags={["New releases", "[Tool calls]"]} rss={{ title: "User-facing tool messages" }}>
+
+  ## Tool calls
+
+  - **User-facing text:** Set [`user_facing_message`](/tracing/instrumentation/tool-calls) when a tool sends text directly to the person. Lemma shows that text as the message they received.
+
+</Update>
+
+<Update label="7.6.0" description="July 22, 2026" tags={["Improvements", "[OpenAI Agents]", "[LangChain]", "[LangGraph]"]} rss={{ title: "Integrations match the trace contract" }}>
+
+  ## OpenAI Agents
+
+  - **Trace contract:** The processor records current-turn input and output, terminal errors, and span-bounded times. Soft tool errors are included.
+
+  ## LangChain
+
+  - **Trace contract:** Owned runs keep current-turn input, output, and errors. Tool calls stay nested under one root until the final answer. LangGraph uses the LangChain adapter.
+
+</Update>
+
+<Update label="7.5.0" description="July 16, 2026" tags={["Bug fixes", "[Tool calls]"]} rss={{ title: "MCP tool errors and child span timing" }}>
+
+  ## Tool calls
+
+  - **MCP errors:** A tool result with `isError` is recorded as an error, without an invented output.
+  - **Child timing:** A tool span no longer ends after its parent generation.
+
+</Update>
+
+<Update label="7.4.2" description="July 14, 2026" tags={["New releases", "[Ingest]"]} rss={{ title: "Ingest replace option removed" }}>
+
+  ## Ingest
+
+  - **One delivery:** The `replace` option is removed. Each execution sends one complete trace. Patching a trace over time is not supported.
+
+</Update>
+
+<Update label="7.4.1" description="July 14, 2026" tags={["New releases", "[Tracing]"]} rss={{ title: "Undocumented environment field removed" }}>
+
+  ## Tracing
+
+  - **Environment field:** The undocumented `environment` client field is removed.
+
+</Update>
+
+<Update label="7.4.0" description="July 9, 2026" tags={["Improvements", "[Debug]"]} rss={{ title: "Debug mode checks ingest status" }}>
+
+  ## Debug
+
+  - **Ingest status:** `LEMMA_DEBUG_VERIFY` checks `GET /traces/ingest-status` for up to 15 seconds, so a backlog does not look like a missed delivery.
+  - **Debug flag:** `LEMMA_DEBUG=1` is the preferred value. `true` still works.
+
+</Update>
+
+<Update label="7.3.0" description="July 8, 2026" tags={["New releases", "[Debug]"]} rss={{ title: "Debug mode delivery diagnostics" }}>
+
+  ## Debug
+
+  - **Delivery logs:** Debug mode logs client config and ingest responses, including failure hints.
+  - **Smoke test:** Debug verification checks that a trace reached Lemma.
+
+</Update>
+
+<Update label="7.2.0" description="July 6, 2026" tags={["Improvements", "[Ingest]"]} rss={{ title: "Traces send once, on end" }}>
+
+  ## Ingest
+
+  - **Send on end:** Trace handles and the OpenAI Agents processor send a trace once, when it ends. They no longer send partial snapshots along the way.
+
+</Update>
+
+<Update label="7.1.0" description="June 30, 2026" tags={["New releases", "[Tracing]", "[LangChain]", "[OpenAI Agents]"]} rss={{ title: "First public Python tracing SDK" }}>
+
+  ## Tracing
+
+  - **First public release:** `uselemma-tracing` sends traces to Lemma, with debug mode and experiment mode.
+
+  ## LangChain
+
+  - **Callback handler:** A LangChain callback handler records chains, model calls, and tools.
+
+  ## OpenAI Agents
+
+  - **Processor:** An OpenAI Agents processor records agent runs.
+
+</Update>

@@ -1,0 +1,263 @@
+---
+title: "Platform"
+sidebarTitle: "Platform"
+description: "Changes to the Lemma platform, including new features, improvements, and bug fixes."
+rss: true
+meta:
+  contentType: "Reference"
+  goal: "Find which user-facing changes reached production on a given day"
+  audience: "People using the Lemma dashboard and API"
+---
+
+<Update label="September 27, 2026" tags={["Bug fixes", "[Traces]"]} rss={{ title: "Trace pages fill with processed traces" }}>
+
+  ## Traces
+
+  - **Processed traces:** With **Show unprocessed** off, each [traces](/platform/traces) page fills with processed traces, so you don’t get a page of empty slots. The traces API accepts `include_unprocessed`.
+
+</Update>
+
+<Update label="September 21, 2026" tags={["Improvements", "[Issues]"]} rss={{ title: "One failure definition for issue detection" }}>
+
+  ## Issues
+
+  - **Failure definition:** Detection uses one failure definition from extraction through investigation for an [issue](/platform/issues).
+
+</Update>
+
+<Update label="September 18, 2026" tags={["New releases", "Improvements", "Bug fixes", "[Slack]", "[Audit logs]", "[API keys]"]} rss={{ title: "Slack alert layout, audit logs, and API key settings" }}>
+
+  ## Slack
+
+  - **Priority alerts:** A priority alert shows the issue name, agent, confirmation writeup, sparkline, and actions. Each export mints a fresh link that lasts 7 days. Alerts no longer append a markdown dump of the thread. See [Slack](/connections/slack).
+
+  ## Audit logs
+
+  - **Sensitive actions:** Audit logs record auth, membership, API key, integration, export, delete, and billing actions. Lemma keeps them for at least 90 days.
+
+  ## Bug fixes
+
+  - **API keys settings:** The API keys settings page finishes loading. A failed request shows the error instead of spinning.
+
+</Update>
+
+<Update label="September 17, 2026" tags={["New releases", "Improvements", "[API keys]", "[Issues]", "[Slack]", "[Support access]"]} rss={{ title: "Project API keys, issue confirmation, and Slack settings" }}>
+
+  ## API keys
+
+  - **Project scope:** You can limit an API key to one project. Calls through REST or the Model Context Protocol (MCP) to any other project are rejected.
+
+  ## Issues
+
+  - **Confirmation:** Issue lists, issue details, and the issue API show whether an issue is unconfirmed or confirmed. They also show the proof writeup and any dismissal note.
+  - **Merging:** Merging matches issues on where the failure happened and what failed. It ignores a parameter that appears on only one occurrence, which cuts duplicate issue groups.
+  - **Validation fields:** The issue API and the dashboard no longer return the old validation status, confidence, and evidence fields.
+
+  ## Slack
+
+  - **Confirmed alerts:** Slack alerts wait until Lemma confirms the issue, and a confirmed alert includes the proof.
+  - **Instrumentation error alerts:** Project Slack settings include an **Instrumentation error alerts** toggle. Turning it off stops the Slack digests and hides the dashboard banner. The control explains what these errors are.
+  - **Channel picker:** The Slack alert channel picker searches every public channel, including a workspace with more than 500 channels.
+
+  ## Support access
+
+  - **Owner controls:** An organization owner can turn Lemma support access off, or limit how long it lasts. An Enterprise organization starts with support access off.
+
+</Update>
+
+<Update label="September 16, 2026" tags={["New releases", "[Settings]", "[API keys]", "[Artifacts]", "[Slack]", "[Issues]", "[Webhooks]"]} rss={{ title: "Settings pages, API key scopes, and Slack channel binding" }}>
+
+  ## Settings
+
+  - **Project settings:** Project settings split into **General**, **Integrations**, and **Developer**. Cards show whether a connection is live.
+
+  ## API keys
+
+  - **Scopes:** API keys have ingest, read, and admin scopes. An existing key stays admin. A new key defaults to ingest. The page shows who created the key, when it was last used, and when it expires. Admins get an alert before expiry.
+
+  ## Artifacts
+
+  - **Coding agents:** A coding agent can update uploaded [artifacts](/platform/artifacts) and append learned context through the [Lemma MCP server](/connections/mcp). It reads the current text before it writes, so it doesn’t overwrite a newer edit. Constraints you wrote stay in place.
+
+  ## Slack
+
+  - **Alert channel:** You choose the Slack alert channel in the dashboard. Lemma retired `/lemma link` and `/lemma unlink`. An unlinked mention points you to settings.
+
+  ## Issues
+
+  - **Flag fields:** When you flag an issue, the public JSON fields use a `flagged_` prefix. Those fields are separate from confirmation fields.
+
+  ## Webhooks
+
+  - **Delivery:** [Webhook](/connections/webhooks) delivery rejects an unsafe or internal destination. Only an owner or admin can change organization settings. Lemma publishes `/.well-known/security.txt`.
+
+</Update>
+
+<Update label="September 11, 2026" tags={["New releases", "Bug fixes", "[Billing]", "[API]"]} rss={{ title: "Annual Pro billing and clearer API errors" }}>
+
+  ## Billing
+
+  - **Annual billing:** Pro checkout offers annual billing in billing settings, onboarding, and starter trial plan changes.
+
+  ## API
+
+  - **Trace search errors:** An invalid trace search returns HTTP 400 with a message you can act on, in REST and MCP. It no longer returns a generic server error.
+  - **Catalog:** The public API and MCP catalog drops unused context and release tools. Trace and issue tools use their current names. An analytics call has to name one view.
+
+</Update>
+
+<Update label="September 10, 2026" tags={["Improvements", "Bug fixes", "[Billing]", "[Issues]", "[MCP]"]} rss={{ title: "Checkout retry, issue type, and MCP capability reports" }}>
+
+  ## Billing
+
+  - **Checkout retry:** Lemma replaces an expired Stripe Checkout session, so you can retry checkout. You no longer stay stuck on the organization checkout lock.
+
+  ## Issues
+
+  - **Issue type:** Issue details label the issue type in the side rail.
+
+  ## MCP
+
+  - **Missing capabilities:** An MCP client can call `get_more_tools` to report a capability the current catalog doesn’t include.
+
+</Update>
+
+<Update label="September 6, 2026" tags={["Improvements", "[Traces]", "[Issues]", "[Slack]"]} rss={{ title: "Unprocessed traces, fingerprints, and Slack digests" }}>
+
+  ## Traces
+
+  - **Unprocessed rows:** The traces list hides unprocessed rows by default. **Show unprocessed** keeps your choice.
+  - **Failed tool calls:** A failed tool call in the trace drawer is one line, with the failure in red. The full error stays on the span.
+
+  ## Issues
+
+  - **Fingerprints:** An issue fingerprint attaches to the failed operation. Grouping treats the same failure at equivalent sites as one issue, and it keeps tool names exact.
+  - **Copy to markdown:** **Copy to markdown** is a compact icon in the issue actions.
+
+  ## Slack
+
+  - **Instrumentation digests:** An instrumentation Slack digest includes every agent that has findings, even when more than three agents are affected.
+
+</Update>
+
+<Update label="August 31, 2026" tags={["New releases", "Improvements", "Bug fixes", "[Issues]", "[Traces]", "[API]"]} rss={{ title: "Issue fingerprints, trace paging, and API edge errors" }}>
+
+  ## Issues
+
+  - **Fingerprints:** Issue grouping keys each new occurrence by where it failed, what failed, and the parameter involved. Headers, the issue API, and [webhooks](/connections/webhooks) show that fingerprint instead of category, subsystem, failure class, or canonical mechanism.
+  - **Thread status:** Thread extraction status covers every analyzed turn, so an earlier turn no longer looks unsampled.
+  - **Root causes:** REST and MCP can read recurring root causes and the issues linked to them.
+
+  ## Traces
+
+  - **Span paging:** REST and MCP trace reads can page through spans and return a trimmed span list. A context bundle reports the total span count. A time bound accepts an ISO 8601 date or epoch milliseconds. Lemma rejects an invalid value.
+  - **Diagnostics:** Diagnostics name incomplete model, history, or input and output instrumentation, instead of calling the generation untyped.
+
+  ## Bug fixes
+
+  - **API edge errors:** If the API edge cannot reach the service, the browser gets a JSON 502 and consistent cross-origin headers.
+
+</Update>
+
+<Update label="August 30, 2026" tags={["Improvements", "Bug fixes", "[Billing]", "[Inspect]", "[Dashboard]", "[Traces]"]} rss={{ title: "Pro trials stay on Pro, and Inspect answers from the docs" }}>
+
+  ## Billing
+
+  - **Pro trials:** A new Pro trial stays on Pro when it ends. You can move to Lemma Jr. before the trial ends.
+  - **Plan controls:** Trial plan controls live in **Manage organization → Billing**, including **Keep Pro** and **Reactivate**.
+
+  ## Inspect
+
+  - **Product questions:** [Inspect](/platform/inspect) and the Slack agent answer product, SDK, API, and instrumentation questions from the public docs. Answers cite the heading.
+
+  ## Bug fixes
+
+  - **Project pages:** Project pages in the dashboard load again.
+  - **Search loading:** Trace search shows a loading indicator while results load.
+
+</Update>
+
+<Update label="August 29, 2026" tags={["New releases", "Improvements", "Bug fixes", "[Billing]", "[Traces]", "[Slack]", "[Issues]", "[Accounts]"]} rss={{ title: "Pro trials, trace search, and Slack markdown downloads" }}>
+
+  ## Billing
+
+  - **Pro trials:** A new organization starts a card-required 14-day Pro trial. Billing lives in **Manage organization**, with plan, status, upgrade, and cancel. A planless or lapsed organization picks a plan during onboarding. That trial was set to end on Lemma Jr. unless you kept Pro.
+
+  ## Traces
+
+  - **Search:** Trace search opens a dropdown built from your data. Clicking a row selects that result. You can edit a saved view without losing it, and you can save a search in one click.
+
+  ## Slack
+
+  - **Download markdown:** A Slack issue alert includes **Download .md**. Each click mints a new private link.
+
+  ## Issues
+
+  - **Empty projects:** A project with no issues shows the explainer video.
+
+  ## Bug fixes
+
+  - **Invites:** A signed-out invitee creates an account and returns to the invite. Deleting an organization sends you to a safe page instead of a crashed dashboard.
+
+</Update>
+
+<Update label="August 21, 2026" tags={["Improvements", "[Inspect]"]} rss={{ title: "Inspect conversation layout" }}>
+
+  ## Inspect
+
+  - **Conversation layout:** Inspect centers the conversation title and uses shorter history controls. Suggestions line up with the conversation. While it answers, it shows **Thinking**.
+
+</Update>
+
+<Update label="August 20, 2026" tags={["Improvements", "[Issues]"]} rss={{ title: "Dismissed issues stay hidden" }}>
+
+  ## Issues
+
+  - **Dismissed issues:** The issues list hides dismissed issues unless you filter for them. Rows that are already on screen stay there while the list refreshes. An empty list and a failed load each state what happened.
+
+</Update>
+
+<Update label="August 19, 2026" tags={["New releases", "Improvements", "[Billing]", "[Issues]", "[Slack]"]} rss={{ title: "Trial access, thread review budget, and Slack sparklines" }}>
+
+  ## Billing
+
+  - **Trials and subscriptions:** You can still create an account and an organization. The dashboard and Slack support require an active trial or subscription.
+
+  ## Issues
+
+  - **Review budget:** The remaining review budget counts threads, not traces. A long chat no longer uses the entire sample.
+  - **Grouping metadata:** A newly grouped issue keeps where it failed, what failed, and the parameter involved.
+
+  ## Slack
+
+  - **Priority alerts:** A Slack priority alert leads with why the issue needs attention. It uses a compact sparkline instead of a tall 14-day chart. Reconnect Slack if an existing connection cannot upload the chart.
+  - **Token counts:** Instrumentation diagnostics flag a generation span that is missing input or output token counts. They also explain the effect on the cost estimate.
+
+</Update>
+
+<Update label="August 18, 2026" tags={["New releases", "Improvements", "[Issues]", "[API]", "[Dashboard]", "[Accounts]"]} rss={{ title: "Issue triage, bulk actions, and account deletion" }}>
+
+  ## Issues
+
+  - **Recurring issues:** The issues list opens on recurring issues. Less common issues sit below a divider. Add `expanded=true` to a shared link to show them.
+  - **Grouping:** Grouping matches occurrences that share the same code defect, using the cited trace evidence.
+  - **Merge:** You can merge compatible issues from the issues table. Pick the issue that should survive, then merge in the dashboard, the REST API, or MCP.
+  - **Bulk actions:** You can flag, unflag, review, resolve, dismiss, assign, and tag up to 50 selected issues. A partial failure lists the rows to retry.
+  - **Categories:** Issue categories stay consistent in filters, sorting, list rows, and detail headers.
+  - **Issue details:** Issue details hide a raw ID for a removed member. An active issue title can refresh from recent occurrences.
+
+  ## API
+
+  - **Bulk updates:** REST and MCP can read and update up to 50 issues in one call. Lemma consolidated the trace, issue, and analytics routes. Older compatible aliases still work. Lemma deprecated those aliases.
+  - **Public responses:** Customer REST and MCP responses omit internal-only fields and tools. An unconfigured API origin returns “Service unavailable”.
+  - **OpenAPI:** OpenAPI and MCP descriptions use product language. Deprecated REST routes stay callable, and the public spec hides them.
+
+  ## Dashboard
+
+  - **Setup to-dos:** Dashboard setup to-dos clear after you connect MCP, upload context, or dismiss an issue.
+
+  ## Accounts
+
+  - **Deletion:** An owner can delete an organization. If you belong to no organization, you can delete your account from **Account Security**.
+
+</Update>

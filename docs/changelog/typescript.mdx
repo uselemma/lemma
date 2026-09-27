@@ -1,0 +1,255 @@
+---
+title: "TypeScript SDK"
+sidebarTitle: "TypeScript SDK"
+description: "Changes to @uselemma/tracing, listed by version."
+rss: true
+meta:
+  contentType: "Reference"
+  goal: "Find what changed in a published version of @uselemma/tracing"
+  audience: "Engineers using the TypeScript tracing SDK"
+---
+
+<Update label="7.12.4" description="September 17, 2026" tags={["Bug fixes", "[LangChain]"]} rss={{ title: "Root output flattens reasoning blocks" }}>
+
+  ## LangChain
+
+  - **Root output:** Reasoning content blocks become the answer string on the root trace output. The generation span keeps the full block list. Tool-call payloads stay unchanged.
+
+</Update>
+
+<Update label="7.12.3" description="September 17, 2026" tags={["Bug fixes", "[LangChain]"]} rss={{ title: "LangChain model name from run metadata" }}>
+
+  ## LangChain
+
+  - **Model name:** When a chat model is not serializable, the handler reads `ls_model_name` from run metadata after invocation params.
+
+</Update>
+
+<Update label="7.12.2" description="September 14, 2026" tags={["Bug fixes", "[Tool calls]"]} rss={{ title: "Structured tool-failure payloads" }}>
+
+  ## Tool calls
+
+  - **Failure payloads:** A tool result with `success: false` or `status` of `error` or `failed` is recorded as an error. The span uses `structuredContent.error` when that field is set.
+
+</Update>
+
+<Update label="7.12.1" description="September 3, 2026" tags={["Improvements", "[LangChain]", "[Vercel AI]", "[Mastra]"]} rss={{ title: "Framework adapters match framework types" }}>
+
+  ## LangChain
+
+  - **Callback handler:** `LemmaLangChainCallbackHandler` accepts LangChain 1.x callback arguments and sets `run_inline`, `raise_error`, and the `ignore_*` flags.
+
+  ## Vercel AI
+
+  - **Telemetry types:** The Vercel AI telemetry object is assignable to the AI SDK `Telemetry` type without a cast.
+
+  ## Mastra
+
+  - **Exporter types:** `exportTracingEvent` accepts the framework event shape, so you can pass the exporter without a cast.
+
+</Update>
+
+<Update label="7.12.0" description="September 2, 2026" tags={["New releases", "[Tracing]"]} rss={{ title: "Stitch one turn across processes" }}>
+
+  ## Tracing
+
+  - **One turn, two processes:** [startTurn](/tracing/instrumentation/cross-process-turns), `attachTurn`, and `apply` record a host and a sandbox as one trace. The child keeps a journal and does not call ingest. The host sends once. `turn.end()` still raises on failure.
+
+</Update>
+
+<Update label="7.11.4" description="September 2, 2026" tags={["Improvements", "[Ingest]"]} rss={{ title: "Automatic ingest fails open" }}>
+
+  ## Ingest
+
+  - **Fail open:** `trace()` and `TraceHandle.end()` catch HTTP and network errors, log them, and do not rethrow. [ingest()](/tracing/instrumentation/traces) still raises. A delivery failure does not replace your agent’s error.
+
+</Update>
+
+<Update label="7.11.3" description="August 31, 2026" tags={["Improvements", "[Generations]"]} rss={{ title: "Model identity on generation spans" }}>
+
+  ## Generations
+
+  - **Model identity:** A typed generation span copies the model from the invocation, the response, or response metadata when params omit it. Completion text is not used as a model id.
+
+</Update>
+
+<Update label="7.11.2" description="August 28, 2026" tags={["Bug fixes", "[Vercel AI]"]} rss={{ title: "Vercel AI records the provider system" }}>
+
+  ## Vercel AI
+
+  - **Provider system:** A generation records the provider system when the call sets `messages`.
+
+</Update>
+
+<Update label="7.11.1" description="August 28, 2026" tags={["Bug fixes", "Improvements", "[Tool calls]", "[Tracing]"]} rss={{ title: "Payload tool failures and the OpenCode harness id" }}>
+
+  ## Tool calls
+
+  - **Encoded failures:** A tool payload that encodes a failure is stored as a span error.
+
+  ## Tracing
+
+  - **OpenCode:** `codingAgentTurnTrace` accepts the `opencode` harness id.
+
+</Update>
+
+<Update label="7.11.0" description="August 20, 2026" tags={["New releases", "[Tracing]"]} rss={{ title: "Assemble a coding-agent turn" }}>
+
+  ## Tracing
+
+  - **Coding-agent turns:** `codingAgentTurnTrace` builds one trace from a completed coding-agent turn: prompt, tool calls, and response.
+
+</Update>
+
+<Update label="7.10.0" description="August 15, 2026" tags={["New releases", "[Generations]", "[Tracing]", "[LangChain]", "[OpenAI Agents]", "[Vercel AI]", "[Mastra]"]} rss={{ title: "Token usage, provider, and release" }}>
+
+  ## Generations
+
+  - **Token usage:** LangChain, OpenAI Agents, Vercel AI SDK, and Mastra record token usage, including cache and reasoning tokens from Agents SDK and AI SDK 7 shapes.
+  - **Provider:** Generation spans set the provider system from the model provider.
+
+  ## Tracing
+
+  - **Release:** Pass `release` to the client, or set `LEMMA_RELEASE`, to stamp the running revision on each trace.
+  - **Provenance:** Spans record the SDK language and integration so missing usage is distinct from a real zero.
+
+</Update>
+
+<Update label="7.9.0" description="August 11, 2026" tags={["New releases", "[Tracing]"]} rss={{ title: "Inputs and outputs are always recorded" }}>
+
+  ## Tracing
+
+  - **Inputs and outputs:** Prompts, tool inputs, tool outputs, model output, and error messages are always recorded. The `recordInputs` and `recordOutputs` options are removed. Redact sensitive values before they reach the agent.
+
+</Update>
+
+<Update label="7.8.1" description="August 11, 2026" tags={["Bug fixes", "[Tracing]"]} rss={{ title: "Normalized error messages" }}>
+
+  ## Tracing
+
+  - **Error messages:** Empty and missing failure text uses the same message in the TypeScript and Python SDKs. Serialized payloads use compact JSON.
+
+</Update>
+
+<Update label="7.8.0" description="August 6, 2026" tags={["New releases", "[Tool calls]"]} rss={{ title: "User-facing tool messages" }}>
+
+  ## Tool calls
+
+  - **User-facing text:** Set [`userFacingMessage`](/tracing/instrumentation/tool-calls) when a tool sends text directly to the person. Lemma shows that text as the message they received.
+
+</Update>
+
+<Update label="7.7.1" description="August 6, 2026" tags={["Bug fixes", "[Mastra]"]} rss={{ title: "Mastra traces use the agent name" }}>
+
+  ## Mastra
+
+  - **Agent name:** The trace name comes from the agent entity, then the entity name, then the id inside the run span name. An explicit `agentName` still wins.
+
+</Update>
+
+<Update label="7.7.0" description="July 22, 2026" tags={["Improvements", "[Vercel AI]", "[OpenAI Agents]", "[LangChain]", "[LangGraph]"]} rss={{ title: "Integrations match the trace contract" }}>
+
+  ## Vercel AI
+
+  - **Trace contract:** One integration owns one in-flight run. The root records the current turn, thread, and user, with wall-clock times and structured output.
+
+  ## OpenAI Agents
+
+  - **Trace contract:** The processor records current-turn input and output, terminal errors, and span-bounded times. Soft tool errors match the Python SDK.
+
+  ## LangChain
+
+  - **Trace contract:** Owned runs keep current-turn input, output, and errors. Tool calls stay nested under one root until the final answer. LangGraph uses the LangChain adapter.
+
+</Update>
+
+<Update label="7.6.0" description="July 17, 2026" tags={["New releases", "[Mastra]"]} rss={{ title: "Mastra Observability exporter" }}>
+
+  ## Mastra
+
+  - **Exporter:** `LemmaMastraExporter` maps agent and workflow spans to Lemma traces, with nested generations and tools. Soft tool failures and the current user turn are included.
+
+</Update>
+
+<Update label="7.5.0" description="July 16, 2026" tags={["Bug fixes", "[Tool calls]"]} rss={{ title: "MCP tool errors and child span timing" }}>
+
+  ## Tool calls
+
+  - **MCP errors:** A tool result with `isError` is recorded as an error, without an invented output.
+  - **Child timing:** A tool span no longer ends after its parent generation.
+
+</Update>
+
+<Update label="7.4.3" description="July 15, 2026" tags={["Improvements", "[Tracing]"]} rss={{ title: "Ended traces leave the client registry" }}>
+
+  ## Tracing
+
+  - **Registry:** An ended trace handle is released from the client registry.
+
+</Update>
+
+<Update label="7.4.2" description="July 14, 2026" tags={["New releases", "[Ingest]"]} rss={{ title: "Ingest replace option removed" }}>
+
+  ## Ingest
+
+  - **One delivery:** The `replace` option is removed. Each execution sends one complete trace. Patching a trace over time is not supported.
+
+</Update>
+
+<Update label="7.4.1" description="July 14, 2026" tags={["New releases", "[Tracing]", "[Ingest]"]} rss={{ title: "TraceHandle.flush removed" }}>
+
+  ## Ingest
+
+  - **end() sends:** `TraceHandle.flush` is removed. `end()` is how a trace handle is sent.
+
+  ## Tracing
+
+  - **Environment field:** The undocumented `environment` client field is removed.
+
+</Update>
+
+<Update label="7.4.0" description="July 9, 2026" tags={["Improvements", "[Debug]"]} rss={{ title: "Debug mode checks ingest status" }}>
+
+  ## Debug
+
+  - **Ingest status:** `LEMMA_DEBUG_VERIFY` and `debugSmokeTest` check `GET /traces/ingest-status` for up to 15 seconds, so a backlog does not look like a missed delivery.
+  - **Debug flag:** `LEMMA_DEBUG=1` is the preferred value. `true` still works.
+
+</Update>
+
+<Update label="7.3.0" description="July 8, 2026" tags={["New releases", "[Debug]"]} rss={{ title: "Debug mode delivery diagnostics" }}>
+
+  ## Debug
+
+  - **Delivery logs:** Debug mode logs client config and ingest responses, including failure hints.
+  - **Smoke test:** `debugSmokeTest` checks that a trace reached Lemma.
+
+</Update>
+
+<Update label="7.2.0" description="July 6, 2026" tags={["Improvements", "[Ingest]"]} rss={{ title: "Traces send once, on end" }}>
+
+  ## Ingest
+
+  - **Send on end:** Trace handles and the OpenAI Agents processor send a trace once, when it ends. They no longer send partial snapshots along the way.
+
+</Update>
+
+<Update label="7.1.0" description="June 30, 2026" tags={["New releases", "[Tracing]", "[LangChain]", "[OpenAI Agents]", "[Vercel AI]"]} rss={{ title: "First public TypeScript tracing SDK" }}>
+
+  ## Tracing
+
+  - **First public release:** `@uselemma/tracing` sends traces to Lemma, with debug mode and experiment mode.
+
+  ## LangChain
+
+  - **Callback handler:** A LangChain callback handler records chains, model calls, and tools.
+
+  ## OpenAI Agents
+
+  - **Processor:** An OpenAI Agents processor records agent runs.
+
+  ## Vercel AI
+
+  - **Telemetry:** A Vercel AI SDK telemetry integration records model and tool calls.
+
+</Update>
