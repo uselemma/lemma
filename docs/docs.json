@@ -181,6 +181,18 @@
         "tab": "API Reference",
         "icon": "/icons/code.svg",
         "openapi": "https://api.uselemma.ai/openapi.json"
+      },
+      {
+        "tab": "Changelog",
+        "icon": "/icons/sparkles.svg",
+        "groups": [
+          {
+            "group": "Product updates",
+            "pages": [
+              "changelog"
+            ]
+          }
+        ]
       }
     ]
   },
