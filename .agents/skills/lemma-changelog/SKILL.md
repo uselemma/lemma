@@ -126,3 +126,7 @@ Read the Update you touched and check:
 - The bullet says what the reader can do, not which commit or flag produced it.
 - A default-off feature is absent.
 - The same behavior is not copied onto the wrong page.
+
+## Maintenance
+
+`skills-lock.json` tracks this folder as a **local** skill so the skills CLI will not fetch a remote replacement. When this skill changes, refresh `skills-lock.json` `computedHash` with the skills CLI folder hash (`localeCompare` file order).

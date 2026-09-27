@@ -2,11 +2,11 @@
 
 ## Docs
 
-When writing or reviewing `docs/`, follow [`.agents/skills/lemma-writing-guidelines/SKILL.md`](.agents/skills/lemma-writing-guidelines/SKILL.md). Lemma-specific writing rules live only in [`.agents/skills/lemma-writing-guidelines/command.md`](.agents/skills/lemma-writing-guidelines/command.md); do not duplicate them here.
+Agent skills under `.agents/skills/` are Lemma-owned pins, not product skills (`skills/`). `skills-lock.json` records each as `sourceType: local`.
 
-That directory is a Lemma-owned pin (`lemma-writing-guidelines`), not a Lemma product skill (`skills/`) and not the upstream `writing-guidelines` skill name. `skills-lock.json` records it as `sourceType: local` so a later `npx skills add vercel-labs/agent-skills --skill writing-guidelines` installs beside this folder instead of replacing it. To refresh the handbook, follow the procedure in the skill `SKILL.md`, then re-hash the folder.
+When writing or reviewing `docs/`, follow [`.agents/skills/lemma-writing-guidelines/SKILL.md`](.agents/skills/lemma-writing-guidelines/SKILL.md). Lemma-specific writing rules live only in [`.agents/skills/lemma-writing-guidelines/command.md`](.agents/skills/lemma-writing-guidelines/command.md); do not duplicate them here. That pin is not the upstream `writing-guidelines` skill name, so a later `npx skills add vercel-labs/agent-skills --skill writing-guidelines` installs beside it instead of replacing it. To refresh the handbook, follow the procedure in that skill.
 
-When adding or editing changelog entries, follow [`.agents/skills/lemma-changelog/SKILL.md`](.agents/skills/lemma-changelog/SKILL.md). That directory is a Lemma-owned agent skill, not a product skill. Do not duplicate its rules here. `skills-lock.json` records it as `sourceType: local`. Re-hash that folder when the skill changes.
+When adding or editing changelog entries, follow [`.agents/skills/lemma-changelog/SKILL.md`](.agents/skills/lemma-changelog/SKILL.md), including its maintenance section when the skill changes.
 
 ## Publish protocol
 
