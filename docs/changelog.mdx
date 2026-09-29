@@ -17,11 +17,15 @@ meta:
 
 </Update>
 
-<Update label="September 27, 2026" tags={["Bug fixes", "[Traces]"]} rss={{ title: "Trace pages fill with processed traces" }}>
+<Update label="September 27, 2026" tags={["Bug fixes", "[Traces]", "[Analytics]"]} rss={{ title: "Trace pages fill with processed traces, and Analytics counts span errors" }}>
 
   ## Traces
 
   - **Processed traces:** With **Show unprocessed** off, each [traces](/platform/traces) page fills with processed traces, so you don’t get a page of empty slots. The traces API accepts `include_unprocessed`.
+
+  ## Analytics
+
+  - **Errors headline:** The [Analytics](/platform/analytics) errors headline counts span errors. **Error rate** and the agent scorecard count runs whose root span failed.
 
 </Update>
 
