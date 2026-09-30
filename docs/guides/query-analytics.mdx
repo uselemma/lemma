@@ -121,16 +121,7 @@ A `trace_cost` row includes `estimated_cost_usd`. When `cost_lower_bound` is tru
 
 ## Preset views
 
-`GET /projects/{project_id}/analytics` returns one dashboard panel. Set `view` to one of:
-
-- `base`
-- `window`
-- `model_scorecard`
-- `agent_scorecard`
-- `tool_aggregates`
-- `roi`
-
-Request one view. MCP has one tool for each view. The [Get project analytics](/api-reference/projects/get-project-analytics) reference lists the parameters and the response for each view.
+`GET /projects/{project_id}/analytics` returns one dashboard panel. Pass one `view`. MCP has one tool for each view. View names, parameters, and responses are on [Get project analytics](/api-reference/projects/get-project-analytics).
 
 ## Related pages
 
