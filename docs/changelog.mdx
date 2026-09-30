@@ -13,7 +13,13 @@ meta:
 
   ## Analytics
 
-  - **Catalog query:** List the events, fields, and cost measures stored for a project, then run one aggregate over them. Use `GET /projects/{project_id}/analytics/catalog` and `POST /projects/{project_id}/analytics/query`, or the MCP tools `describe_project_analytics` and `query_project_analytics`.
+  - **Catalog:** List the events, fields, and cost measures stored for a project.
+  - **Aggregate:** Run one aggregate over the events, fields, and cost measures stored for a project.
+
+  ## API
+
+  - **Catalog:** `GET /projects/{project_id}/analytics/catalog` returns the events, fields, and cost measures for a project. The MCP tool is `describe_project_analytics`.
+  - **Query:** `POST /projects/{project_id}/analytics/query` runs one aggregate over the stored events. The MCP tool is `query_project_analytics`.
 
 </Update>
 
