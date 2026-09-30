@@ -164,6 +164,7 @@
               "guides/building-high-quality-traces",
               "guides/instrumenting-multi-turn-agents",
               "guides/examples",
+              "guides/query-analytics",
               {
                 "group": "Migrations",
                 "expanded": false,
