@@ -1,0 +1,196 @@
+---
+title: "Querying project analytics"
+sidebarTitle: "Query analytics"
+description: "Fields, filters, and limits for one project analytics aggregate"
+meta:
+  contentType: "How-to"
+  goal: "Run one project analytics aggregate from REST or MCP"
+  audience: "Engineers querying project analytics from a script or a coding agent"
+---
+
+Query project analytics when you need one number or one breakdown. Read the catalog, then run a single aggregate. REST and the Lemma [Model Context Protocol (MCP)](/connections/mcp) server share this query.
+
+Preset views return an [Analytics](/platform/analytics) panel. Use a preset view for that panel. Use this query when one aggregate answers the question.
+
+<Note>
+  You need an organization API key whose scope is read or admin, plus the project id. An ingest-only key cannot call these routes. A key limited to one project works only for that project. Create the key under **API Keys** in the [Lemma dashboard](https://platform.uselemma.ai).
+</Note>
+
+## Query one aggregate
+
+The catalog names every event, field, filter, and aggregation the query accepts. A field that is missing there is not queryable.
+
+<Steps>
+  <Step title="Read the catalog">
+    `GET` the catalog for the project. Trace analytics uses these events:
+
+    - `trace.processed`
+    - `generation.completed`
+    - `tool.called`
+    - `span.errored`
+
+    The same response lists issue lifecycle events, such as `issue.created` and `issue.resolved`.
+
+    ```bash
+    curl -s \
+      "https://api.uselemma.ai/projects/your_project_id/analytics/catalog" \
+      -H "Authorization: Bearer your_organization_api_key"
+    ```
+
+    The JSON includes:
+
+    - `events`, each with `dimensions`, `measures`, and `cost_measures`
+    - `filter_ops`
+    - `buckets`
+    - `limits`
+
+    On MCP, call `describe_project_analytics` with `project_id`.
+  </Step>
+  <Step title="Post one aggregate">
+    `POST` one query. The body names an event, a window, and at least one measure. `count` does not take a `field`. `p95` and the other numeric aggregations do.
+
+    `start` and `end_exclusive` are second-aligned UTC. The end is exclusive, so `2026-09-30T00:00:00.000Z` is not included. The window can be at most 90 days.
+
+    ```json
+    {
+      "from": "trace.processed",
+      "start": "2026-09-23T00:00:00.000Z",
+      "end_exclusive": "2026-09-30T00:00:00.000Z",
+      "filters": [
+        {
+          "field": "agent_name",
+          "op": "eq",
+          "value": "support_agent"
+        }
+      ],
+      "group_by": [{ "bucket": "day", "as": "day" }],
+      "measures": [
+        { "as": "traces", "agg": "count" },
+        {
+          "as": "p95_ms",
+          "agg": "p95",
+          "field": "duration_ms"
+        }
+      ],
+      "limit": 7
+    }
+    ```
+
+    This body counts `trace.processed` rows for `support_agent`, one row per day, with a p95 of root duration.
+
+    Save that JSON as `query.json`, then post it:
+
+    ```bash
+    curl -s -X POST \
+      "https://api.uselemma.ai/projects/your_project_id/analytics/query" \
+      -H "Authorization: Bearer your_organization_api_key" \
+      -H "Content-Type: application/json" \
+      -d @query.json
+    ```
+
+    On MCP, call `query_project_analytics` with the same body in camelCase: `endExclusive`, `groupBy`, and `orderBy`. Pass `project_id` as an argument. Field names such as `agent_name` stay snake_case.
+
+    Lemma returns HTTP 400, with the reason, when the query is invalid. Lemma returns HTTP 404 for an unknown project. Lemma stops the query after 15s.
+  </Step>
+  <Step title="Read the rows">
+    The response has `rows`, `truncated`, and `window`. Each row is keyed by the aliases you set. For the query above, one row has this shape, and a day bucket is a date string:
+
+    ```json
+    {
+      "rows": [
+        {
+          "day": "2026-09-23",
+          "traces": 120,
+          "p95_ms": 840.5
+        }
+      ],
+      "truncated": false,
+      "window": {
+        "start": "2026-09-23T00:00:00.000Z",
+        "end_exclusive": "2026-09-30T00:00:00.000Z"
+      }
+    }
+    ```
+
+    `truncated` is true when the rows fill the cap, so further matches can be absent. Narrow the filters or raise `limit`. REST and MCP both return this snake_case shape.
+  </Step>
+</Steps>
+
+## Query limits
+
+The catalog’s `limits` object repeats these caps:
+
+- **Group-by fields**: 3
+- **Measures**: 1 to 8
+- **Filters**: 12
+- **Order-by entries**: 2
+- **Values in one `in` filter**: 20
+- **Rows**: 500, even when you omit `limit`
+- **Window**: 90 days
+
+An alias starts with a letter and then uses lowercase letters, digits, and underscores. It can be at most 41 characters.
+
+`order_by` names those aliases, including a group alias. Each entry is `{ "measure": "traces", "direction": "desc" }`. Omit `order_by` and Lemma orders a grouped query by the group.
+
+Filter operations are:
+
+- `eq`, `neq`, `gt`, `gte`, `lt`, and `lte`, each with a scalar `value`
+- `in`, with an array `value`
+- `is_null` and `is_not_null`, with no `value`
+
+Time buckets are:
+
+- `minute`
+- `hour`
+- `day`
+- `week`
+- `month`
+
+You can also group by a dimension field.
+
+You can join one other event on a field both events share. Put cost measures on the primary event only.
+
+Numeric aggregations are:
+
+- `sum`, `avg`, `min`, and `max`
+- `p50`, `p95`, and `p99`
+- `uniqExact`, which counts distinct values
+- `count`, which takes no `field`
+
+## Cost estimates
+
+`trace_cost` and `generation_cost` are estimates from recorded token counts and public list prices. They are not an invoice. A backfilled row keeps the price from that backfill. A per-model split covers rows that do not yet have a stored price.
+
+Pass one cost measure, and leave `field` off it. For `generation_cost`, group by the `model` field and keep that alias. The row then includes `estimated_cost_usd` and `priced`.
+
+A `trace_cost` row includes `estimated_cost_usd`. When `cost_lower_bound` is true, the estimate can be low. `cost_lower_bound_reasons` lists the cause.
+
+## Preset views
+
+`GET /projects/{project_id}/analytics` returns one dashboard panel. Set `view` to one of:
+
+- `base`
+- `window`
+- `model_scorecard`
+- `agent_scorecard`
+- `tool_aggregates`
+- `roi`
+
+Request one view. MCP has one tool for each view. The [Get project analytics](/api-reference/projects/get-project-analytics) reference lists the parameters and the response for each view.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Analytics" href="/platform/analytics">
+    Dashboard charts for volume, latency, errors, tools, models, and cost.
+  </Card>
+  <Card title="Analytics catalog" href="/api-reference/projects/describe-project-analytics-catalog">
+    Events, fields, filters, and limits for a project query.
+  </Card>
+  <Card title="Query project analytics" href="/api-reference/projects/query-project-analytics">
+    The REST operation for one aggregate.
+  </Card>
+  <Card title="Analytics telemetry" href="/reference/analytics-telemetry">
+    SDK fields the aggregates are computed from.
+  </Card>
+</CardGroup>
