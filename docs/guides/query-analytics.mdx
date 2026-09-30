@@ -1,16 +1,16 @@
 ---
 title: "Querying project analytics"
 sidebarTitle: "Query analytics"
-description: "Fields, filters, and limits for one project analytics aggregate"
+description: "Volume, tool failures, and model cost from a project analytics query"
 meta:
   contentType: "How-to"
   goal: "Run one project analytics aggregate from REST or MCP"
   audience: "Engineers querying project analytics from a script or a coding agent"
 ---
 
-A project analytics query returns one number or one breakdown. REST and the Lemma [Model Context Protocol (MCP)](/connections/mcp) server share the catalog and the query.
+Copy one of the queries below when you want a number from a project. Each one is a single aggregate: daily volume and latency, tools that fail, or model cost. REST and the Lemma [Model Context Protocol (MCP)](/connections/mcp) server accept the same query.
 
-Preset views return an [Analytics](/platform/analytics) panel. Use a preset view for that panel. Use this query when one aggregate answers the question.
+The [catalog](#catalog) lists every other event and field. Preset views return an [Analytics](/platform/analytics) panel. Use a preset view for that panel, and a query when one aggregate answers the question.
 
 <Note>
   You need an organization API key whose scope is read or admin, plus the project id. An ingest-only key cannot call these routes. A key limited to one project works only for that project. Create the key under **API Keys** in the [Lemma dashboard](https://platform.uselemma.ai).
@@ -33,13 +33,13 @@ curl -s \
   -H "Authorization: Bearer your_organization_api_key"
 ```
 
-The response is the catalog for that project.
+The response is the catalog for that project. Use it when you need a field the examples below do not use.
 
-## Query body
+## Daily volume and latency
 
-`POST /projects/{project_id}/analytics/query` runs one aggregate. The body names an event, a window, and at least one measure. `count` takes no `field`. `p95` and the other numeric aggregations do.
+This query counts `trace.processed` rows for one agent, one row per day, with a p95 of root duration. `count` takes no `field`. `p95` takes `duration_ms`.
 
-`start` and `end_exclusive` are second-aligned UTC. The end is exclusive, so `2026-09-30T00:00:00.000Z` is not included. The window cannot exceed the catalog’s maximum.
+`start` and `end_exclusive` are second-aligned UTC. The end is exclusive, so `2026-09-30T00:00:00.000Z` is not included.
 
 ```json
 {
@@ -66,58 +66,139 @@ The response is the catalog for that project.
 }
 ```
 
-This body counts `trace.processed` rows for `support_agent`, one row per day, with a p95 of root duration. Send it as `Content-Type: application/json` with `Authorization: Bearer your_organization_api_key`.
+`POST` that JSON to `/projects/your_project_id/analytics/query` with `Content-Type: application/json` and `Authorization: Bearer your_organization_api_key`.
 
-On MCP, call `query_project_analytics` with the same body in camelCase: `endExclusive`, `groupBy`, and `orderBy`. Pass `project_id` as an argument. Field names such as `agent_name` stay snake_case.
+```bash
+curl -s -X POST \
+  "https://api.uselemma.ai/projects/your_project_id/analytics/query" \
+  -H "Authorization: Bearer your_organization_api_key" \
+  -H "Content-Type: application/json" \
+  -d @daily.json
+```
 
-Lemma returns HTTP 400, with the reason, when the query is invalid. Lemma returns HTTP 404 for an unknown project. Lemma stops the query after 15s.
+`daily.json` is the body above. On MCP, call `query_project_analytics` with `project_id` and the same fields in camelCase: `endExclusive`, `groupBy`, and `orderBy`. Field names such as `agent_name` stay snake_case.
 
-## Rows
-
-The response has `rows`, `truncated`, and `window`. Each row is keyed by the aliases in the query. A day bucket is a date string. REST and MCP both return this snake_case shape.
+One element of `rows` looks like this. `day` is a date string. `p95_ms` is the 95th percentile of root duration, in milliseconds.
 
 ```json
 {
-  "rows": [
+  "day": "2026-09-23",
+  "traces": 120,
+  "p95_ms": 840.5
+}
+```
+
+## Tools that fail
+
+This query ranks tools by how often `tool.called` failed. `error` is `1` when that tool span failed, and `0` when it did not. `failures` is the sum of `error`. Divide `failures` by `calls` for the failure rate.
+
+```json
+{
+  "from": "tool.called",
+  "start": "2026-09-23T00:00:00.000Z",
+  "end_exclusive": "2026-09-30T00:00:00.000Z",
+  "group_by": [{ "field": "tool", "as": "tool" }],
+  "measures": [
+    { "as": "calls", "agg": "count" },
     {
-      "day": "2026-09-23",
-      "traces": 120,
-      "p95_ms": 840.5
+      "as": "failures",
+      "agg": "sum",
+      "field": "error"
     }
   ],
-  "truncated": false,
-  "window": {
-    "start": "2026-09-23T00:00:00.000Z",
-    "end_exclusive": "2026-09-30T00:00:00.000Z"
+  "order_by": [
+    { "measure": "failures", "direction": "desc" }
+  ],
+  "limit": 20
+}
+```
+
+Rows come back highest `failures` first. A row names the tool, the call count, and the failure count.
+
+```json
+{
+  "tool": "search_docs",
+  "calls": 400,
+  "failures": 18
+}
+```
+
+That row is 18 failures out of 400 calls.
+
+## Model cost
+
+This query estimates generation cost by model. Group by the `model` field and keep the alias `model`. `generation_cost` takes no `field`.
+
+```json
+{
+  "from": "generation.completed",
+  "start": "2026-09-23T00:00:00.000Z",
+  "end_exclusive": "2026-09-30T00:00:00.000Z",
+  "group_by": [{ "field": "model", "as": "model" }],
+  "measures": [
+    { "as": "cost", "agg": "generation_cost" }
+  ]
+}
+```
+
+The row uses `estimated_cost_usd`, not the `cost` alias. `priced: false` means that model had no list price, so the estimate is null.
+
+```json
+{
+  "model": "gpt-4o",
+  "estimated_cost_usd": 12.4,
+  "priced": true
+}
+```
+
+A `trace_cost` measure on `trace.processed` does not need a `model` group. When `cost_lower_bound` is true, that estimate can be low. `cost_lower_bound_reasons` lists the cause.
+
+## Join a second event
+
+A query can attach one other event on a field both events share. This body counts traces and tool calls for the same `agent_name`. Put a cost measure on the primary event only.
+
+```json
+{
+  "from": "trace.processed",
+  "start": "2026-09-23T00:00:00.000Z",
+  "end_exclusive": "2026-09-30T00:00:00.000Z",
+  "group_by": [
+    { "field": "agent_name", "as": "agent_name" }
+  ],
+  "measures": [
+    { "as": "traces", "agg": "count" }
+  ],
+  "join": {
+    "from": "tool.called",
+    "on": "agent_name",
+    "measures": [
+      { "as": "tool_calls", "agg": "count" }
+    ]
   }
 }
 ```
 
-`truncated` is true when the rows fill the cap, so further matches can be absent. Narrow the filters or raise `limit`.
+`tool_calls` is the joined count. `traces` is the primary count.
 
-## Query limits
+```json
+{
+  "agent_name": "support_agent",
+  "traces": 120,
+  "tool_calls": 640
+}
+```
 
-`limits` on the catalog is the cap for group-by fields, measures, filters, order-by entries, `in` values, rows, and the window. Omitting `limit` still stops at `limits.max_rows`.
+## Rules that change the result
 
-An alias starts with a letter and then uses lowercase letters, digits, and underscores. It can be at most 41 characters.
+These rules apply to every query above:
 
-`order_by` names those aliases, including a group alias. Each entry is `{ "measure": "traces", "direction": "desc" }`. Omit `order_by` and Lemma orders a grouped query by the group.
+- **Window**: `start` and `end_exclusive` are second-aligned UTC, and the end is exclusive. The window cannot exceed the catalog maximum.
+- **Row cap**: `truncated` is true when the rows fill the cap. Narrow the filter or raise `limit`. Omitting `limit` still stops at `limits.max_rows`.
+- **Aliases**: An alias is lowercase, starts with a letter, and is at most 41 characters.
+- **Errors**: Lemma returns HTTP 400, with the reason, for an invalid query. Lemma returns HTTP 404 for an unknown project. Lemma stops a query after 15s.
+- **Cost**: Cost figures are estimates from token counts and public list prices. They are not an invoice. A backfilled row keeps the price from that backfill.
 
-Filter operations are `filter_ops` on the catalog. Comparison ops take a scalar `value`. `in` takes an array. `is_null` and `is_not_null` omit `value`.
-
-Time buckets are `buckets` on the catalog. You can also group by a dimension field.
-
-You can join one other event on a field both events share. Put cost measures on the primary event only.
-
-Aggregations are the `aggs` listed on each measure.
-
-## Cost estimates
-
-`trace_cost` and `generation_cost` are estimates from recorded token counts and public list prices. They are not an invoice. A backfilled row keeps the price from that backfill. A per-model split covers rows that do not yet have a stored price.
-
-Pass one cost measure, and leave `field` off it. For `generation_cost`, group by the `model` field and keep that alias. The row then includes `estimated_cost_usd` and `priced`.
-
-A `trace_cost` row includes `estimated_cost_usd`. When `cost_lower_bound` is true, the estimate can be low. `cost_lower_bound_reasons` lists the cause.
+The response also includes `window`, with the same `start` and `end_exclusive` you sent. REST and MCP both return this snake_case shape.
 
 ## Preset views
 
