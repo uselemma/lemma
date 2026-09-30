@@ -9,20 +9,6 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
-<Update label="September 30, 2026" tags={["New releases", "[Analytics]", "[API]"]} rss={{ title: "Query stored analytics from the catalog" }}>
-
-  ## Analytics
-
-  - **Catalog:** List the events, fields, and cost measures stored for a project.
-  - **Aggregate:** Run one aggregate over the events, fields, and cost measures stored for a project.
-
-  ## API
-
-  - **Catalog:** `GET /projects/{project_id}/analytics/catalog` returns the events, fields, and cost measures for a project. The MCP tool is `describe_project_analytics`.
-  - **Query:** `POST /projects/{project_id}/analytics/query` runs one aggregate over the stored events. The MCP tool is `query_project_analytics`.
-
-</Update>
-
 <Update label="September 29, 2026" tags={["Bug fixes", "[Analytics]"]} rss={{ title: "Analytics views show latency, tokens, and model cost" }}>
 
   ## Analytics
