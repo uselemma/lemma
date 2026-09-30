@@ -3,8 +3,8 @@ title: "Querying project analytics"
 sidebarTitle: "Query analytics"
 description: "Fields, filters, and limits for one project analytics aggregate"
 meta:
-  contentType: "Reference"
-  goal: "Describe the project analytics query body, limits, and rows"
+  contentType: "How-to"
+  goal: "Run one project analytics aggregate from REST or MCP"
   audience: "Engineers querying project analytics from a script or a coding agent"
 ---
 
@@ -18,16 +18,7 @@ Preset views return an [Analytics](/platform/analytics) panel. Use a preset view
 
 ## Catalog
 
-`GET /projects/{project_id}/analytics/catalog` lists every event, field, filter, and aggregation a query accepts. A field that is missing there is not queryable. On MCP, call `describe_project_analytics` with `project_id`.
-
-Trace analytics uses these events:
-
-- `trace.processed`
-- `generation.completed`
-- `tool.called`
-- `span.errored`
-
-The same list includes issue lifecycle events, such as `issue.created` and `issue.resolved`.
+`GET /projects/{project_id}/analytics/catalog` lists every event, field, filter, and aggregation a query accepts. Trace events and issue lifecycle events are named there. A field that is missing there is not queryable. On MCP, call `describe_project_analytics` with `project_id`.
 
 The JSON includes:
 
@@ -48,7 +39,7 @@ The response is the catalog for that project.
 
 `POST /projects/{project_id}/analytics/query` runs one aggregate. The body names an event, a window, and at least one measure. `count` takes no `field`. `p95` and the other numeric aggregations do.
 
-`start` and `end_exclusive` are second-aligned UTC. The end is exclusive, so `2026-09-30T00:00:00.000Z` is not included. The window can be at most 90 days.
+`start` and `end_exclusive` are second-aligned UTC. The end is exclusive, so `2026-09-30T00:00:00.000Z` is not included. The window cannot exceed the catalog’s maximum.
 
 ```json
 {
@@ -106,44 +97,19 @@ The response has `rows`, `truncated`, and `window`. Each row is keyed by the ali
 
 ## Query limits
 
-The catalog’s `limits` object repeats these caps:
-
-- **Group-by fields**: 3
-- **Measures**: 1 to 8
-- **Filters**: 12
-- **Order-by entries**: 2
-- **Values in one `in` filter**: 20
-- **Rows**: 500, even when you omit `limit`
-- **Window**: 90 days
+`limits` on the catalog is the cap for group-by fields, measures, filters, order-by entries, `in` values, rows, and the window. Omitting `limit` still stops at `limits.max_rows`.
 
 An alias starts with a letter and then uses lowercase letters, digits, and underscores. It can be at most 41 characters.
 
 `order_by` names those aliases, including a group alias. Each entry is `{ "measure": "traces", "direction": "desc" }`. Omit `order_by` and Lemma orders a grouped query by the group.
 
-Filter operations are:
+Filter operations are `filter_ops` on the catalog. Comparison ops take a scalar `value`. `in` takes an array. `is_null` and `is_not_null` omit `value`.
 
-- `eq`, `neq`, `gt`, `gte`, `lt`, and `lte`, each with a scalar `value`
-- `in`, with an array `value`
-- `is_null` and `is_not_null`, with no `value`
-
-Time buckets are:
-
-- `minute`
-- `hour`
-- `day`
-- `week`
-- `month`
-
-You can also group by a dimension field.
+Time buckets are `buckets` on the catalog. You can also group by a dimension field.
 
 You can join one other event on a field both events share. Put cost measures on the primary event only.
 
-Numeric aggregations are:
-
-- `sum`, `avg`, `min`, and `max`
-- `p50`, `p95`, and `p99`
-- `uniqExact`, which counts distinct values
-- `count`, which takes no `field`
+Aggregations are the `aggs` listed on each measure.
 
 ## Cost estimates
 
