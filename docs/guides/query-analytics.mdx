@@ -107,7 +107,7 @@ Each example below is a complete body. Save it as `query.json` and send it with 
 
 ### Daily volume and latency for one agent
 
-Count one agent’s traces per day, with the 95th percentile of root duration:
+Count one agent’s traces per day, with the 95th percentile of root duration. On `trace.processed`, root duration is `root_duration_ms`:
 
 ```json
 {
@@ -124,7 +124,7 @@ Count one agent’s traces per day, with the 95th percentile of root duration:
   "group_by": [{ "bucket": "day", "as": "day" }],
   "measures": [
     { "as": "traces", "agg": "count" },
-    { "as": "p95_ms", "agg": "p95", "field": "duration_ms" }
+    { "as": "p95_ms", "agg": "p95", "field": "root_duration_ms" }
   ]
 }
 ```
