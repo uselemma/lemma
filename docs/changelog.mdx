@@ -9,6 +9,15 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="September 30, 2026" tags={["New releases", "[Analytics]"]} rss={{ title: "Query stored analytics from the catalog" }}>
+
+  ## Analytics
+
+  - **Catalog:** `GET /projects/{project_id}/analytics/catalog` lists each event and its measures. The MCP tool is `describe_project_analytics`.
+  - **Query:** `POST /projects/{project_id}/analytics/query` selects one event and aggregates its measures. The MCP tool is `query_project_analytics`. [Querying analytics](/guides/query-analytics) shows the query body.
+
+</Update>
+
 <Update label="September 28, 2026" tags={["Bug fixes", "[Analytics]"]} rss={{ title: "Analytics views keep 90 days of history" }}>
 
   ## Analytics
