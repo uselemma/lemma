@@ -7,7 +7,17 @@ meta:
   audience: "Engineers querying project analytics from a script or a coding agent"
 ---
 
-A project analytics query returns one aggregate: a count, a percentile, a sum, or an estimated cost, optionally grouped by time or by a field. You send it over REST or the Lemma [Model Context Protocol (MCP)](/connections/mcp) server. This page explains how a query is built, then shows [examples](#examples) you can copy.
+<Tip>
+  Using a coding agent? Install the Lemma analytics skill, and the agent reads the catalog, builds the query, and reports the result with its window and cost caveats, over the [Lemma MCP server](/connections/mcp) or REST:
+
+  ```bash
+  npx skills add uselemma/lemma --skill "lemma-analytics"
+  ```
+
+  Then ask it a question, such as “Which tools failed most in the last 7 days, and what did each model cost?”
+</Tip>
+
+A project analytics query returns one aggregate: a count, a percentile, a sum, or an estimated cost, optionally grouped by time or by a field. You send it over REST or the Lemma [Model Context Protocol (MCP)](/connections/mcp) server. This page explains how a query is built, then shows [examples](#examples) you can copy. Every field and rule is on [Analytics query API](/reference/analytics-query).
 
 Use a query when one number or one breakdown answers the question. For a full [Analytics](/platform/analytics) panel, request a [preset view](#preset-views) instead.
 
@@ -43,63 +53,20 @@ On MCP, call `query_project_analytics` with `project_id` plus the same body. MCP
 
 ## Build the query body
 
-A body names an event, a window, and at least one measure. Everything else narrows or shapes the result.
+A body names an event in `from`, a window in `start` and `end_exclusive`, and at least one measure. The window is UTC, on whole seconds, with the end exclusive. Optional keys narrow or shape the result:
 
-| Key | Required | What it does |
-| --- | --- | --- |
-| `from` | Yes | The event to read, such as `trace.processed` |
-| `start` | Yes | Window start, second-aligned UTC, inclusive |
-| `end_exclusive` | Yes | Window end, second-aligned UTC, exclusive |
-| `measures` | Yes | What to compute; each has an alias in `as` |
-| `filters` | No | Conditions a row must match to be counted |
-| `group_by` | No | Split the result by a time bucket or a field |
-| `order_by` | No | Sort rows by an alias |
-| `limit` | No | Maximum rows to return |
-| `join` | No | Add measures from one other event |
+- [Measures](/reference/analytics-query#measures): what to compute, each with an alias in `as`, and an optional per-measure `filter`
+- [Filters](/reference/analytics-query#filters): conditions every counted row must match
+- [Groups and order](/reference/analytics-query#groups-and-order): split by a time bucket or a field, then sort
+- [Join](/reference/analytics-query#join): add measures from one other event
 
-### Window
-
-`start` and `end_exclusive` must fall on a whole second, in UTC. The end is exclusive, so a window ending at `2026-09-30T00:00:00.000Z` stops before that instant. The window can’t be longer than the catalog maximum in `limits`.
-
-### Measures
-
-Each measure is `{ "as": "alias", "agg": "aggregation", "field": "field" }`. `count` counts rows and takes no `field`. Other aggregations, such as `sum`, `avg`, and `p95`, need a numeric `field` that lists that aggregation in its catalog `aggs`. `uniqExact` counts distinct values of a field.
-
-A cost measure, `trace_cost` or `generation_cost`, takes no `field`. A query can have one cost measure. See [Cost estimates](#cost-estimates).
-
-An alias names the column in each result row. It starts with a letter, then uses lowercase letters, digits, and underscores, up to 41 characters.
-
-### Filters
-
-Each filter is `{ "field": "field", "op": "operator", "value": "value" }`. The operators are `filter_ops` in the catalog:
-
-- A comparison operator, such as `eq`, takes one `value`
-- `in` takes an array of values
-- `is_null` and `is_not_null` take no `value`
-
-A row must match every filter to be counted.
-
-### Group and order
-
-A `group_by` entry is either a time bucket, `{ "bucket": "day", "as": "day" }`, or a field, `{ "field": "tool", "as": "tool" }`. The bucket names are in the catalog `buckets`.
-
-An `order_by` entry is `{ "measure": "alias", "direction": "desc" }`. The alias can name a measure or a group. Without `order_by`, grouped rows are sorted by the group.
-
-### Join
-
-`join` adds measures from one other event, matched on a field both events have, such as `agent_name`. Cost measures belong on the primary event only.
+[Query request](/reference/analytics-query#query-request) lists every key and limit.
 
 ## Read the response
 
-A response has three keys:
+A response has `rows`, one object per group keyed by your aliases, plus `truncated` and the queried `window`. When `truncated` is true, further rows exist, so narrow the filters or raise `limit`. REST and MCP return the same snake_case shape. See [Query response](/reference/analytics-query#query-response).
 
-- `rows`: one object per group, keyed by the aliases you chose
-- `truncated`: true when the rows reached `limit`, or `limits.max_rows` if you set no limit
-- `window`: the `start` and `end_exclusive` that were queried
-
-When `truncated` is true, further rows exist. Narrow the filters or raise `limit`. REST and MCP return the same snake_case shape.
-
-Lemma returns HTTP 400 with the reason for an invalid query, and HTTP 404 for an unknown project. A query that runs longer than 15s fails.
+An invalid query returns HTTP 400 with the reason. [Query errors](/reference/analytics-query#query-errors) lists each message and its cause.
 
 ## Examples
 
@@ -182,9 +149,35 @@ The row reports the estimate in `estimated_cost_usd`, not under the `cost` alias
 
 `priced: false` means Lemma has no list price for that model, and `estimated_cost_usd` is `null`.
 
-### Traces and tool calls per agent
+### Runs with errors by agent
 
-Join tool calls to traces on `agent_name`:
+Count each agent’s traces, and the traces where any span failed. The second measure’s `filter` limits it to traces with `error_count` above zero:
+
+```json
+{
+  "from": "trace.processed",
+  "start": "2026-09-23T00:00:00.000Z",
+  "end_exclusive": "2026-09-30T00:00:00.000Z",
+  "group_by": [{ "field": "agent_name", "as": "agent_name" }],
+  "measures": [
+    { "as": "traces", "agg": "count" },
+    {
+      "as": "runs_with_errors",
+      "agg": "count",
+      "filter": { "field": "error_count", "op": "gt", "value": 0 }
+    }
+  ],
+  "order_by": [{ "measure": "runs_with_errors", "direction": "desc" }]
+}
+```
+
+```json
+{ "agent_name": "support_agent", "traces": 120, "runs_with_errors": 9 }
+```
+
+### Traces and tool use per agent
+
+Join tool calls to traces on `agent_name`. `uniqExact` on `tool` counts the distinct tools each agent called:
 
 ```json
 {
@@ -196,28 +189,32 @@ Join tool calls to traces on `agent_name`:
   "join": {
     "from": "tool.called",
     "on": "agent_name",
-    "measures": [{ "as": "tool_calls", "agg": "count" }]
+    "measures": [
+      { "as": "tool_calls", "agg": "count" },
+      { "as": "tools_used", "agg": "uniqExact", "field": "tool" }
+    ]
   }
 }
 ```
 
 ```json
-{ "agent_name": "support_agent", "traces": 120, "tool_calls": 640 }
+{ "agent_name": "support_agent", "traces": 120, "tool_calls": 640, "tools_used": 7 }
 ```
 
 ## Cost estimates
 
-`trace_cost` and `generation_cost` are estimates from recorded token counts and public list prices, not an invoice. A backfilled row keeps the price from that backfill.
-
-`trace_cost` runs on `trace.processed` and needs no `model` group. Its row includes `estimated_cost_usd` and `cost_lower_bound`. When `cost_lower_bound` is true, the estimate can be low, and `cost_lower_bound_reasons` lists why.
+`trace_cost` and `generation_cost` are estimates from recorded token counts and public list prices, not an invoice. [Cost fields](/reference/analytics-query#cost-fields) lists what each adds to a row, including `cost_lower_bound` when the estimate can be low.
 
 ## Preset views
 
-`GET /projects/{project_id}/analytics` returns one dashboard panel. Pass one `view`. MCP has one tool for each view. View names, parameters, and responses are on [Get project analytics](/api-reference/projects/get-project-analytics).
+`GET /projects/{project_id}/analytics` returns one dashboard panel. Pass one `view`. MCP has one tool for each view. View names, MCP tools, parameters, and responses are on [Analytics query API](/reference/analytics-query#preset-views).
 
 ## Related pages
 
 <CardGroup cols={2}>
+  <Card title="Analytics query API" href="/reference/analytics-query">
+    Every event, field, rule, error, and preset view.
+  </Card>
   <Card title="Analytics" href="/platform/analytics">
     Dashboard charts for volume, latency, errors, tools, models, and cost.
   </Card>

@@ -8,9 +8,11 @@ description: >-
   through all urgent issues and validate each", or "dismiss everything under X
   impact." Also use when browsing, ranking, or acting on Lemma detections over
   MCP. Do not use for recording what an agent does in Lemma, or for writing
-  agent context and artifacts from a codebase — that is lemma-artifacts.
+  agent context and artifacts from a codebase — that is lemma-artifacts. Do
+  not use for counts, latency, error rates, or estimated cost across traces —
+  that is lemma-analytics.
 metadata:
-  version: 1.1.0
+  version: 1.1.1
 ---
 
 # Lemma MCP

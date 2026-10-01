@@ -148,7 +148,8 @@
             "expanded": true,
             "pages": [
               "reference/trace-contract",
-              "reference/analytics-telemetry"
+              "reference/analytics-telemetry",
+              "reference/analytics-query"
             ]
           }
         ]
