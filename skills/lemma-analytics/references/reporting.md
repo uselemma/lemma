@@ -55,12 +55,15 @@ Lemma treats a missing field as "not instrumented" and an explicit `0` as a
 real zero. An empty latency, token, or cost figure usually means the SDK
 isn't sending that field. The ones analytics depends on:
 
-| Metric | Needs on the trace |
+| Analytics metric | What the SDK must send |
 | --- | --- |
 | Model and cost | Generation `model` and token `usage` |
-| Root latency | Trace `duration_ms` (or start and end) |
+| Root latency (`root_duration_ms` on `trace.processed`) | Root span start and end, or a trace duration |
 | Error rate | `status: "ERROR"` on the root or tool span |
 | Tool breakdowns | Tool spans with a name under the trace |
+
+The right column is the SDK side, not query fields. For field names, use the
+catalog.
 
 To confirm, call the `window` view and read `coverage`: a `false` capability,
 or a low `observed / eligible` ratio for the window, names the gap.
