@@ -1,0 +1,253 @@
+---
+title: "Analytics query API"
+description: "Events, fields, request rules, responses, errors, and preset views for project analytics over REST and MCP"
+meta:
+  contentType: "Reference"
+  goal: "Specify what the project analytics catalog, query, and preset view routes accept and return"
+  audience: "Engineers and coding agents calling project analytics from REST or MCP"
+---
+
+Project analytics has three surfaces: the catalog lists what you can query, the query route runs one aggregate, and preset views return one precomputed [Analytics](/platform/analytics) panel. This page specifies each one. For a walkthrough with examples, see [Querying analytics](/guides/query-analytics).
+
+| Surface | REST | MCP tool |
+| --- | --- | --- |
+| Catalog | `GET /projects/{project_id}/analytics/catalog` | `describe_project_analytics` |
+| Query | `POST /projects/{project_id}/analytics/query` | `query_project_analytics` |
+| Preset view | `GET /projects/{project_id}/analytics?view=...` | One tool per view, see [Preset views](#preset-views) |
+
+All routes need an organization API key with read or admin scope, sent as `Authorization: Bearer your_organization_api_key`. Analytics keeps 90 days of events.
+
+## Catalog
+
+The catalog response has four keys. It’s the live source of truth for this page’s event and field lists:
+
+- `events`: each event’s `name`, `dimensions` (`field`, `type`), `measures` (`field`, `type`, `aggs`), and `cost_measures`
+- `filter_ops`: valid filter operators
+- `buckets`: valid time buckets
+- `limits`: `max_group_by`, `max_measures`, `max_filters`, `max_order_by`, `max_in_values`, `max_rows`, `max_window_days`
+
+Dimensions are string fields. Measures are numeric fields. Both can be filtered, and both accept `uniqExact`, though the catalog lists `aggs` only for measures.
+
+## Events and fields
+
+Every event also has `actor`, `surface`, `user_id`, and `api_key_id`, which describe where the event was recorded. Missing string values are stored as `''`, not null.
+
+### `trace.processed`
+
+One row per processed trace. Cost measure: `trace_cost`.
+
+| Field | Kind | Meaning |
+| --- | --- | --- |
+| `agent_name` | Dimension | Agent that produced the trace |
+| `root_status_code` | Dimension | Root span status |
+| `root_duration_ms` | Measure | Whole-run latency in milliseconds |
+| `error_count` | Measure | Error spans in the trace |
+| `failing_tool_calls` | Measure | Failed tool spans in the trace |
+| `input_tokens`, `output_tokens` | Measure | Tokens across the trace |
+| `total_tokens` | Measure | `input_tokens + output_tokens`, `sum` only |
+| `estimated_cost_usd` | Measure | Stored per-trace estimate; use `trace_cost` for totals |
+
+Root latency on this event is `root_duration_ms`. The catalog also lists cost bookkeeping fields such as `estimated_cost_basis`, `cost_priced_tokens`, and `cost_unpriced_models`. This event has no queryable `trace_id`.
+
+### `generation.completed`
+
+One row per model call. Cost measure: `generation_cost`. This event has no `agent_name`, so model use can’t be split by agent.
+
+| Field | Kind | Meaning |
+| --- | --- | --- |
+| `model` | Dimension | Model name |
+| `trace_id`, `span_id` | Dimension | The call’s trace and span |
+| `duration_ms` | Measure | Model call latency in milliseconds |
+| `input_tokens`, `output_tokens` | Measure | Tokens for the call |
+| `tps` | Measure | Output tokens per second, null when unknown |
+| `error` | Measure | `1` if the call failed, else `0` |
+
+### `tool.called`
+
+One row per tool span.
+
+| Field | Kind | Meaning |
+| --- | --- | --- |
+| `tool` | Dimension | Tool name |
+| `agent_name` | Dimension | Agent of the trace the call ran in |
+| `trace_id`, `span_id` | Dimension | The call’s trace and span |
+| `duration_ms` | Measure | Tool call latency in milliseconds |
+| `output_tokens` | Measure | Output tokens recorded on the span |
+| `error` | Measure | `1` if the call failed, else `0` |
+
+### `span.errored`
+
+One row per failed span of any type. Fields: `span_name`, `trace_id`, `span_id`, all dimensions.
+
+### Issue lifecycle events
+
+`issue.created`, `issue.resolved`, `issue.dismissed`, `issue.reopened`, `issue.review_started`, `issue.flagged`, `issue.unflagged`, and `issue.slack_sent` carry only the fields every event has. Count them by time bucket.
+
+## Query request
+
+A query body names one event, a window, and at least one measure. REST uses the snake_case keys below. MCP uses `endExclusive`, `groupBy`, and `orderBy` for those three keys and takes `project_id` in the body. Unknown keys are rejected.
+
+| Key | Required | Rule |
+| --- | --- | --- |
+| `from` | Yes | Event name |
+| `start` | Yes | ISO 8601, UTC, whole second, inclusive |
+| `end_exclusive` | Yes | ISO 8601, UTC, whole second, exclusive, after `start` |
+| `measures` | Yes | 1 to `max_measures` |
+| `filters` | No | Up to `max_filters`; a row must match all of them |
+| `group_by` | No | Up to `max_group_by` |
+| `order_by` | No | Up to `max_order_by` |
+| `limit` | No | 1 to `max_rows`; defaults to `max_rows` |
+| `join` | No | One other event |
+
+The window can’t exceed `max_window_days`.
+
+### Measures
+
+A measure is `{ "as": "alias", "agg": "aggregation", "field": "field", "filter": {} }`:
+
+- `count` counts rows and takes no `field`
+- `uniqExact` counts distinct values of any field
+- `sum`, `avg`, `min`, `max`, `p50`, `p95`, and `p99` need a numeric field whose `aggs` lists the aggregation
+- `filter` is optional and holds one filter. The measure then aggregates only matching rows, while other measures see every row
+
+A cost measure uses `trace_cost` or `generation_cost` as `agg` and takes no `field` or `filter`. A query can have one cost measure, on the primary event. `generation_cost` also needs a `model` group whose alias is `model`.
+
+An alias starts with a lowercase letter, then uses up to 40 lowercase letters, digits, or underscores. Aliases must be unique across groups and measures.
+
+### Filters
+
+A filter is `{ "field": "field", "op": "operator", "value": "value" }`:
+
+- `eq`, `neq`, `gt`, `gte`, `lt`, and `lte` take one string or number
+- `in` takes a non-empty array of up to `max_in_values` values
+- `is_null` and `is_not_null` take no `value`
+
+To match a missing string, such as an unset `agent_name`, filter `eq` with `""`.
+
+### Groups and order
+
+A group is `{ "bucket": "day", "as": "day" }` or `{ "field": "tool", "as": "tool" }`. When you omit `as`, a bucket’s alias is `bucket` and a field’s alias is the field name.
+
+| Bucket | Row value |
+| --- | --- |
+| `minute`, `hour` | `2026-09-23 14:00:00` |
+| `day` | `2026-09-23` |
+| `week` | Date of the week’s Sunday |
+| `month` | Date of the month’s first day |
+
+An `order_by` entry is `{ "measure": "alias", "direction": "asc" }` or `"desc"`. It names a group alias or a primary measure alias. Without `order_by`, grouped rows are sorted by the groups. Groups with no rows are absent from the result.
+
+### Join
+
+A join adds measures from one other event: `{ "from": "event", "on": "field", "filters": [], "measures": [] }`. Its rules:
+
+- `from` must differ from the primary event, and `on` must be a field on both events
+- Lemma groups the joined event by `on` and left-joins it to the primary rows on the primary group with that alias, so group the primary query by `on` and keep the default alias
+- `filters` applies only to the joined event
+- Primary rows without a match get null joined measures
+- Joined measures can’t be cost measures, reuse a primary alias, or appear in `order_by`
+
+Useful pairs: `trace.processed` with `tool.called` on `agent_name`, and `tool.called` with `generation.completed` or `span.errored` on `trace_id`.
+
+## Query response
+
+A query returns `rows`, `truncated`, and `window`:
+
+- `rows`: one object per group, keyed by alias, or one object when there’s no `group_by`. Large integer results, such as counts and token sums, can be numeric strings
+- `truncated`: true when the row count reaches `limit`, or `max_rows` without a limit. More groups can exist
+- `window`: the `start` and `end_exclusive` that ran
+
+REST and MCP return the same snake_case shape.
+
+### Cost fields
+
+Cost rows don’t use the cost measure’s alias.
+
+A `generation_cost` row has `estimated_cost_usd` (null when unpriced) and `priced`.
+
+A `trace_cost` row has:
+
+- `estimated_cost_usd`, `priced_tokens`, `total_tokens`, and `priced_token_share`
+- `unpriced_models` and `pricing_fetched_at`
+- `cost_source`: `stored`, `mixed`, or `query_time`
+- `cost_lower_bound` and `cost_lower_bound_reasons`, from `unpriced_models`, `prices_unavailable`, `unbackfilled_traces`, `live_priced_breakdown_truncated`, and `model_rollup_truncated`
+- `model_breakdown_truncated`
+- `attribution`: `coverage` (`all`, `unwritten_only`, or `none`) and `values`, a map from model to estimated cost for traces priced at query time
+
+Cost figures are estimates from token counts and public list prices, not an invoice. A backfilled row keeps the price from that backfill.
+
+## Query errors
+
+Lemma rejects an invalid query with HTTP 400 and a `detail` message:
+
+| `detail` | Cause |
+| --- | --- |
+| `Unknown field: name` | The field isn’t on that event |
+| `p95 is not valid for name` | The field is a string, or its `aggs` lacks the aggregation |
+| `count does not take a field` | `count` has a `field` |
+| `trace_cost is not valid on tool.called` | The cost measure belongs to another event |
+| `Only one cost measure is allowed` | The query has two cost measures |
+| `generation_cost requires grouping by model` | No `model` group |
+| `Invalid alias: name` | The alias breaks the alias pattern |
+| `Duplicate alias: name` | Two groups or measures share an alias |
+| `Unknown order field: name` | `order_by` names an unknown or joined alias |
+| `start and endExclusive must be second-aligned UTC` | A timestamp has milliseconds |
+| `Window exceeds 90 days` | The window is longer than `max_window_days` |
+| `in filters accept at most 20 values` | An `in` list is over `max_in_values` |
+| `Join must use a different event` | The join reads the primary event |
+
+An unknown project, or a key limited to another project, returns HTTP 404. A query that runs past 15s fails with a timeout.
+
+## Preset views
+
+A preset view returns one precomputed dashboard payload, so its numbers match the [Analytics](/platform/analytics) page. Over REST, pass the view as `view`. On MCP, call the view’s tool.
+
+| View | MCP tool | Window | Returns |
+| --- | --- | --- | --- |
+| `window` | `get_project_analytics_window` | Required | Latency, totals, coverage, estimated cost |
+| `base` | `get_project_analytics_base` | Required | Series of traces, errors, tokens, cost, and cost by model |
+| `agent_scorecard` | `get_project_agent_scorecard` | Required | One row per agent |
+| `tool_aggregates` | `get_project_tool_aggregates` | Required | One row per tool, tool volume, error concentration |
+| `model_scorecard` | `get_project_model_scorecard` | `start`, optional end | One row per model |
+| `roi` | `get_project_roi` | None | Issue series and lifetime counts |
+
+Preset parameters are query parameters:
+
+- `start`: inclusive, ISO 8601, UTC, whole second
+- `endExclusive`: exclusive end, required where the table says so. REST also accepts `end_exclusive`
+- `end`: `model_scorecard` only, in place of `endExclusive`
+- `granularity`: `day` (default), `week`, or `month`
+
+The older per-view paths, such as `/projects/{project_id}/agent-scorecard`, are deprecated aliases for `?view=`.
+
+### Preset responses
+
+Each view returns these keys:
+
+- `window`: `totals` (`traces`, `p50`, `p95`, `error_rate`, `failed_runs`, `root_status_known`, `root_absent`), `latency` (`granularity`, `points` of `date`, `p50`, `p95`), `coverage`, and `cost`
+- `base`: `traces`, `errors` (`span_errors`, `failed_runs`, `root_status_known`, `root_absent`, `traces` per date), `tokens`, `cost`, `cost_by_model`, and `cost_by_model_coverage`
+- `agent_scorecard`: `rows` with `agent`, `traces`, `p50`, `p95`, `error_rate`, `root_status_known`, `tools_used`, `tokens`, `cost`, and lower-bound flags
+- `tool_aggregates`: `comparison` rows (`tool`, `calls`, `errors`, `error_rate`, `p50`, `p95`, `traces`, `output_tokens`), `volume`, `failing_volume`, and `error_concentration`
+- `model_scorecard`: `rows` with `model`, `traces`, `tokens`, `input_tokens`, `output_tokens`, `avg_speed`, `priced`, and `estimated_cost_usd`, plus overall cost fields and `cost_attribution_coverage`
+- `roi`: `state` (`connect`, `waiting`, or `populated`), lifetime `counts`, and daily `base` series for `caught`, `resolved`, `dismissed`, `traces`, `errors`, `artifact_iterations`, and `resolution_days`
+
+`coverage` in the `window` view reports, per capability (`root_status`, `root_duration`, `agents`, `tokens`, `model`, `provider`, `cost_basis`, `tools`), whether the project sends it at all and how many window traces have it (`observed` of `eligible`). A missing capability explains an empty metric; see [Analytics telemetry](/reference/analytics-telemetry).
+
+A per-model `estimated_cost_usd` in `model_scorecard` can be null when part of the window was priced at write time. The overall figure stays complete; `cost_attribution_coverage` is `all` when the rows add up to it.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Querying analytics" href="/guides/query-analytics">
+    Build and send a query, with worked examples.
+  </Card>
+  <Card title="Analytics telemetry" href="/reference/analytics-telemetry">
+    SDK fields the aggregates are computed from.
+  </Card>
+  <Card title="Analytics" href="/platform/analytics">
+    Dashboard charts the preset views back.
+  </Card>
+  <Card title="Lemma MCP server" href="/connections/mcp">
+    Connect a coding agent to these tools.
+  </Card>
+</CardGroup>
