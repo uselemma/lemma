@@ -12,8 +12,24 @@ A project analytics query returns one aggregate: a count, a percentile, a sum, o
 Use a query when one number or one breakdown answers the question. For a full [Analytics](/platform/analytics) panel, request a [preset view](#preset-views) instead.
 
 <Note>
-  You need an organization API key whose scope is read or admin, plus the project id. An ingest-only key cannot call these routes. A key limited to one project works only for that project. Create the key under **API Keys** in the [Lemma dashboard](https://platform.uselemma.ai).
+  You need an organization API key whose scope is read or admin, plus the project id. An ingest-only key cannot call these routes. A key limited to one project works only for that project.   Create the key under **API Keys** in the [Lemma dashboard](https://platform.uselemma.ai).
 </Note>
+
+## Ask a coding agent
+
+The Lemma analytics skill teaches a coding agent to read the catalog, build the query, and report the result with its window and cost caveats. It works over the [Lemma MCP server](/connections/mcp) or REST.
+
+```bash
+npx skills add uselemma/lemma --skill "lemma-analytics"
+```
+
+Then prompt your coding agent:
+
+```text
+Which tools failed most in the last 7 days, and what did each model cost?
+```
+
+The rest of this page covers the same queries by hand.
 
 ## Find events and fields in the catalog
 
