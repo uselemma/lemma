@@ -72,6 +72,34 @@ When a metric is empty for this reason, say which field is missing and offer
 `lemma-diagnostics` to confirm it, then `lemma-tracing` to add it. Don't
 claim an outage from an empty chart.
 
+## Windows
+
+Compute windows with a tool, not by hand:
+
+```bash
+date -u -d '7 days ago 00:00' +%Y-%m-%dT%H:%M:%S.000Z   # start, GNU date
+date -u -d 'today 00:00' +%Y-%m-%dT%H:%M:%S.000Z        # end_exclusive
+```
+
+On macOS, use `date -u -v-7d -v0H -v0M -v0S +%Y-%m-%dT%H:%M:%S.000Z`.
+
+A window ending "now" has a partial last bucket; say so.
+
+For a range longer than 90 days, split it into adjacent windows within the
+limit, run one query per window, then combine:
+
+- `count`, `sum`: add across windows.
+- `min`, `max`: take the min or max of the parts.
+- `avg`: weight each part by its `count`. Add a `count` measure to every
+  part so you can.
+- `p50`, `p95`, `p99`, `uniqExact`: can't be combined. Report per window, or
+  tell the user the overall figure isn't available over that range.
+- Estimated cost: add `estimated_cost_usd`; carry over any `priced: false` or
+  `cost_lower_bound: true`.
+
+Analytics keeps 90 days, so the part of a range older than that returns
+nothing.
+
 ## Going from a number to evidence
 
 Analytics covers 90 days; individual traces are kept for 14. A spike older

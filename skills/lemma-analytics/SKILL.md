@@ -24,9 +24,8 @@ report comes from a call you made in this conversation.
 
 ## Core rules
 
-1. Read the catalog before the first query for a project in this
-   conversation, and map fields with
-   [references/events.md](references/events.md). Never guess an event,
+1. Fetch the docs below and read the catalog before the first query for a
+   project in this conversation. Never guess an event,
    field, aggregation, filter operator, or bucket. If the catalog lacks it,
    say so; don't approximate with a different field.
 2. Every call here is a read. Run them without asking. Never print the API
@@ -45,16 +44,33 @@ report comes from a call you made in this conversation.
 
 ## Choose the call
 
-| Need | Call | Reference |
+| Need | MCP tool | REST |
 | --- | --- | --- |
-| Which event and field answer the question | `describe_project_analytics` | [references/events.md](references/events.md) |
-| One number or one breakdown | `query_project_analytics` | [references/query.md](references/query.md) |
-| A question that matches a common pattern | `query_project_analytics` | [references/recipes.md](references/recipes.md) |
-| A dashboard panel: headline numbers, scorecards, tool health, ROI | `get_project_analytics_window`, `get_project_agent_scorecard`, and the other view tools | [references/presets.md](references/presets.md) |
-| Turning rows into an answer | | [references/reporting.md](references/reporting.md) |
+| Which event and field answer the question | `describe_project_analytics` | `GET /projects/{project_id}/analytics/catalog` |
+| One number or one breakdown | `query_project_analytics` | `POST /projects/{project_id}/analytics/query` |
+| A dashboard panel: headline numbers, scorecards, tool health, ROI | `get_project_analytics_window` and the other view tools | `GET /projects/{project_id}/analytics?view=` |
 
-Read the matching reference before acting. Keep operation names exactly as
-written; MCP tools and REST operations share them.
+Request bodies, fields, limits, errors, and preset views are in the docs
+below. Turn rows into an answer with
+[references/reporting.md](references/reporting.md).
+
+## Docs
+
+Base URL: `https://docs.uselemma.ai`
+
+Fetch these before the first query. Do not copy their bodies into notes or
+into this skill.
+
+1. `https://docs.uselemma.ai/guides/query-analytics.md`: how a query works,
+   with worked examples
+2. `https://docs.uselemma.ai/reference/analytics-query.md`: every event,
+   field, request key, limit, error, and preset view
+3. `https://docs.uselemma.ai/reference/analytics-telemetry.md`: which trace
+   fields feed each metric
+4. `https://docs.uselemma.ai/platform/analytics.md`: what the dashboard
+   panels show
+
+When the docs and the catalog disagree, trust the catalog.
 
 ## Transport
 
@@ -78,3 +94,6 @@ pick one when there's more than one.
   the field: explain the gap from [references/reporting.md](references/reporting.md),
   then offer `lemma-diagnostics` to audit and `lemma-tracing` to fix.
 - Single-trace debugging: use trace tools, not analytics.
+- What the provider actually billed: Lemma only estimates.
+- Anything older than 90 days, or a field the catalog doesn't list: say it
+  isn't available.
