@@ -43,7 +43,8 @@ Example:
 | --- | --- |
 | No rows | Nothing matched in the window. Check the filter value and window before concluding there was no traffic |
 | `truncated: true` | The list is partial; give the cap and offer to narrow |
-| A percentile or avg is null | No row in that group had the field. Usually missing telemetry, not zero latency |
+| A percentile or avg is null or 0 with few rows | The field is mostly missing in that group. Usually missing telemetry, not zero latency |
+| A group named `""` | Rows without that field set, such as traces with no agent name. Label it "unnamed" |
 | Cost with `priced: false` | Lemma has no list price for that model; total excludes it |
 | `cost_lower_bound: true` | The estimate can be low; give `cost_lower_bound_reasons` |
 | Preset `state` isn't `populated` | The project has no analytics yet |
@@ -60,6 +61,9 @@ isn't sending that field. The ones analytics depends on:
 | Root latency | Trace `duration_ms` (or start and end) |
 | Error rate | `status: "ERROR"` on the root or tool span |
 | Tool breakdowns | Tool spans with a name under the trace |
+
+To confirm, call the `window` view and read `coverage`: a `false` capability,
+or a low `observed / eligible` ratio for the window, names the gap.
 
 When a metric is empty for this reason, say which field is missing and offer
 `lemma-diagnostics` to confirm it, then `lemma-tracing` to add it. Don't

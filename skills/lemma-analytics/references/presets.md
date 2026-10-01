@@ -1,16 +1,39 @@
 # Preset views
 
-`get_project_analytics` returns one precomputed Analytics dashboard panel.
-Use it when the user wants what a dashboard panel shows (an agent scorecard,
-a model comparison, tool health) rather than one custom aggregate. One call
-can replace several queries, and the numbers match the dashboard.
+A preset view returns one precomputed Analytics dashboard payload. Use one
+when the user wants what a dashboard panel shows (an agent scorecard, a model
+comparison, tool health, the headline numbers) rather than a custom
+aggregate. One call can replace several queries, and the numbers match the
+dashboard.
 
 ## Call
 
-MCP: one tool per view; pick the one matching the view below from the tool
-list, and pass `project_id` plus the window.
+Each view has its own MCP tool. Over REST, pass the view name as `view` to
+`GET /projects/{project_id}/analytics`. The `get_project_analytics` tool takes
+`view` the same way.
 
-REST:
+| View | MCP tool | Window | Answers |
+| --- | --- | --- | --- |
+| `window` | `get_project_analytics_window` | Required | Headline numbers: latency p50/p95, error rate, coverage, estimated cost |
+| `base` | `get_project_analytics_base` | Required | Series over time: traces, errors, tokens, cost, cost by model |
+| `agent_scorecard` | `get_project_agent_scorecard` | Required | Per-agent volume, latency, error rate, tools, tokens, cost |
+| `tool_aggregates` | `get_project_tool_aggregates` | Required | Per-tool calls, errors, latency; tool volume; error concentration |
+| `model_scorecard` | `get_project_model_scorecard` | `start`, optional end | Per-model volume, tokens, speed, cost |
+| `roi` | `get_project_roi` | None | Lemma's value: issues caught, resolved, dismissed; lifetime counts |
+
+Parameters:
+
+- `start`: inclusive, ISO-8601 UTC, whole second.
+- `endExclusive`: exclusive end. Required for `window`, `base`,
+  `agent_scorecard`, and `tool_aggregates`. REST also accepts
+  `end_exclusive`.
+- `end`: `model_scorecard` only, instead of `endExclusive`.
+- `granularity`: `day` (default), `week`, or `month`. Use `day` up to a
+  month, `week` for a quarter, `month` beyond.
+- `roi` takes only `project_id` and returns about a year of daily series.
+
+Unlike the query body, these are query parameters and use `endExclusive` in
+camelCase on REST.
 
 ```bash
 curl -s -G "https://api.uselemma.ai/projects/$LEMMA_PROJECT_ID/analytics" \
@@ -20,70 +43,78 @@ curl -s -G "https://api.uselemma.ai/projects/$LEMMA_PROJECT_ID/analytics" \
   --data-urlencode "endExclusive=2026-09-30T00:00:00.000Z"
 ```
 
-| Parameter | Notes |
-| --- | --- |
-| `view` | `base`, `window`, `model_scorecard`, `agent_scorecard`, `tool_aggregates`, or `roi` |
-| `start` | Inclusive window start, ISO-8601 |
-| `endExclusive` | Exclusive end. Required for `base`, `window`, `agent_scorecard`, and `tool_aggregates` |
-| `end` | Optional inclusive end, instead of `endExclusive` |
-| `granularity` | `day`, `week`, or `month`, for views with series |
+Older per-view REST paths such as `/projects/{project_id}/agent-scorecard`
+are deprecated aliases. Use `?view=` instead.
 
-These are query parameters, and `endExclusive` is camelCase even on REST,
-unlike the query body. The live list of views is the `view` enum on
-[Get project analytics](https://docs.uselemma.ai/api-reference/projects/get-project-analytics);
-trust it over this table if they differ.
+## Responses
 
-Pick a granularity that keeps the series readable: `day` up to a month,
-`week` for a quarter, `month` beyond. Analytics looks back 90 days on a
-rolling basis.
+### `window`
 
-## Views
+- `totals`: `traces`, `p50`, `p95`, `error_rate` (null when unknown),
+  `failed_runs`, `root_status_known`, `root_absent`
+- `latency`: `granularity` and `points` of `{ date, p50, p95 }`
+- `coverage`: `capability` (booleans: does the project emit `root_status`,
+  `root_duration`, `agents`, `tokens`, `model`, `provider`, `cost_basis`,
+  `tools` at all) and `window` (for each, `{ observed, eligible }` traces in
+  this window), plus `window_traces`
+- `cost`: estimated cost fields, with `cost_trace_counts` and truncation
+  flags
+
+Compare `root_status_known` with `traces`. When many traces have no root
+status, the error rate rests on fewer traces than the total; say so.
+
+### `base`
+
+Date series for the window: `traces` (`{ date, value }`), `errors` (`date`,
+`span_errors`, `failed_runs`, `root_status_known`, `root_absent`, `traces`),
+`tokens` (`date`, `input_tokens`, `output_tokens`), `cost` (estimated cost
+fields per date, with `traces`), and `cost_by_model` (`{ date, values }`
+keyed by model). `cost_by_model_coverage` says how complete the per-model
+split is; it covers only traces priced at query time.
 
 ### `agent_scorecard`
 
 `rows`, one per agent: `agent`, `traces`, `p50`, `p95`, `error_rate`,
-`tools_used`, `tokens`, `cost`, and lower-bound flags (`tools_used_is_lower_bound`,
-`cost_is_lower_bound`, `cost_lower_bound_reasons`). Best first call for "how
-are my agents doing".
+`root_status_known`, `tools_used` (with `tools_used_is_lower_bound`),
+`tokens`, `cost` (with `cost_is_lower_bound`, `cost_lower_bound_reasons`,
+`cost_source`), `model_breakdown_truncated`. Best first call for "how are my
+agents doing".
+
+### `tool_aggregates`
+
+- `comparison`, one row per tool: `tool`, `calls`, `errors`, `error_rate`,
+  `p50`, `p95`, `traces` (with `traces_is_lower_bound`), `output_tokens`
+- `volume` and `failing_volume`: `{ date, values }` keyed by tool
+- `error_concentration`: `rows` of `{ span_name, errors, rate }`, with
+  `total_error_spans` and `truncated`
 
 ### `model_scorecard`
 
 `rows`, one per model: `model`, `traces`, `tokens`, `input_tokens`,
 `output_tokens`, `avg_speed`, `priced`, `estimated_cost_usd`. Top level adds
-the overall `estimated_cost_usd`, `priced_token_share`, `unpriced_models`,
-`cost_lower_bound`, and truncation flags.
+the overall estimated cost fields, `cost_rollup_truncated`, and
+`cost_attribution_coverage`. Per-model `estimated_cost_usd` can be null when
+part of the window's cost was priced at write time; the top-level total is
+still complete. Check `cost_attribution_coverage`: `all` means the rows add
+up to the total.
 
-### `tool_aggregates`
+### `roi`
 
-- `comparison`, one row per tool: `tool`, `calls`, `errors`, `error_rate`,
-  `p50`, `p95`, `traces`, `output_tokens`
-- `volume` and `failing_volume`: per-date series of calls by tool
-- `error_concentration.rows`: `span_name`, `errors`, `rate`, with
-  `total_error_spans` and `truncated`
-
-### `base`
-
-Project overview: `state` (`connect`, `waiting`, or `populated`), lifetime
-`counts` (`agents`, `lifetime_traces`, `issues`, `resolved`), and `base`
-date series (issues caught, resolved, dismissed, traces, errors, and more).
-If `state` isn't `populated`, the project has no analytics yet; say so and
-stop.
-
-### `window` and `roi`
-
-Window-level series and totals: trace and error series, latency
-percentiles, error rate, tokens, estimated cost, cost by model, and coverage
-of each telemetry capability. Call the view and read the keys it returns
-rather than assuming a shape.
+- `state`: `connect`, `waiting`, or `populated`. If it isn't
+  `populated`, say the project has no analytics yet and stop.
+- `counts`: lifetime `agents`, `lifetime_traces`, `issues`, `resolved`
+- `base`: daily `{ date, value }` series for `caught`, `resolved`,
+  `dismissed`, `traces`, `errors`, `artifact_iterations`, and
+  `resolution_days`
 
 ## Reading preset responses
 
-- Series come as `[{ date, value }]` or `[{ date, values }]` keyed by tool or
-  model.
-- `cost_source` is `stored`, `mixed`, or `query_time`. Mention it only when
-  the user asks how cost was computed.
-- `coverage` objects say which capabilities (root status, durations, tokens,
-  model, provider, tools) the traces emit. A capability that's missing
-  explains an empty metric; see [reporting.md](reporting.md).
+- Estimated cost fields: `estimated_cost_usd`, `priced_token_share`,
+  `priced_tokens`, `total_tokens`, `unpriced_models`, `pricing_fetched_at`,
+  `cost_source` (`stored`, `mixed`, or `query_time`), `cost_lower_bound`,
+  `cost_lower_bound_reasons`, `model_breakdown_truncated`.
 - Any `*_truncated` or `*_is_lower_bound` flag that is true means the figure
   is partial or a floor. Say so.
+- `coverage` explains empty metrics. A capability that's `false`, or a low
+  `observed / eligible`, means the traces don't send that field; see
+  [reporting.md](reporting.md).

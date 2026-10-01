@@ -14,55 +14,42 @@ curl -s "https://api.uselemma.ai/projects/$LEMMA_PROJECT_ID/analytics/catalog" \
 The response has four keys. Keep it in context for the rest of the
 conversation; it doesn't change between queries.
 
-| Key | Shape | Use it for |
-| --- | --- | --- |
-| `events` | `[{ name, dimensions, measures, cost_measures }]` | What `from` can be, and which fields each event has |
-| `filter_ops` | `string[]` | Valid `op` values in `filters` |
-| `buckets` | `string[]` | Valid time buckets in `group_by` |
-| `limits` | `{ max_group_by, max_measures, max_filters, max_order_by, max_in_values, max_rows, max_window_days }` | Hard caps; a query over any of them fails with HTTP 400 |
+| Key | Use it for |
+| --- | --- |
+| `events` | What `from` can be, and each event's `dimensions`, `measures`, and `cost_measures` |
+| `filter_ops` | Valid `op` values in a filter |
+| `buckets` | Valid time buckets in `group_by` |
+| `limits` | Caps on group-bys, measures, filters, order-bys, `in` values, rows, and window days |
 
-Per event:
-
-- `dimensions`: `[{ field, type }]`. Fields you can filter and group by.
-- `measures`: `[{ field, type, aggs }]`. Fields you can aggregate, and the
-  aggregations each one allows. An aggregation not in `aggs` for that field
-  is rejected.
-- `cost_measures`: `string[]`, such as `trace_cost` or `generation_cost`.
-  Empty when the event has no cost.
-
-Events you will usually see include `trace.processed` (one row per trace),
-`generation.completed` (one per model call), `tool.called` (one per tool
-span), `span.errored` (one per failed span), and issue lifecycle events. The
-catalog is the source of truth; use the names it returns.
-
-To find the right event, map the user's noun to the row: "runs" or "traces"
-is `trace.processed`, "model calls" or "tokens" is `generation.completed`,
-"tool calls" is `tool.called`, "errors" is `span.errored` or the `error`
-measure on the event that owns it.
+Map the user's question to an event and fields with
+[events.md](events.md).
 
 ## 2. Build the body
 
 | Key | Required | Notes |
 | --- | --- | --- |
-| `from` | Yes | Event name from the catalog |
+| `from` | Yes | Event name |
 | `start` | Yes | ISO-8601 UTC, whole second, inclusive |
-| `end_exclusive` | Yes | ISO-8601 UTC, whole second, exclusive |
-| `measures` | Yes | At least one |
-| `filters` | No | All must match |
-| `group_by` | No | Time bucket or dimension |
-| `order_by` | No | By measure or group alias |
-| `limit` | No | Defaults to `limits.max_rows` |
+| `end_exclusive` | Yes | ISO-8601 UTC, whole second, exclusive, after `start` |
+| `measures` | Yes | 1 to `limits.max_measures` |
+| `filters` | No | Up to `limits.max_filters`; all must match |
+| `group_by` | No | Up to `limits.max_group_by` |
+| `order_by` | No | Up to `limits.max_order_by` |
+| `limit` | No | 1 to `limits.max_rows`; defaults to `max_rows` |
 | `join` | No | One other event |
+
+Unknown keys are rejected.
 
 ### Window
 
-- Both ends must be whole seconds in UTC. `2026-09-23T00:00:00.000Z` works;
+- Both ends must be whole seconds. `2026-09-23T00:00:00.000Z` works;
   `2026-09-23T00:00:00.500Z` doesn't.
-- The end is exclusive. For "September 23 through 29", send
-  `start: 2026-09-23T00:00:00.000Z`, `end_exclusive: 2026-09-30T00:00:00.000Z`.
-- The span can't exceed `limits.max_window_days`.
-- "Today" or "so far" windows end at the current time truncated to the
-  second. Say the last bucket is partial.
+- The end is exclusive and must be after the start. For "September 23
+  through 29", send `start: 2026-09-23T00:00:00.000Z` and
+  `end_exclusive: 2026-09-30T00:00:00.000Z`.
+- The span can't exceed `limits.max_window_days` (90).
+- A window ending "now" ends at the current time truncated to the second.
+  Say the last bucket is partial.
 
 Compute windows with a tool, not by hand:
 
@@ -76,23 +63,32 @@ On macOS, use `date -u -v-7d -v0H -v0M -v0S +%Y-%m-%dT%H:%M:%S.000Z`.
 ### Measures
 
 ```json
-{ "as": "alias", "agg": "aggregation", "field": "field" }
+{ "as": "alias", "agg": "aggregation", "field": "field", "filter": { ... } }
 ```
 
-- `count` counts rows. Omit `field`.
-- `sum`, `avg`, `min`, `max`, `p50`, `p95`, `p99` need a numeric `field`
-  whose catalog `aggs` lists that aggregation.
-- `uniqExact` counts distinct values of a field whose `aggs` lists it.
-- A cost measure uses the cost name as `agg` and omits `field`. One cost
-  measure per query, on the primary event only.
-- `generation_cost` also needs `group_by` on `model` with alias `model`.
-- Aliases start with a letter, then lowercase letters, digits, and
-  underscores, at most 41 characters. Aliases must be unique across
-  measures and groups.
+- `count` counts rows. It takes no `field`.
+- `uniqExact` counts distinct values of any field, string or numeric.
+- `sum`, `avg`, `min`, `max`, `p50`, `p95`, `p99` need a numeric field whose
+  catalog `aggs` lists that aggregation.
+- `filter` is optional and takes one filter object. The measure then counts
+  or aggregates only matching rows, while other measures see every row. Use
+  it for a rate in one query:
 
-Cost rows don't use your alias. `generation_cost` rows carry
-`estimated_cost_usd` and `priced`. `trace_cost` rows carry
-`estimated_cost_usd`, `cost_lower_bound`, and `cost_lower_bound_reasons`.
+```json
+"measures": [
+  { "as": "calls", "agg": "count" },
+  { "as": "failures", "agg": "count", "filter": { "field": "error", "op": "eq", "value": 1 } }
+]
+```
+
+- Cost measures (`trace_cost` on `trace.processed`, `generation_cost` on
+  `generation.completed`) use the cost name as `agg` and take no `field` or
+  `filter`. One cost measure per query, on the primary event only.
+- `generation_cost` also needs a group on `model` whose alias is `model`.
+
+Aliases match `^[a-z][a-z0-9_]{0,40}$`: a lowercase letter, then up to 40
+lowercase letters, digits, or underscores. They must be unique across groups
+and measures.
 
 ### Filters
 
@@ -100,34 +96,36 @@ Cost rows don't use your alias. `generation_cost` rows carry
 { "field": "agent_name", "op": "eq", "value": "support_agent" }
 ```
 
-- `op` must be in the catalog `filter_ops`.
-- A comparison operator such as `eq` takes one scalar `value`.
-- `in` takes an array of at most `limits.max_in_values` values.
-- `is_null` and `is_not_null` omit `value`.
-- Filter values are exact. If the user names an agent loosely ("the support
-  bot"), first group by `agent_name` over the window to list the real names,
-  then filter on the match. Confirm with the user when more than one name
-  fits.
+- `eq`, `neq`, `gt`, `gte`, `lt`, `lte` take one string or number.
+- `in` takes a non-empty array of up to `limits.max_in_values` (20) values.
+- `is_null` and `is_not_null` take no `value`.
+- Values are exact. Missing strings are stored as `''`, so "agent unset" is
+  `{ "field": "agent_name", "op": "eq", "value": "" }`, not `is_null`.
+- If the user names something loosely ("the support bot"), first group by
+  that field over the window to list real values, then filter on the match.
+  Confirm with the user when more than one fits.
 
 ### Group and order
 
 ```json
 "group_by": [
   { "bucket": "day", "as": "day" },
-  { "field": "agent_name", "as": "agent_name" }
+  { "field": "agent_name" }
 ],
 "order_by": [{ "measure": "traces", "direction": "desc" }]
 ```
 
-- A bucket must be in the catalog `buckets`. A day bucket comes back as a
-  date string such as `2026-09-23`.
-- A field group must be a dimension of the event.
-- `order_by.measure` names any measure alias or group alias. `direction` is
-  `asc` or `desc`. Without `order_by`, grouped rows are sorted by the group.
-- For a "top N", set `order_by` desc and `limit: N`.
-- Don't assume every bucket comes back. If a day is missing from the rows,
-  treat it as no data, not as zero, unless the measure is a count. Say so
-  when you fill gaps in a series.
+- Buckets: `minute`, `hour`, `day`, `week`, `month` (check `buckets`). A
+  `day` bucket returns `2026-09-23`; `hour` and `minute` return
+  `2026-09-23 14:00:00`. Weeks start on Sunday. Months start on the 1st.
+- `as` is optional. A bucket's alias defaults to `bucket`; a field's to the
+  field name. Set `as` on buckets so rows read clearly.
+- `order_by.measure` names a group alias or a primary measure alias, not a
+  joined measure. `direction` is `asc` or `desc`.
+- Without `order_by`, grouped rows come back sorted by the groups.
+- For a top N, order desc and set `limit: N`.
+- Groups with no rows are absent. Treat a missing bucket as zero only for
+  `count` and `sum`, and say so when you fill gaps.
 
 ### Join
 
@@ -135,21 +133,25 @@ Cost rows don't use your alias. `generation_cost` rows carry
 "join": {
   "from": "tool.called",
   "on": "agent_name",
-  "measures": [{ "as": "tool_calls", "agg": "count" }]
+  "filters": [{ "field": "error", "op": "eq", "value": 1 }],
+  "measures": [{ "as": "tool_failures", "agg": "count" }]
 }
 ```
 
-- One join per query, on a field that is a dimension of both events.
-- Group the primary query by the `on` field, so each row pairs both counts
-  for one value.
-- Joined measure aliases must not collide with primary aliases.
-- Cost measures stay on the primary event.
+- One join, to a different event, on a field both events have (see
+  [events.md](events.md)). The joined side is grouped by `on` and LEFT
+  JOINed, so primary rows without a match get null joined measures.
+- Group the primary query by the `on` field and leave its alias as the
+  field name; the join matches on that alias.
+- `join.filters` applies only to the joined event.
+- Joined aliases must not collide with primary aliases, can't be cost
+  measures, and can't be used in `order_by`.
 
 ## 3. Send it
 
 MCP: `query_project_analytics` with `project_id` plus the body, with three
 keys in camelCase: `endExclusive`, `groupBy`, `orderBy`. Everything else,
-including field names such as `agent_name`, stays as written.
+including field names, stays as written.
 
 REST:
 
@@ -168,40 +170,71 @@ queries.
 
 ```json
 {
-  "rows": [{ "day": "2026-09-23", "traces": 120, "p95_ms": 840.5 }],
+  "rows": [{ "day": "2026-09-23", "traces": "120", "p95_ms": 840.5 }],
   "truncated": false,
   "window": { "start": "...", "end_exclusive": "..." }
 }
 ```
 
-- `rows`: one object per group, keyed by your aliases (cost fields
-  excepted, see above). With no `group_by`, one row.
-- `truncated`: true when the rows hit `limit` or `limits.max_rows`. More
-  groups exist. Narrow filters, use a coarser bucket, or raise `limit` up to
-  `max_rows`. Never present a truncated ranking as complete.
-- `window`: the window that ran. Quote it in the answer.
+- `rows`: one object per group, keyed by alias. With no `group_by`, one row.
+- Large integer results, such as `count` and `sum` of token fields, can
+  arrive as numeric strings. Parse them before doing math.
+- Cost rows don't use your alias. See [Cost fields](#cost-fields).
+- `truncated` is true when the row count reached `limit` (or 500). There may
+  be more groups, or exactly that many. Narrow filters, use a coarser
+  bucket, or raise `limit` and check again. Never present a truncated
+  ranking as complete.
+- `window` echoes the window that ran. Quote it in the answer.
 
-Both transports return this snake_case shape.
+### Cost fields
+
+- `generation_cost`: each row gets `estimated_cost_usd` (null when unpriced)
+  and `priced`.
+- `trace_cost`: each row gets `estimated_cost_usd`, `cost_lower_bound`,
+  `cost_lower_bound_reasons`, `cost_source`, `priced_tokens`,
+  `total_tokens`, `priced_token_share`, `unpriced_models`,
+  `pricing_fetched_at`, and `model_breakdown_truncated`, plus
+  `attribution: { coverage, values }`. `values` maps model to estimated
+  cost, and covers only traces priced at query time: `coverage` is `all`,
+  `unwritten_only` (a partial per-model split), or `none`. Don't present a
+  partial split as the full breakdown.
+
+`cost_lower_bound_reasons` values: `unpriced_models`, `prices_unavailable`,
+`unbackfilled_traces`, `live_priced_breakdown_truncated`,
+`model_rollup_truncated`.
 
 ## 5. Recover from errors
 
 | Response | Cause | Fix |
 | --- | --- | --- |
-| 400 | Invalid body. `detail` says which part | Read `detail`, recheck against the catalog, fix that part only, retry once |
+| 400 | Invalid body; `detail` names the problem | Fix that part and retry once |
 | Auth error | Missing, wrong, or ingest-only key | Ask for an organization key with read or admin scope |
-| 404 | Unknown project, or a key limited to another project | Confirm the project id with the user |
-| Fails after 15s | Query too expensive | Shorten the window, drop a group, or use a coarser bucket |
+| 404 | Unknown project, or a key limited to another project | Confirm the project id |
+| Timeout | Query ran past 15s | Shorten the window, drop a group, or use a coarser bucket |
 | 503 | Lemma unavailable | Retry once after a short wait, then tell the user |
 
-Common 400 causes: a field not in the event, an aggregation not in that
-field's `aggs`, a window not on a whole second, a window longer than
-`max_window_days`, a duplicate alias, `field` set on `count` or a cost
-measure, `generation_cost` without a `model` group, or a list over a limit.
+400 `detail` messages and their fixes:
+
+| `detail` | Fix |
+| --- | --- |
+| `Unknown field: x` | Use a field from that event in the catalog |
+| `p95 is not valid for x` | The field is a string, or `aggs` lacks it |
+| `count does not take a field` | Drop `field` |
+| `trace_cost is not valid on tool.called` | Cost measures only work on their own event |
+| `Only one cost measure is allowed` | Split into two queries |
+| `generation_cost requires grouping by model` | Add `{ "field": "model" }` to `group_by` |
+| `Invalid alias: x` | Lowercase letter first, then `[a-z0-9_]`, 41 max |
+| `Duplicate alias: x` | Rename one |
+| `Unknown order field: x` | Order by a group or primary measure alias |
+| `start and endExclusive must be second-aligned UTC` | Drop milliseconds |
+| `Window exceeds 90 days` | Split the window, see below |
+| `in filters accept at most 20 values` | Split the list across queries |
+| `Join must use a different event` | Pick another event, or use a measure `filter` |
 
 ## 6. Windows longer than the limit
 
-Split the range into adjacent windows within `max_window_days`, run one query
-per window, then combine:
+Split the range into adjacent windows within 90 days, run one query per
+window, then combine:
 
 - `count`, `sum`: add across windows.
 - `min`, `max`: take the min or max of the parts.
@@ -211,3 +244,6 @@ per window, then combine:
   tell the user the overall figure isn't available over that range.
 - Estimated cost: add `estimated_cost_usd`; carry over any `priced: false` or
   `cost_lower_bound: true`.
+
+Analytics keeps 90 days, so a range reaching further back returns nothing
+for the older part.

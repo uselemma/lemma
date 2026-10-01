@@ -25,9 +25,10 @@ report comes from a call you made in this conversation.
 ## Core rules
 
 1. Read the catalog before the first query for a project in this
-   conversation. Never guess an event, field, aggregation, filter operator,
-   or bucket. If the catalog lacks it, say so; don't approximate with a
-   different field.
+   conversation, and map fields with
+   [references/events.md](references/events.md). Never guess an event,
+   field, aggregation, filter operator, or bucket. If the catalog lacks it,
+   say so; don't approximate with a different field.
 2. Every call here is a read. Run them without asking. Never print the API
    key, and never write it to a file the user didn't ask for.
 3. Always set an explicit window and state it in the answer, in UTC, with the
@@ -38,7 +39,7 @@ report comes from a call you made in this conversation.
    `cost_lower_bound: true` rather than hiding them.
 5. Report what came back, not what you expected. If `truncated` is true, say
    the result is partial. If rows are empty, say so and offer the likely
-   cause; don't fill gaps with zeros.
+   cause; don't invent values.
 6. Never show raw JSON unless the user asks for it. Render a table or a
    sentence, sentence case, terse, no em-dashes.
 
@@ -46,10 +47,10 @@ report comes from a call you made in this conversation.
 
 | Need | Call | Reference |
 | --- | --- | --- |
-| Events, fields, aggregations, limits for this project | `describe_project_analytics` | [references/query.md](references/query.md) |
+| Which event and field answer the question | `describe_project_analytics` | [references/events.md](references/events.md) |
 | One number or one breakdown | `query_project_analytics` | [references/query.md](references/query.md) |
 | A question that matches a common pattern | `query_project_analytics` | [references/recipes.md](references/recipes.md) |
-| A whole dashboard panel (scorecards, tool aggregates, ROI) | `get_project_analytics` | [references/presets.md](references/presets.md) |
+| A dashboard panel: headline numbers, scorecards, tool health, ROI | `get_project_analytics_window`, `get_project_agent_scorecard`, and the other view tools | [references/presets.md](references/presets.md) |
 | Turning rows into an answer | | [references/reporting.md](references/reporting.md) |
 
 Read the matching reference before acting. Keep operation names exactly as
@@ -67,8 +68,8 @@ one. Point them to **API Keys** in the
 [Lemma dashboard](https://platform.uselemma.ai) and the
 [MCP setup page](https://docs.uselemma.ai/connections/mcp).
 
-If you don't know the project id, ask. With the MCP connected, you can list
-projects first if a project listing tool is available.
+If you don't know the project id, call `list_projects` and ask the user to
+pick one when there's more than one.
 
 ## Scope
 
