@@ -9,6 +9,19 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="October 2, 2026" tags={["New releases", "Improvements", "[Audit logs]", "[Issues]"]} rss={{ title: "Read the audit log, and find issues on completed tasks" }}>
+
+  ## Audit logs
+
+  - **Read:** An owner or admin lists organization audit events with `GET /audit-events`. An org-wide admin API key can list them too. The default window is the last 7 days, and a window wider than 90 days is rejected. A project-scoped key is rejected.
+  - **CSV export:** `GET /audit-events/export` downloads the same window and filters as CSV, under the same access rules. More than 10,000 matching events is rejected, and Lemma records the export.
+
+  ## Issues
+
+  - **Completed tasks:** After the agent delivers the requested outcome, detection looks for an [issue](/platform/issues), including a confirmed hallucination.
+
+</Update>
+
 <Update label="September 30, 2026" tags={["New releases", "[Analytics]"]} rss={{ title: "Query stored analytics from the catalog" }}>
 
   ## Analytics
