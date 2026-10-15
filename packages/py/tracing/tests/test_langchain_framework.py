@@ -18,7 +18,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import RunnableLambda
-from langchain_core.tools import tool
+from langchain_core.tools import ToolException, tool
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langsmith.run_helpers import tracing_context
 from pydantic import PrivateAttr
@@ -153,6 +153,45 @@ def test_create_agent_ainvoke_is_one_root_with_tool_and_generation():
         if span["type"] == "tool"
     }
     assert "ping" in tool_names
+
+
+def test_agent_can_recover_from_handled_tool_error():
+    calls = []
+    handler = _handler(calls, agent_name="support-agent")
+
+    @tool
+    def lookup_order() -> str:
+        """Look up an order."""
+        raise ToolException("Order service unavailable")
+
+    lookup_order.handle_tool_error = True
+    model = ScriptedChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[{"name": "lookup_order", "args": {}, "id": "call_1"}],
+            ),
+            AIMessage(content="Please try again later."),
+        ]
+    )
+    agent = create_agent(model=model, tools=[lookup_order], name="support-agent")
+    result = asyncio.run(
+        agent.ainvoke(
+            {"messages": [{"role": "user", "content": "Find my order"}]},
+            {"callbacks": [handler]},
+        )
+    )
+    handler.flush()
+
+    assert result["messages"][-1].content == "Please try again later."
+    assert len(calls) == 1
+    trace = calls[0]["body"]["trace"]
+    span = next(span for span in trace["spans"] if span["type"] == "tool")
+    assert span["error"] == "Order service unavailable"
+    assert span["status"] == "ERROR"
+    assert "output" not in span
+    assert trace.get("status") != "ERROR"
+    assert trace["output"] == "Please try again later."
 
 
 class _PassthroughMiddleware(AgentMiddleware):
