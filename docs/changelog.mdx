@@ -9,11 +9,29 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
-<Update label="October 15, 2026" tags={["New releases", "[Dashboard]"]} rss={{ title: "Monitor groups are shared for the project" }}>
+<Update label="October 15, 2026" tags={["New releases", "Improvements", "Bug fixes", "[Monitors]", "[Issues]", "[Slack]", "[Billing]"]} rss={{ title: "Monitors track an event or behavior on an agent" }}>
 
-  ## Dashboard
+  ## Monitors
 
-  - **Monitor board:** [Monitors](/platform/monitors) stores one board per project. You and every other member see the same groups and card order after a reload.
+  - **Signal and behavior:** [Monitors](/platform/monitors) records matching traces for one agent as they arrive. A signal monitor counts an event. A behavior monitor also writes an issue when that behavior is wrong. You can’t change the agent or the kind later.
+  - **Chart:** The chart draws one point per day. **Percent** is the share of that day’s traces that fit. **Count** is how many traces fit that day. You can view the same chart by week or by month. A behavior monitor also shows how many of those traces have an occurrence.
+  - **Correct a trace:** **Doesn’t fit** means this trace should not count. **Add to monitor** means it should, including a trace the monitor has not judged. **Recalibrate** teaches later traces from that feedback. Lemma also recalibrates every night.
+  - **Board:** The project stores one board. You and every other member see the same groups and card order after a reload.
+
+  ## Issues
+
+  - **Open the trace:** Clicking an occurrence on an [issue](/platform/issues) opens that trace with the occurrence expanded. Its first cited span is selected. An occurrence with no citation opens the trace with no span selected.
+  - **Details:** **Agent**, **Locus**, **Fault**, and **Param** sit in the side rail under **Details**.
+
+  ## Slack
+
+  - **Chart alerts:** An issue alert that includes a chart waits until Slack has the image, then posts. If Slack still rejects the chart, the alert posts once without it.
+  - **Repeat alerts:** You don’t get a second Slack alert for the same issue in that window when fewer of its priority signals fire.
+
+  ## Billing
+
+  - **Trace ingest:** Sending traces returns HTTP 402 until the organization is trialing, active, past due, or on an Enterprise plan. Setup and the rest of the API stay open.
+  - **Enterprise trial:** An Enterprise organization with no Stripe subscription shows **Enterprise trial** on the billing page, and there is no subscription to cancel.
 
 </Update>
 
