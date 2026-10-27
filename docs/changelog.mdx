@@ -9,6 +9,18 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="October 26, 2026" tags={["Bug fixes", "[Issues]", "[Dashboard]"]} rss={{ title: "Reruns replace withdrawn findings, and Dashboard keeps issue history" }}>
+
+  ## Issues
+
+  - **Rerun:** When detection finishes again on turns it already read, the new findings replace the earlier ones on those turns. A finding already grouped into an [issue](/platform/issues) is removed when that run does not raise it again. A run that does not finish leaves the existing findings. An issue a behavior monitor wrote on those turns stays. The issue stays when other traces still support it.
+
+  ## Dashboard
+
+  - **Issue history:** **Dashboard** keeps **Issues identified**, **Issues resolved**, and **Resolved vs. dismissed** for 90 days.
+
+</Update>
+
 <Update label="October 15, 2026" tags={["New releases", "[Dashboard]"]} rss={{ title: "Monitor groups are shared for the project" }}>
 
   ## Dashboard
