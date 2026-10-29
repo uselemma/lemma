@@ -30,11 +30,8 @@ meta:
 
   ## Issues
 
-  - **Rerun:** When detection finishes again on turns it already read, the new findings replace the earlier ones on those turns.
-  - **Grouped finding:** A finding already grouped into an [issue](/platform/issues) is removed when that run does not raise it again.
-  - **Incomplete run:** A run that does not finish leaves the existing findings.
-  - **Behavior monitor issues:** An issue a behavior monitor wrote on those turns stays.
-  - **Other traces:** The issue stays when other traces still support it.
+  - **Rerun:** When detection finishes again on turns it already read, the new findings replace the earlier ones, including a finding already grouped into an [issue](/platform/issues).
+  - **Exceptions:** A run that doesn’t finish leaves the existing findings. An issue a behavior monitor wrote on those turns stays, and the issue stays when other traces still support it.
 
   ## Dashboard
 
@@ -54,7 +51,7 @@ meta:
 
   ## Issues
 
-  - **See conversation:** On an [issue](/platform/issues), **See conversation** opens the trace with that occurrence expanded and its first cited span selected. Clicking the row doesn’t open the trace.
+  - **See conversation:** **See conversation** opens the trace. Clicking the row doesn’t. [Open an occurrence](/platform/issues#open-an-occurrence) describes what the trace shows.
 
   ## Slack
 
@@ -67,11 +64,11 @@ meta:
 
   ## Billing
 
-  - **Project setup:** You can create a project and call the API and MCP with no trial or subscription. Sending traces returns HTTP 402 until the organization is trialing, active, past due, or on an Enterprise plan.
+  - **Project setup:** You can create a project and call the API and MCP with no trial or subscription. Sending traces still returns HTTP 402, as on October 15.
 
 </Update>
 
-<Update label="October 15, 2026" tags={["New releases", "Improvements", "Bug fixes", "[Monitors]", "[Issues]", "[Slack]", "[Billing]"]} rss={{ title: "Monitors track an event or behavior on an agent" }}>
+<Update label="October 15, 2026" tags={["New releases", "Improvements", "Bug fixes", "[Monitors]", "[Issues]", "[Slack]", "[Billing]"]} rss={{ title: "Monitor groups are shared for the project" }}>
 
   ## Monitors
 
@@ -82,7 +79,7 @@ meta:
 
   ## Issues
 
-  - **Open the trace:** Clicking an occurrence on an [issue](/platform/issues) opens that trace with the occurrence expanded. Its first cited span is selected. An occurrence with no citation opens the trace with no span selected.
+  - **Open the trace:** Clicking an occurrence on an [issue](/platform/issues#open-an-occurrence) opens that trace.
 
   ## Slack
 
@@ -91,7 +88,7 @@ meta:
 
   ## Billing
 
-  - **Trace ingest:** Sending traces returns HTTP 402 until the organization is trialing, active, past due, or on an Enterprise plan. Setup and the rest of the API stay open.
+  - **Trace ingest:** Sending traces returns HTTP 402 until the organization is trialing, active, past due, or on an Enterprise plan.
   - **Enterprise trial:** An Enterprise organization with no Stripe subscription shows **Enterprise trial** on the billing page, and there is no subscription to cancel.
 
 </Update>
