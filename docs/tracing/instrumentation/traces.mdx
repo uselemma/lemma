@@ -238,6 +238,8 @@ Return values are captured automatically. Use `trace.output()` only when the rec
 
 If the callback throws, the SDK records the trace as failed, sends it to Lemma, and rethrows the original error. Automatic delivery (`trace` / `async_trace` / `TraceHandle.end()`) fails open: a Lemma ingest 4xx/5xx or network error is logged in debug mode and dropped, so it cannot fail the caller’s application or replace the original error. A transport failure on a successful run is not recorded as an agent failure. Use `ingest()` when you need a failed send to raise so you can retry.
 
+Requests to Lemma time out after 10s by default. Set `timeout` in Python (seconds, per socket operation) or `timeoutMs` in TypeScript (a total deadline per request). Automatic delivery drops a timed-out trace the same way it drops a 5xx, and `ingest()` raises or rejects.
+
 ## Pass trace context to helpers
 
 Pass the trace context into nested helper functions that need to record child work:

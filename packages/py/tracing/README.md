@@ -158,8 +158,8 @@ span IDs are skipped — so a failed send can be retried as-is. It raises on a
 non-2xx response and never mutates the trace's status.
 
 Automatic delivery (`trace` / `async_trace`) fails open: a Lemma ingest
-4xx/5xx or network error is logged in debug mode and dropped so it cannot fail
-the caller's application. LangChain and OpenAI Agents flush through this path.
+4xx/5xx, network error, or timeout is logged in debug mode and dropped so it
+cannot fail the caller's application. LangChain and OpenAI Agents flush through this path.
 Use `ingest()` when you need a failed send to raise so you can retry.
 
 ## Cross-process turns
@@ -350,8 +350,14 @@ Use `attributes` for raw attributes that do not yet have a native SDK keyword.
 | `before_send`               | none                 | none                      |
 | `max_payload_bytes`         | none                 | none (no cap)             |
 | `deduplicate_span_content`  | none                 | `False`                   |
+| `timeout`                   | none                 | `10.0` seconds            |
 
-The SDK sends to `{base_url}/traces/ingest`.
+The SDK sends to `{base_url}/traces/ingest`. On the default transport,
+`timeout` applies to each socket operation (connecting, each read), not to the
+request as a whole. `None` falls back to `socket.getdefaulttimeout()`, which
+waits indefinitely unless your process sets it. When it fires, automatic
+delivery drops the trace and `ingest()` raises. A custom `transport` sets its
+own timeouts.
 
 You can pass configuration directly to the constructor instead of using
 environment variables:

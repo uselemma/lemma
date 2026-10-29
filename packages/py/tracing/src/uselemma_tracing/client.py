@@ -26,6 +26,8 @@ from .debug_delivery import (
     INGEST_STATUS_PATH,
     INGEST_STATUS_POLL_INTERVAL_SECONDS,
     INGEST_STATUS_POLL_TIMEOUT_SECONDS,
+    INGEST_TIMEOUT_SECONDS,
+    MAX_INGEST_TIMEOUT_SECONDS,
     api_key_suffix,
     build_config_warnings,
     ingest_failure_hint,
@@ -59,6 +61,11 @@ _SDK_USER_AGENT = f"uselemma-tracing/{_SDK_VERSION}"
 
 def _merge_sdk_user_agent(headers: dict[str, str]) -> dict[str, str]:
     return {"User-Agent": _SDK_USER_AGENT, **headers}
+
+
+def _timeout_kwargs(timeout: float | None) -> dict[str, float]:
+    # None leaves urllib's default in place: socket.getdefaulttimeout().
+    return {} if timeout is None else {"timeout": timeout}
 
 
 def _now() -> datetime:
@@ -1027,6 +1034,7 @@ class Lemma:
         before_send: BeforeSend | None = None,
         max_payload_bytes: int | None = None,
         deduplicate_span_content: bool = False,
+        timeout: float | None = INGEST_TIMEOUT_SECONDS,
     ) -> None:
         self.api_key = api_key or os.environ.get("LEMMA_API_KEY")
         self.project_id = project_id or os.environ.get("LEMMA_PROJECT_ID")
@@ -1036,6 +1044,11 @@ class Lemma:
             raise ValueError("uselemma-tracing: Missing LEMMA_PROJECT_ID")
         if max_payload_bytes is not None and max_payload_bytes <= 0:
             raise ValueError("uselemma-tracing: max_payload_bytes must be > 0")
+        if timeout is not None and not 0 < timeout <= MAX_INGEST_TIMEOUT_SECONDS:
+            raise ValueError(
+                "uselemma-tracing: timeout must be > 0 and at most "
+                f"{MAX_INGEST_TIMEOUT_SECONDS} seconds, or None"
+            )
         self.release = normalize_release(
             release if release is not None else os.environ.get("LEMMA_RELEASE")
         )
@@ -1043,9 +1056,18 @@ class Lemma:
         self.before_send = before_send
         self.max_payload_bytes = max_payload_bytes
         self.deduplicate_span_content = deduplicate_span_content
+        self.timeout = timeout
         self._last_response_headers: dict[str, str] = {}
         self._config_logged = False
-        self.transport = self._wrap_transport(transport or self._urllib_transport)
+        # The default transport reads self.timeout per request: the one source of the deadline.
+        self.transport = self._wrap_transport(
+            transport
+            or (
+                lambda url, headers, body: self._urllib_transport(
+                    url, headers, body, timeout=self.timeout
+                )
+            )
+        )
         self._log_init_config_once()
 
     def debug_smoke_test(self) -> dict[str, Any]:
@@ -1462,6 +1484,7 @@ class Lemma:
             status, text, _headers = self._urllib_get(
                 url,
                 {"Authorization": f"Bearer {self.api_key}"},
+                timeout=self.timeout,
             )
             if status < 200 or status >= 300:
                 return None
@@ -1507,7 +1530,11 @@ class Lemma:
 
     @staticmethod
     def _urllib_transport(
-        url: str, headers: dict[str, str], body: bytes
+        url: str,
+        headers: dict[str, str],
+        body: bytes,
+        *,
+        timeout: float | None,
     ) -> tuple[int, str, dict[str, str]]:
         request = urllib.request.Request(
             url,
@@ -1516,7 +1543,7 @@ class Lemma:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request) as response:
+            with urllib.request.urlopen(request, **_timeout_kwargs(timeout)) as response:
                 return (
                     response.status,
                     response.read().decode(),
@@ -1527,7 +1554,10 @@ class Lemma:
 
     @staticmethod
     def _urllib_get(
-        url: str, headers: dict[str, str]
+        url: str,
+        headers: dict[str, str],
+        *,
+        timeout: float | None,
     ) -> tuple[int, str, dict[str, str]]:
         request = urllib.request.Request(
             url,
@@ -1535,7 +1565,7 @@ class Lemma:
             method="GET",
         )
         try:
-            with urllib.request.urlopen(request) as response:
+            with urllib.request.urlopen(request, **_timeout_kwargs(timeout)) as response:
                 return (
                     response.status,
                     response.read().decode(),
