@@ -29,6 +29,10 @@ _LIVE_SPAN_DATA_KEYS = (
 )
 
 
+# Survives _compact so a successful None tool/child end is not dropped from the span.
+_NO_OUTPUT = {"result": "none"}
+
+
 @dataclass
 class _StoredTrace:
     context: TraceContext
@@ -561,11 +565,24 @@ class LemmaOpenAIAgentsProcessor:
         if not error_message and _is_generation_type(span_type) and output is not None:
             self._note_root_output(stored, output)
 
+        # Successful non-root tool/child ends that return None record a marker
+        # so the span carries an explicit output instead of dropping the key in _compact.
+        recorded_output = (
+            dict(_NO_OUTPUT)
+            if not error_message
+            and output is None
+            and (
+                span_type == "function"
+                or (_get(span, "parent_id") is not None and not _is_generation_type(span_type))
+            )
+            else output
+        )
+
         # Prefer the original string timestamp so payload ISO matches the SDK.
         ended_at_value = raw_ended_at if raw_ended_at is not None else span_ended_at
         handle.end(
             # Failures must not invent an output — record error instead.
-            output=output,
+            output=recorded_output,
             error=error_message,
             status="ERROR" if error_message else None,
             model=pick_model_identity(data),

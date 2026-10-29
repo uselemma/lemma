@@ -848,3 +848,59 @@ def test_openai_agents_force_flush_does_not_raise_on_ingest_503():
     processor.on_trace_start(FakeTrace(trace_id="trace_503", name="agent"))
     processor.on_trace_end(FakeTrace(trace_id="trace_503", name="agent"))
     processor.force_flush()
+
+
+def test_openai_agents_function_returning_none_records_no_output_marker():
+    calls = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda _url, _headers, body: calls.append(body) or (201, {"ok": True}),
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_none", name="agent"))
+    processor.on_span_start(
+        FakeSpan(
+            trace_id="trace_none",
+            span_id="span_gen",
+            parent_id=None,
+            started_at="2026-06-29T10:00:00Z",
+            span_data={"type": "generation"},
+        )
+    )
+    processor.on_span_start(
+        FakeSpan(
+            trace_id="trace_none",
+            span_id="span_tool",
+            parent_id="span_gen",
+            started_at="2026-06-29T10:00:00.010Z",
+            span_data={"type": "function", "name": "log_event"},
+        )
+    )
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_none",
+            span_id="span_tool",
+            parent_id="span_gen",
+            started_at="2026-06-29T10:00:00.010Z",
+            ended_at="2026-06-29T10:00:00.020Z",
+            span_data={"type": "function", "name": "log_event", "output": None},
+        )
+    )
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_none",
+            span_id="span_gen",
+            parent_id=None,
+            started_at="2026-06-29T10:00:00Z",
+            ended_at="2026-06-29T10:00:00.030Z",
+            span_data={"type": "generation", "output": [{"role": "assistant", "content": "done"}]},
+        )
+    )
+    processor.on_trace_end(FakeTrace(trace_id="trace_none", name="agent"))
+
+    payload = json.loads(calls[0].decode() if isinstance(calls[0], (bytes, bytearray)) else calls[0])
+    spans = {s["id"]: s for s in payload["trace"]["spans"]}
+    assert "output" in spans["span_tool"]
+    assert spans["span_tool"]["output"] == {"result": "none"}
+
