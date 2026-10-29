@@ -26,12 +26,7 @@ meta:
 
 </Update>
 
-<Update label="October 26, 2026" tags={["Bug fixes", "[Issues]", "[Dashboard]"]} rss={{ title: "Reruns replace withdrawn findings, and Dashboard keeps issue history" }}>
-
-  ## Issues
-
-  - **Rerun:** When detection finishes again on turns it already read, the new findings replace the earlier ones, including a finding already grouped into an [issue](/platform/issues).
-  - **Exceptions:** A run that doesn’t finish leaves the existing findings. An issue a behavior monitor wrote on those turns stays, and the issue stays when other traces still support it.
+<Update label="October 26, 2026" tags={["Bug fixes", "[Dashboard]"]} rss={{ title: "Dashboard keeps issue history" }}>
 
   ## Dashboard
 
@@ -57,14 +52,6 @@ meta:
 
   - **Delivery log:** `GET /projects/{project_id}/slack-deliveries` lists each attempted [Slack](/connections/slack) send, newest first. That covers issue alerts, Issue Briefs, and instrumentation digests, including failed and partial sends. The MCP tool is `list_slack_deliveries`. Each row has no message text. Lemma keeps them for 14 days.
   - **One delivery:** `GET /projects/{project_id}/slack-deliveries/{delivery_id}` returns every attempted message. The MCP tool is `get_slack_delivery`.
-
-</Update>
-
-<Update label="October 16, 2026" tags={["Bug fixes", "[Billing]"]} rss={{ title: "Project setup no longer requires a subscription" }}>
-
-  ## Billing
-
-  - **Project setup:** You can create a project and call the API and MCP with no trial or subscription. Sending traces returns HTTP 402 until the organization is trialing, active, past due, or on an Enterprise plan.
 
 </Update>
 
