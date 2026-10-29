@@ -160,7 +160,8 @@ non-2xx response and never mutates the trace's status.
 Automatic delivery (`trace` / `async_trace`) fails open: a Lemma ingest
 4xx/5xx or network error is logged in debug mode and dropped so it cannot fail
 the caller's application. LangChain and OpenAI Agents flush through this path.
-Use `ingest()` when you need a failed send to raise so you can retry.
+Use `ingest()` or `turn.end()` when you need a failed send to raise so you can
+retry.
 
 ## Cross-process turns
 

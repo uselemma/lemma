@@ -156,7 +156,7 @@ If the sandbox dies before a complete journal, apply whatever records arrived. E
   </Tab>
 </Tabs>
 
-`turn.end()` is **strict**: a 4xx/5xx from Lemma throws so you can retry the same payload. Automatic `lemma.trace()` delivery fails open.
+`turn.end()` is **strict**: a 4xx/5xx from Lemma or a network error throws. Call `turn.end()` again to retry: unless you pass new times, it resends the trace with the first attempt’s start and end times. Lemma skips span IDs it already stored, so a retry doesn’t duplicate spans. A second `turn.end()` while a send is running doesn’t send again: in TypeScript it waits for that send, and in Python it returns right away. Automatic `lemma.trace()` delivery fails open.
 
 ## Helpers for each role
 
