@@ -2,7 +2,49 @@ from __future__ import annotations
 
 import json
 
+import pytest
+from langchain_core.messages import ToolMessage
+
 from uselemma_tracing.tool_result import tool_result_error
+
+
+@pytest.mark.parametrize("serialized", [False, True])
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ("  Connection refused  ", "Connection refused"),
+        (
+            ["Service unavailable", {"type": "text", "text": "Try later"}],
+            "Service unavailable\nTry later",
+        ),
+        ("", "Tool returned an error result"),
+    ],
+)
+def test_tool_result_error_normalizes_tool_messages(content, expected, serialized):
+    message = ToolMessage(content=content, status="error", tool_call_id="call-1")
+    assert tool_result_error(message.model_dump() if serialized else message) == expected
+
+
+def test_tool_result_error_preserves_successful_tool_messages():
+    assert (
+        tool_result_error(
+            ToolMessage(content="No error was found", status="success", tool_call_id="call-1")
+        )
+        is None
+    )
+
+
+def test_tool_result_error_ignores_unusable_model_dumps():
+    class BrokenModel:
+        def model_dump(self):
+            raise ValueError("cannot serialize")
+
+    class NonRecordModel:
+        def model_dump(self):
+            return ["not a record"]
+
+    assert tool_result_error(BrokenModel()) is None
+    assert tool_result_error(NonRecordModel()) is None
 
 
 def test_tool_result_error_returns_none_for_success():

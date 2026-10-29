@@ -7,7 +7,7 @@ from typing import Any
 
 
 def tool_result_error(output: Any) -> str | None:
-    """Return an error message for MCP/Mastra-style tool failure payloads.
+    """Return an error message for MCP/Mastra/LangChain tool failure payloads.
 
     Detects protocol flags (``{isError: true}``, ``{is_error: true}``, Mastra
     ``{error: true, message}``, ``{success: false}``, ``{status: "error"}``)
@@ -33,6 +33,8 @@ def tool_result_error(output: Any) -> str | None:
         encoded = _encoded_payload_error(record)
         if encoded:
             return encoded
+        if record.get("type") == "tool":
+            return "Tool returned an error result"
         try:
             return json.dumps(record, default=str)
         except TypeError:
@@ -72,12 +74,15 @@ def _encoded_payload_error(record: dict[str, Any]) -> str | None:
 
 
 def _content_text(content: Any) -> str | None:
+    if isinstance(content, str):
+        return _non_empty_string(content)
     if not isinstance(content, list):
         return None
     texts = [
-        part.get("text")
+        part if isinstance(part, str) else part.get("text")
         for part in content
-        if isinstance(part, dict) and isinstance(part.get("text"), str)
+        if isinstance(part, str)
+        or (isinstance(part, dict) and isinstance(part.get("text"), str))
     ]
     text = "\n".join(text for text in texts if text).strip()
     return text or None
@@ -94,6 +99,14 @@ def _as_result_record(output: Any) -> dict[str, Any] | None:
     if isinstance(output, dict):
         return output
     if not isinstance(output, str):
+        # Normalize framework message models without importing optional dependencies.
+        model_dump = getattr(output, "model_dump", None)
+        if callable(model_dump):
+            try:
+                record = model_dump()
+            except Exception:
+                return None
+            return record if isinstance(record, dict) else None
         return None
     trimmed = output.strip()
     if not trimmed.startswith("{") and not trimmed.startswith("["):
