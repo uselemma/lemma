@@ -17,9 +17,9 @@ meta:
 
 </Update>
 
-<Update label="October 27, 2026" tags={["Bug fixes", "[Monitors]"]} rss={{ title: "A second click does not create another monitor" }}>
+<Update label="October 27, 2026" tags={["Bug fixes", "[Dashboard]"]} rss={{ title: "A second click does not create another monitor" }}>
 
-  ## Monitors
+  ## Dashboard
 
   - **Create:** A second click or Enter in **New monitor** does not create another [monitor](/platform/monitors). The button stays busy, and you can’t close the dialog until the request finishes.
   - **Failed create:** If creation fails, the dialog stays open so you can submit again.
@@ -39,9 +39,9 @@ meta:
 
 </Update>
 
-<Update label="October 21, 2026" tags={["Bug fixes", "[Monitors]"]} rss={{ title: "A behavior monitor lists its own issues" }}>
+<Update label="October 21, 2026" tags={["Bug fixes", "[Dashboard]"]} rss={{ title: "A behavior monitor lists its own issues" }}>
 
-  ## Monitors
+  ## Dashboard
 
   - **Issues tab:** **Issues** on a [behavior monitor](/platform/monitors) lists issues that monitor owns. Lemma groups that monitor’s occurrences only with those issues, and adds an issue when none of them fits. `list_monitor_issues` returns the same issues.
 
@@ -64,32 +64,15 @@ meta:
 
   ## Billing
 
-  - **Project setup:** You can create a project and call the API and MCP with no trial or subscription. Sending traces still returns HTTP 402, as on October 15.
+  - **Project setup:** You can create a project and call the API and MCP with no trial or subscription. Sending traces returns HTTP 402 until the organization is trialing, active, past due, or on an Enterprise plan.
 
 </Update>
 
-<Update label="October 15, 2026" tags={["New releases", "Improvements", "Bug fixes", "[Monitors]", "[Issues]", "[Slack]", "[Billing]"]} rss={{ title: "Monitor groups are shared for the project" }}>
+<Update label="October 15, 2026" tags={["New releases", "[Dashboard]"]} rss={{ title: "Monitor groups are shared for the project" }}>
 
-  ## Monitors
+  ## Dashboard
 
-  - **Signal and behavior:** [Monitors](/platform/monitors) records matching traces for one agent as they arrive. A signal monitor counts an event. A behavior monitor also writes an issue when that behavior is wrong. You can’t change the agent or the kind later.
-  - **Chart:** The chart draws one point per day. **Percent** is the share of that day’s traces that fit. **Count** is how many traces fit that day. You can view the same chart by week or by month. A behavior monitor also shows how many of those traces have an occurrence.
-  - **Correct a trace:** **Doesn’t fit** means this trace should not count. **Add to monitor** means it should, including a trace the monitor has not judged. **Recalibrate** teaches later traces from that feedback. Lemma also recalibrates every night.
-  - **Board:** The project stores one board. You and every other member see the same groups and card order after a reload.
-
-  ## Issues
-
-  - **Open the trace:** Clicking an occurrence on an [issue](/platform/issues#open-an-occurrence) opens that trace.
-
-  ## Slack
-
-  - **Chart alerts:** An issue alert that includes a chart waits until Slack has the image, then posts. If Slack still rejects the chart, the alert posts once without it.
-  - **Repeat alerts:** You don’t get a second Slack alert for the same issue in that window when fewer of its priority signals fire.
-
-  ## Billing
-
-  - **Trace ingest:** Sending traces returns HTTP 402 until the organization is trialing, active, past due, or on an Enterprise plan.
-  - **Enterprise trial:** An Enterprise organization with no Stripe subscription shows **Enterprise trial** on the billing page, and there is no subscription to cancel.
+  - **Monitor board:** [Monitors](/platform/monitors) stores one board per project. You and every other member see the same groups and card order after a reload.
 
 </Update>
 
