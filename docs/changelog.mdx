@@ -9,6 +9,52 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="October 28, 2026" tags={["Bug fixes", "[Issues]"]} rss={{ title: "A monitor issue name opens that issue" }}>
+
+  ## Issues
+
+  - **Issue links:** On a [monitor](/platform/monitors) **Issues** tab, the issue name, a row click, or Enter opens that issue, while **Mark incorrect** still opens the dismiss dialog and the checkbox still selects the row. On **Feedback**, a dismissed issue’s name opens that issue, and a trace correction stays text.
+
+</Update>
+
+<Update label="October 27, 2026" tags={["Bug fixes", "[Dashboard]"]} rss={{ title: "A second click does not create another monitor" }}>
+
+  ## Dashboard
+
+  - **Create:** A second click or Enter in **New monitor** does not create another [monitor](/platform/monitors). The button stays busy, and you can’t close the dialog until the request finishes.
+  - **Failed create:** If creation fails, the dialog stays open so you can submit again.
+
+</Update>
+
+<Update label="October 26, 2026" tags={["Bug fixes", "[Dashboard]"]} rss={{ title: "Dashboard keeps issue history" }}>
+
+  ## Dashboard
+
+  - **Issue history:** **Dashboard** keeps **Issues identified**, **Issues resolved**, and **Resolved vs. dismissed** for 90 days.
+
+</Update>
+
+<Update label="October 21, 2026" tags={["Bug fixes", "[Issues]"]} rss={{ title: "A behavior monitor lists its own issues" }}>
+
+  ## Issues
+
+  - **Issues tab:** **Issues** on a [behavior monitor](/platform/monitors) lists issues that monitor owns. Lemma groups that monitor’s occurrences only with those issues, and adds an issue when none of them fits. `list_monitor_issues` returns the same issues.
+
+</Update>
+
+<Update label="October 20, 2026" tags={["New releases", "Improvements", "[Issues]", "[Slack]"]} rss={{ title: "Open an issue conversation, and read Slack deliveries" }}>
+
+  ## Issues
+
+  - **See conversation:** **See conversation** opens the trace. Clicking the row doesn’t. [Open an occurrence](/platform/issues#open-an-occurrence) describes what the trace shows.
+
+  ## Slack
+
+  - **Delivery log:** `GET /projects/{project_id}/slack-deliveries` lists each attempted [Slack](/connections/slack) send, newest first. That covers issue alerts, Issue Briefs, and instrumentation digests, including failed and partial sends. The MCP tool is `list_slack_deliveries`. Each row has no message text. Lemma keeps them for 14 days.
+  - **One delivery:** `GET /projects/{project_id}/slack-deliveries/{delivery_id}` returns every attempted message. The MCP tool is `get_slack_delivery`.
+
+</Update>
+
 <Update label="October 15, 2026" tags={["New releases", "[Dashboard]"]} rss={{ title: "Monitor groups are shared for the project" }}>
 
   ## Dashboard
