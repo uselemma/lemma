@@ -159,6 +159,20 @@ def _message_content(message: Any) -> Any:
     return message
 
 
+def _tool_message_error(output: Any) -> str | None:
+    """Return the content of a ``ToolMessage`` with ``status="error"``.
+
+    Tools with ``handle_tool_error`` or ``handle_validation_error`` catch the
+    exception and return such a message through ``on_tool_end``, so
+    ``on_tool_error`` never fires for them.
+    """
+    if _get(output, "type") != "tool" or _get(output, "status") != "error":
+        return None
+    content = _message_content(output)
+    text = _text_from_content_blocks(content)
+    return describe_error(text if text is not None else content)
+
+
 def _role_from_class_name(name: str) -> str | None:
     lower = name.lower()
     if "human" in lower or lower == "user":
@@ -1318,7 +1332,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         if run is None:
             return
         ended_at = _now()
-        soft_error = tool_result_error(output)
+        soft_error = _tool_message_error(output) or tool_result_error(output)
         if soft_error is not None:
             end_run_handle(
                 run,
