@@ -446,6 +446,14 @@ export function openAIAgents(
     }
 
     handle.end({
+      // The Agents SDK fills spanData.input after onSpanStart (tool arguments,
+      // generation messages), so re-read it here. Skip an absent input so it
+      // can't erase one captured at start.
+      ...(input !== undefined ? { input } : {}),
+      ...(isGenerationType(data.type) && Array.isArray(input)
+        ? { llmInputMessages: input as unknown[] }
+        : {}),
+      attributes: openAIAttributes(span),
       // Failures must not invent an output — record error instead.
       output: parsedOutput,
       error: errorMessage,
