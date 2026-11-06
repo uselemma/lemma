@@ -623,6 +623,79 @@ def test_langchain_records_payload_encoded_tool_failure_as_error():
     assert "output" not in span
 
 
+def test_langchain_records_error_status_tool_message_as_error_without_output():
+    from langchain_core.messages import ToolMessage
+
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+    )
+
+    handler.on_chain_start({"name": "support-agent"}, "hello", run_id="chain-1")
+    handler.on_tool_start(
+        {"name": "lookup_order"},
+        {"order_id": "order-1"},
+        run_id="tool-1",
+        parent_run_id="chain-1",
+    )
+    handler.on_tool_end(
+        ToolMessage(
+            content="Order service unavailable",
+            tool_call_id="call-1",
+            name="lookup_order",
+            status="error",
+        ),
+        run_id="tool-1",
+    )
+    handler.on_chain_end({"answer": "Try again later."}, run_id="chain-1")
+
+    trace = calls[0]["body"]["trace"]
+    assert trace.get("status") is None
+    assert trace["output"] == "Try again later."
+    span = trace["spans"][0]
+    assert span["name"] == "lookup_order"
+    assert span["status"] == "ERROR"
+    assert span["error"] == "Order service unavailable"
+    assert "output" not in span
+
+
+def test_langchain_records_success_status_tool_message_as_output():
+    from langchain_core.messages import ToolMessage
+
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+    )
+
+    handler.on_chain_start({"name": "support-agent"}, "hello", run_id="chain-1")
+    handler.on_tool_start(
+        {"name": "lookup_order"},
+        {"order_id": "order-1"},
+        run_id="tool-1",
+        parent_run_id="chain-1",
+    )
+    handler.on_tool_end(
+        ToolMessage(
+            content="Order shipped",
+            tool_call_id="call-1",
+            name="lookup_order",
+            status="success",
+        ),
+        run_id="tool-1",
+    )
+    handler.on_chain_end({"answer": "It shipped."}, run_id="chain-1")
+
+    span = calls[0]["body"]["trace"]["spans"][0]
+    assert span["name"] == "lookup_order"
+    assert span.get("status") is None
+    assert span.get("error") is None
+    assert "Order shipped" in span["output"]
+
+
 def test_records_inputs_outputs_and_errors():
     calls = []
     handler = langchain(
