@@ -563,7 +563,17 @@ class LemmaOpenAIAgentsProcessor:
 
         # Prefer the original string timestamp so payload ISO matches the SDK.
         ended_at_value = raw_ended_at if raw_ended_at is not None else span_ended_at
+        # The Agents SDK fills span_data.input after on_span_start (tool
+        # arguments, generation messages), so re-read it here. Skip an absent
+        # input so it can't erase one captured at start.
+        late_input: dict[str, Any] = {}
+        if input_value is not None:
+            late_input["input"] = input_value
+            if _is_generation_type(span_type) and isinstance(input_value, list):
+                late_input["llm_input_messages"] = input_value
         handle.end(
+            **late_input,
+            attributes=_attributes(span, data),
             # Failures must not invent an output — record error instead.
             output=output,
             error=error_message,

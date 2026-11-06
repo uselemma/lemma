@@ -506,6 +506,91 @@ def test_openai_agents_records_inputs_and_outputs():
     assert gen["output"] == "secret answer"
 
 
+def test_openai_agents_records_input_set_after_span_start():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+
+    # The Agents SDK hands the processor one live span and fills input/output
+    # on its span_data after on_span_start has already run.
+    generation = FakeSpan(
+        trace_id="trace_late_input",
+        span_id="span_generation_late",
+        started_at="2026-06-29T10:00:00Z",
+        span_data={"type": "generation"},
+    )
+    tool = FakeSpan(
+        trace_id="trace_late_input",
+        span_id="span_tool_late",
+        parent_id="span_generation_late",
+        started_at="2026-06-29T10:00:00.050Z",
+        span_data={"type": "function", "name": "repo_push", "input": "", "output": ""},
+    )
+
+    processor.on_trace_start(FakeTrace(trace_id="trace_late_input", name="scan-agent"))
+    processor.on_span_start(generation)
+    generation.span_data["input"] = [{"role": "user", "content": "push the repo"}]
+    processor.on_span_start(tool)
+    tool.span_data["input"] = json.dumps({"repo": "acme/app"})
+    tool.span_data["output"] = json.dumps({"status": "committed"})
+    tool.ended_at = "2026-06-29T10:00:00.090Z"
+    processor.on_span_end(tool)
+    generation.span_data["output"] = [{"role": "assistant", "content": "Pushed."}]
+    generation.ended_at = "2026-06-29T10:00:00.125Z"
+    processor.on_span_end(generation)
+    processor.on_trace_end(FakeTrace(trace_id="trace_late_input", name="scan-agent"))
+
+    trace = calls[0]["trace"]
+    gen = next(span for span in trace["spans"] if span["id"] == "span_generation_late")
+    assert gen["input"] == [{"role": "user", "content": "push the repo"}]
+    assert gen["attributes"]["llm.input_messages.0.message.role"] == "user"
+    assert gen["attributes"]["llm.input_messages.0.message.content"] == "push the repo"
+    assert json.loads(gen["attributes"]["openai.agents.span_data"])["input"] == [
+        {"role": "user", "content": "push the repo"}
+    ]
+    tool_span = next(span for span in trace["spans"] if span["id"] == "span_tool_late")
+    assert tool_span["input"] == {"repo": "acme/app"}
+    assert tool_span["output"] == {"status": "committed"}
+    span_data = json.loads(tool_span["attributes"]["openai.agents.span_data"])
+    assert span_data["input"] == json.dumps({"repo": "acme/app"})
+    assert trace["input"] == "push the repo"
+
+
+def test_openai_agents_keeps_start_input_when_end_has_none():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+
+    processor.on_trace_start(FakeTrace(trace_id="trace_kept", name="agent"))
+    processor.on_span_start(
+        FakeSpan(
+            trace_id="trace_kept",
+            span_id="span_custom_kept",
+            span_data={"type": "custom", "name": "step", "input": "start input"},
+        )
+    )
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_kept",
+            span_id="span_custom_kept",
+            span_data={"type": "custom", "name": "step"},
+        )
+    )
+    processor.on_trace_end(FakeTrace(trace_id="trace_kept", name="agent"))
+
+    assert calls[0]["trace"]["spans"][0]["input"] == "start input"
+
+
 def test_openai_agents_root_hard_error_not_soft_tool_alone():
     calls = []
 

@@ -139,6 +139,118 @@ describe("openAIAgents", () => {
     ).toBe(40);
   });
 
+  it("records span input the Agents SDK sets after the span starts", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    // The Agents SDK hands the processor one live spanData object and fills
+    // input/output on it after onSpanStart has already run.
+    const generation = {
+      traceId: "trace_late_input",
+      spanId: "span_generation_late",
+      spanData: { type: "generation" } as Record<string, unknown> & {
+        type: string;
+      },
+      startedAt: "2026-06-29T10:00:00.000Z",
+      endedAt: null as string | null,
+    };
+    const tool = {
+      traceId: "trace_late_input",
+      spanId: "span_tool_late",
+      parentId: "span_generation_late",
+      spanData: {
+        type: "function",
+        name: "repo_push",
+        input: "",
+        output: "",
+      } as Record<string, unknown> & { type: string },
+      startedAt: "2026-06-29T10:00:00.050Z",
+      endedAt: null as string | null,
+    };
+
+    await processor.onTraceStart({
+      traceId: "trace_late_input",
+      name: "scan-agent",
+    });
+    await processor.onSpanStart(generation);
+    generation.spanData.input = [{ role: "user", content: "push the repo" }];
+    await processor.onSpanStart(tool);
+    tool.spanData.input = JSON.stringify({ repo: "acme/app" });
+    tool.spanData.output = JSON.stringify({ status: "committed" });
+    tool.endedAt = "2026-06-29T10:00:00.090Z";
+    await processor.onSpanEnd(tool);
+    generation.spanData.output = [{ role: "assistant", content: "Pushed." }];
+    generation.endedAt = "2026-06-29T10:00:00.125Z";
+    await processor.onSpanEnd(generation);
+    await processor.onTraceEnd({
+      traceId: "trace_late_input",
+      name: "scan-agent",
+    });
+    await processor.forceFlush();
+
+    const body = jsonBody(fetchMock.mock.calls[0]);
+    const [generationSpan, toolSpan] = body.trace.spans;
+    expect(generationSpan).toMatchObject({
+      id: "span_generation_late",
+      input: [{ role: "user", content: "push the repo" }],
+      attributes: {
+        "llm.input_messages.0.message.role": "user",
+        "llm.input_messages.0.message.content": "push the repo",
+      },
+    });
+    expect(
+      JSON.parse(generationSpan.attributes["openai.agents.span_data"]),
+    ).toMatchObject({ input: [{ role: "user", content: "push the repo" }] });
+    expect(toolSpan).toMatchObject({
+      id: "span_tool_late",
+      input: { repo: "acme/app" },
+      output: { status: "committed" },
+    });
+    expect(
+      JSON.parse(toolSpan.attributes["openai.agents.span_data"]),
+    ).toMatchObject({
+      input: JSON.stringify({ repo: "acme/app" }),
+      output: JSON.stringify({ status: "committed" }),
+    });
+    expect(body.trace.input).toBe("push the repo");
+  });
+
+  it.each([
+    ["missing", {}],
+    ["null", { input: null }],
+  ])(
+    "keeps a start-time input when the span ends with %s input",
+    async (_label, endInput) => {
+      const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+      const processor = openAIAgents({
+        apiKey: "key",
+        projectId: "10000000-0000-0000-0000-000000000001",
+        fetch: fetchMock as typeof fetch,
+      });
+
+      await processor.onTraceStart({ traceId: "trace_kept", name: "agent" });
+      await processor.onSpanStart({
+        traceId: "trace_kept",
+        spanId: "span_custom_kept",
+        spanData: { type: "custom", name: "step", input: "start input" },
+      });
+      await processor.onSpanEnd({
+        traceId: "trace_kept",
+        spanId: "span_custom_kept",
+        spanData: { type: "custom", name: "step", ...endInput },
+      });
+      await processor.onTraceEnd({ traceId: "trace_kept", name: "agent" });
+      await processor.forceFlush();
+
+      const body = jsonBody(fetchMock.mock.calls[0]);
+      expect(body.trace.spans[0].input).toBe("start input");
+    },
+  );
+
   it("extracts usage from spanData.usage and sets openai-agents provenance", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const processor = openAIAgents({
