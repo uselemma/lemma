@@ -219,31 +219,37 @@ describe("openAIAgents", () => {
     expect(body.trace.input).toBe("push the repo");
   });
 
-  it("keeps a start-time input when the span ends without one", async () => {
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
-    const processor = openAIAgents({
-      apiKey: "key",
-      projectId: "10000000-0000-0000-0000-000000000001",
-      fetch: fetchMock as typeof fetch,
-    });
+  it.each([
+    ["missing", {}],
+    ["null", { input: null }],
+  ])(
+    "keeps a start-time input when the span ends with %s input",
+    async (_label, endInput) => {
+      const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+      const processor = openAIAgents({
+        apiKey: "key",
+        projectId: "10000000-0000-0000-0000-000000000001",
+        fetch: fetchMock as typeof fetch,
+      });
 
-    await processor.onTraceStart({ traceId: "trace_kept", name: "agent" });
-    await processor.onSpanStart({
-      traceId: "trace_kept",
-      spanId: "span_custom_kept",
-      spanData: { type: "custom", name: "step", input: "start input" },
-    });
-    await processor.onSpanEnd({
-      traceId: "trace_kept",
-      spanId: "span_custom_kept",
-      spanData: { type: "custom", name: "step" },
-    });
-    await processor.onTraceEnd({ traceId: "trace_kept", name: "agent" });
-    await processor.forceFlush();
+      await processor.onTraceStart({ traceId: "trace_kept", name: "agent" });
+      await processor.onSpanStart({
+        traceId: "trace_kept",
+        spanId: "span_custom_kept",
+        spanData: { type: "custom", name: "step", input: "start input" },
+      });
+      await processor.onSpanEnd({
+        traceId: "trace_kept",
+        spanId: "span_custom_kept",
+        spanData: { type: "custom", name: "step", ...endInput },
+      });
+      await processor.onTraceEnd({ traceId: "trace_kept", name: "agent" });
+      await processor.forceFlush();
 
-    const body = jsonBody(fetchMock.mock.calls[0]);
-    expect(body.trace.spans[0].input).toBe("start input");
-  });
+      const body = jsonBody(fetchMock.mock.calls[0]);
+      expect(body.trace.spans[0].input).toBe("start input");
+    },
+  );
 
   it("extracts usage from spanData.usage and sets openai-agents provenance", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
