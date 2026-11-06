@@ -9,6 +9,23 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="November 5, 2026" tags={["Improvements", "Bug fixes", "[Traces]", "[API keys]"]} rss={{ title: "Trace search keeps what you type, and API key alerts state the problem" }}>
+
+  ## Traces
+
+  - **Search:** The [traces](/platform/traces) search keeps every character you type, so the string you enter is the string you search.
+
+  ## API keys
+
+  - **Create:** **Create New API Key** scrolls to **Custom**, and the dialog stays inside the browser window.
+  - **Counts:** The alert title counts keys that have expired, are about to expire, or have no expiration.
+  - **Rotate:** Rotate or revoke those keys in the key list.
+  - **About to expire:** A key about to expire stops working within 14 days.
+  - **Color:** The alert is red when a key has expired or has no expiration. It is yellow only when every listed key is about to expire.
+  - **Lifetime:** **Add an API key lifetime** is information. It isn’t an alert.
+
+</Update>
+
 <Update label="November 2, 2026" tags={["Improvements", "[Dashboard]"]} rss={{ title: "New monitor offers five signal templates" }}>
 
   ## Dashboard
