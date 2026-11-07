@@ -281,6 +281,112 @@ describe("cross-process turn journal", () => {
     );
   });
 
+  it("resends the same trace when turn.end() is retried after a failure", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("nope", { status: 503 }))
+      .mockResolvedValue(new Response("{}", { status: 201 }));
+    const host = hostClient(fetchMock);
+    const turn = startTurn(host, { name: "agent-turn" });
+    turn.recordTool({ name: "lookup_order", input: { orderId: "1843" } });
+
+    await expect(turn.end({ output: "ok" })).rejects.toThrow(
+      "failed to ingest trace (503): nope",
+    );
+    await turn.end({ output: "ok" });
+    // Delivered: a further end() is a no-op.
+    await turn.end({ output: "ok" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const first = jsonBody(fetchMock.mock.calls[0]);
+    const retry = jsonBody(fetchMock.mock.calls[1]);
+    expect(retry.trace.id).toBe(first.trace.id);
+    expect(retry.trace.started_at).toBe(first.trace.started_at);
+    expect(retry.trace.ended_at).toBe(first.trace.ended_at);
+    expect(retry.trace.spans).toEqual(first.trace.spans);
+    expect(turn.isEnded).toBe(true);
+  });
+
+  it("keeps the first attempt's start and end times on a bare retry", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("nope", { status: 503 }))
+      .mockResolvedValue(new Response("{}", { status: 201 }));
+    const turn = startTurn(hostClient(fetchMock), { name: "agent-turn" });
+
+    await expect(
+      turn.end({
+        startedAt: new Date("2020-01-01T00:00:00.000Z"),
+        endedAt: new Date("2020-01-01T00:00:05.000Z"),
+      }),
+    ).rejects.toThrow("503");
+    expect(turn.isEnded).toBe(false);
+    await turn.end();
+
+    const retry = jsonBody(fetchMock.mock.calls[1]);
+    expect(retry.trace.started_at).toBe("2020-01-01T00:00:00.000Z");
+    expect(retry.trace.ended_at).toBe("2020-01-01T00:00:05.000Z");
+    expect(retry.trace.duration_ms).toBe(5000);
+  });
+
+  it("uses new times passed to a retry", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("nope", { status: 503 }))
+      .mockResolvedValue(new Response("{}", { status: 201 }));
+    const turn = startTurn(hostClient(fetchMock), { name: "agent-turn" });
+
+    await expect(
+      turn.end({ endedAt: new Date("2020-01-01T00:00:05.000Z") }),
+    ).rejects.toThrow("503");
+    await turn.end({
+      startedAt: new Date("2020-01-01T00:00:02.000Z"),
+      endedAt: new Date("2020-01-01T00:00:09.000Z"),
+    });
+
+    const retry = jsonBody(fetchMock.mock.calls[1]);
+    expect(retry.trace.started_at).toBe("2020-01-01T00:00:02.000Z");
+    expect(retry.trace.ended_at).toBe("2020-01-01T00:00:09.000Z");
+    expect(retry.trace.duration_ms).toBe(7000);
+  });
+
+  it("rejects every end() made during a failed send, then retries once", async () => {
+    let failSend!: () => void;
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            failSend = () => resolve(new Response("nope", { status: 503 }));
+          }),
+      )
+      .mockResolvedValue(new Response("{}", { status: 201 }));
+    const turn = startTurn(hostClient(fetchMock), { name: "agent-turn" });
+
+    const first = turn.end({ output: "ok" });
+    const second = turn.end({ output: "ok" });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    failSend();
+
+    await expect(first).rejects.toThrow("503");
+    await expect(second).rejects.toThrow("503");
+    await turn.end();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("resends after a network error on turn.end()", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValue(new Response("{}", { status: 201 }));
+    const turn = startTurn(hostClient(fetchMock), { name: "agent-turn" });
+
+    await expect(turn.end({ output: "ok" })).rejects.toThrow("fetch failed");
+    await turn.end({ output: "ok" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("parses a versioned context token and rejects invalid ones", () => {
     const token = parseTurnContextToken({
       version: 1,

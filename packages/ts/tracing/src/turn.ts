@@ -421,6 +421,42 @@ export class AttachedTurn {
 }
 
 export class TurnHandle extends TraceHandle {
+  private delivered = false;
+  private sending?: Promise<void>;
+  private sentStartedAt?: Date;
+  private sentEndedAt?: Date;
+
+  // A turn's end() is strict and can be retried: once a send completes without
+  // throwing, end() does nothing, and a call made during a send waits for that
+  // send. If the send throws, the next end() sends the complete trace again,
+  // which is safe because Lemma skips span ids it already stored.
+  override async end(): Promise<void>;
+  override async end(output: unknown): Promise<void>;
+  override async end(options: TraceEndOptions): Promise<void>;
+  override async end(outputOrOptions?: unknown | TraceEndOptions) {
+    if (this.delivered) return;
+    if (this.sending) return this.sending;
+    const times = this.applyEndArguments(outputOrOptions, arguments.length > 0);
+    // A retry keeps the first attempt's times unless it passes new ones.
+    const startedAt = times.startedAt ?? this.sentStartedAt ?? this.startedAt;
+    const endedAt = times.endedAt ?? this.sentEndedAt ?? new Date();
+    this.sentStartedAt = startedAt;
+    this.sentEndedAt = endedAt;
+    const send = this.sendFn(this, startedAt, endedAt);
+    this.sending = send;
+    try {
+      await send;
+      this.delivered = true;
+    } finally {
+      this.sending = undefined;
+    }
+  }
+
+  /** Whether a send from `end()` has succeeded; stays false after a failed send, so `end()` can retry. */
+  override get isEnded() {
+    return this.delivered;
+  }
+
   export(options: { parentSpanId?: string | null } = {}): TurnContextToken {
     const identity = this.identity();
     return compact({

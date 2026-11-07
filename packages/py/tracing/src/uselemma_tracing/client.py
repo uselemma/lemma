@@ -998,15 +998,25 @@ class TraceHandle(TraceContext):
         if self._ended:
             return
         self._ended = True
+        requested_end = self._apply_end_arguments(output, ended_at, duration_ms)
+        self._lemma.ingest(
+            self,
+            started_at=self.started_at,
+            ended_at=requested_end or _datetime_or_now(None),
+        )
+
+    def _apply_end_arguments(
+        self,
+        output: Any,
+        ended_at: datetime | str | None,
+        duration_ms: int | None,
+    ) -> datetime | None:
+        """Record end()'s output and duration; return the end time it passed, if any."""
         if output is not None:
             self.output(output)
         if duration_ms is not None:
             self.duration_ms = duration_ms
-        self._lemma.ingest(
-            self,
-            started_at=self.started_at,
-            ended_at=_datetime_or_now(ended_at),
-        )
+        return None if ended_at is None else _datetime_or_now(ended_at)
 
 
 class Lemma:
