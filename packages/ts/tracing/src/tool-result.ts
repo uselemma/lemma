@@ -18,6 +18,7 @@ export function toolResultError(output: unknown): string | null {
     if (message) return message;
     const encoded = encodedPayloadError(record);
     if (encoded) return encoded;
+    if (record.type === "tool") return "Tool returned an error result";
     try {
       return JSON.stringify(record);
     } catch {
@@ -54,9 +55,11 @@ function encodedPayloadError(record: Record<string, unknown>): string | null {
 }
 
 function contentText(content: unknown): string | null {
+  if (typeof content === "string") return nonEmptyString(content);
   if (!Array.isArray(content)) return null;
   const text = content
     .map((part) => {
+      if (typeof part === "string") return part;
       if (!part || typeof part !== "object") return "";
       const textValue = (part as { text?: unknown }).text;
       return typeof textValue === "string" ? textValue : "";

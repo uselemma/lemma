@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import { ToolMessage } from "@langchain/core/messages";
 import { jsonBody } from "../test-helpers";
 import { langChain, langGraph } from "./langchain";
 
-function handler(fetchMock: ReturnType<typeof vi.fn>, options: Record<string, unknown> = {}) {
+function handler(
+  fetchMock: ReturnType<typeof vi.fn>,
+  options: Record<string, unknown> = {},
+) {
   return langChain({
     apiKey: "key",
     projectId: "10000000-0000-0000-0000-000000000001",
@@ -12,6 +16,36 @@ function handler(fetchMock: ReturnType<typeof vi.fn>, options: Record<string, un
 }
 
 describe("langChain", () => {
+  it("records a handled tool failure without failing a recovered agent", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const h = handler(fetchMock);
+    h.handleChainStart({ name: "agent" }, { input: "Find my order" }, "root");
+    h.handleToolStart({ name: "lookup_order" }, "order-1", "tool-1", "root");
+    await h.handleToolEnd(
+      new ToolMessage({
+        content: "Order service unavailable",
+        status: "error",
+        tool_call_id: "call-1",
+      }),
+      "tool-1",
+    );
+    await h.handleChainEnd({ output: "Please try again later." }, "root");
+    await h.flush();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const trace = jsonBody(fetchMock.mock.calls[0]).trace;
+    const span = trace.spans.find(
+      (span: { type: string }) => span.type === "tool",
+    );
+    expect(span).toMatchObject({
+      status: "ERROR",
+      error: "Order service unavailable",
+    });
+    expect(span).not.toHaveProperty("output");
+    expect(trace.status).not.toBe("ERROR");
+    expect(trace.output).toBe("Please try again later.");
+  });
+
   it("records a LangChain run with generation, retriever, and tool children", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
     const h = handler(fetchMock);
