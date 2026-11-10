@@ -18,7 +18,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import RunnableLambda
-from langchain_core.tools import tool
+from langchain_core.tools import ToolException, tool
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langsmith.run_helpers import tracing_context
 from pydantic import PrivateAttr
@@ -153,6 +153,92 @@ def test_create_agent_ainvoke_is_one_root_with_tool_and_generation():
         if span["type"] == "tool"
     }
     assert "ping" in tool_names
+
+
+def test_handled_tool_error_marks_tool_span_errored():
+    """lemma#120: handle_tool_error returns the failure through on_tool_end."""
+    calls = []
+    handler = _handler(calls)
+
+    @tool
+    def lookup_order(order_id: str) -> str:
+        """Look up an order."""
+        raise ToolException("Order service unavailable")
+
+    lookup_order.handle_tool_error = True
+    result = lookup_order.invoke(
+        {
+            "type": "tool_call",
+            "name": "lookup_order",
+            "args": {"order_id": "order-1"},
+            "id": "call-1",
+        },
+        {"callbacks": [handler]},
+    )
+    handler.flush()
+
+    assert result.status == "error"
+    span = next(
+        span for span in calls[0]["body"]["trace"]["spans"] if span["type"] == "tool"
+    )
+    assert span["status"] == "ERROR"
+    assert span["error"] == "Order service unavailable"
+    assert "output" not in span
+
+
+def test_create_agent_recovers_from_handled_tool_error():
+    calls = []
+    handler = _handler(calls, agent_name="support-agent")
+
+    @tool
+    def lookup_order(order_id: str) -> str:
+        """Look up an order."""
+        raise ToolException("Order service unavailable")
+
+    lookup_order.handle_tool_error = True
+    model = ScriptedChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "lookup_order",
+                        "args": {"order_id": "order-1"},
+                        "id": "call_1",
+                    }
+                ],
+            ),
+            AIMessage(content="The order service is down. Try again later."),
+        ]
+    )
+    agent = create_agent(
+        model=model,
+        tools=[lookup_order],
+        name="support-agent",
+    )
+
+    result = asyncio.run(
+        agent.ainvoke(
+            {"messages": [{"role": "user", "content": "where is order-1?"}]},
+            {"callbacks": [handler]},
+        )
+    )
+    handler.flush()
+
+    assert result["messages"][-1].content == (
+        "The order service is down. Try again later."
+    )
+    assert len(calls) == 1
+    trace = calls[0]["body"]["trace"]
+    assert trace.get("status") is None
+    tool_span = next(
+        span
+        for span in trace["spans"]
+        if span["type"] == "tool" and span.get("name") == "lookup_order"
+    )
+    assert tool_span["status"] == "ERROR"
+    assert tool_span["error"] == "Order service unavailable"
+    assert "output" not in tool_span
 
 
 class _PassthroughMiddleware(AgentMiddleware):
