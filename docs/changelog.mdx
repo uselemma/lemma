@@ -9,6 +9,42 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="November 9, 2026" tags={["Improvements", "Bug fixes", "[Issues]", "[Slack]", "[Dashboard]", "[API keys]", "[Artifacts]"]} rss={{ title: "Issues open on Open, and Slack pages yellow once and red once" }}>
+
+  ## Issues
+
+  - **Open:** The [issues](/platform/issues) list opens on **Open**. A `status` in the URL still selects **In review**, **Resolved**, or **Dismissed**.
+  - **Sort:** The list sorts by **Recently active**. **Priority** is gone, and an old `sort=signals` link uses **Recently active**.
+  - **Needs review:** **Needs review** and the urgent bell are gone. An old `review` link is ignored.
+  - **Signals:** The **Signals** column is gone. An old `sig` link is ignored.
+  - **Why it matters:** **Why it matters** keeps the daily chart. The traffic-share number and the **Impact**, **Spike**, and **Persistence** boxes are gone.
+  - **Confirmation:** `list_issues` and `get_issue` omit `confirmation`, `confirmed_at`, and `confirmation_writeup`.
+  - **Severity:** The same reads omit `severity`, `severity_verdict`, and `severity_rationale`.
+  - **Lanes:** The same reads omit `needs_review`, `notifiable`, `metric_flags`, and `raw_lane_scores`. MCP returns the same object.
+
+  ## Slack
+
+  - **Two colors:** [Slack](/connections/slack) sends at most one yellow alert and one red alert for an open issue. Red can be the first alert. It doesn’t send the same color again.
+  - **Skipped:** A resolved or dismissed issue doesn’t page.
+  - **First days:** Slack waits until judged traces cover at least 3 of the last 7 UTC days.
+  - **Message:** The alert shows severity, impact, and how many conversations in the last 7 days, plus a **Latest example**. It doesn’t include a confirmation writeup.
+
+  ## Dashboard
+
+  - **Backfill:** While a [monitor](/platform/monitors) is **Judging retained traces**, its overview and traces tab show traces already judged, with the rate, chart, and list.
+  - **Monitor tags:** In the trace drawer, a monitor tag’s name opens that monitor and closes the drawer. A counted tag offers **Looks incorrect**. A tag you added offers **Remove added monitor**.
+
+  ## API keys
+
+  - **Project Developer:** Project **Developer** says **To add new API keys, go to organization settings.** The button opens organization **Developer**.
+  - **MCP:** **Create New API Key** says **Connect MCP with an admin key so it can resolve and dismiss issues.** **Read** can’t resolve, dismiss, or change them. A new key still starts on **Ingest**.
+
+  ## Artifacts
+
+  - **Diagram:** On [Artifacts](/platform/artifacts), switching agents replaces the decision-flow diagram. The previous agent’s graph doesn’t stay on screen.
+
+</Update>
+
 <Update label="November 5, 2026" tags={["Improvements", "Bug fixes", "[Traces]", "[API keys]"]} rss={{ title: "Trace search keeps what you type, and API key alerts state the problem" }}>
 
   ## Traces
