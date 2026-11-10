@@ -1,8 +1,9 @@
 # Operation examples
 
-Each example is a valid input for its tool as registered. Replace the
-placeholder ids and the example window. Read only the section you need. The
-live tool schemas stay authoritative for every optional field, and
+Each block names an operation and gives a valid input for it as registered. Send
+`input` as the tool arguments (MCP) or as the request (REST). Replace the
+placeholder ids and the example window. Read only the section you need. The live
+tool schemas stay authoritative for every optional field, and
 `lemma://tool-selection-guide` states each operation's effects and retry rule.
 
 Windows are half-open: `start_inclusive` is in the window and `end_exclusive`
@@ -18,12 +19,15 @@ Discover the matching set when ids are not known. Follow `sections.issues.next_c
 
 ```json
 {
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "response_version": 2,
-  "status": "open",
-  "agent_name": "support",
-  "query": "refund",
-  "limit": 20
+  "operation_id": "list_issues",
+  "input": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "response_version": 2,
+    "status": "open",
+    "agent_name": "support",
+    "query": "refund",
+    "limit": 20
+  }
 }
 ```
 
@@ -33,15 +37,18 @@ Read known ids with the projections you need. Follow each issue's `next_page` fo
 
 ```json
 {
-  "issue_ids": [
-    "22222222-2222-4222-8222-222222222222"
-  ],
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "include": [
-    "state",
-    "evidence",
-    "fixes"
-  ]
+  "operation_id": "read_issues",
+  "input": {
+    "issue_ids": [
+      "22222222-2222-4222-8222-222222222222"
+    ],
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "include": [
+      "state",
+      "evidence",
+      "fixes"
+    ]
+  }
 }
 ```
 
@@ -51,19 +58,22 @@ Dismiss, resolve, reopen, or start review. This example resolves with a deployme
 
 ```json
 {
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "idempotency_key": "resolve-refund-fix",
-  "action": "resolve",
-  "items": [
-    {
-      "issue_id": "22222222-2222-4222-8222-222222222222",
-      "resolution_evidence": {
-        "kind": "deployment_reference",
-        "explanation": "Refund handler fix is live in the latest release.",
-        "reference": "https://github.com/acme/support-agent/pull/412"
+  "operation_id": "transition_issues",
+  "input": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "idempotency_key": "resolve-refund-fix",
+    "action": "resolve",
+    "items": [
+      {
+        "issue_id": "22222222-2222-4222-8222-222222222222",
+        "resolution_evidence": {
+          "kind": "deployment_reference",
+          "explanation": "Refund handler fix is live in the latest release.",
+          "reference": "https://github.com/acme/support-agent/pull/412"
+        }
       }
-    }
-  ]
+    ]
+  }
 }
 ```
 
@@ -73,19 +83,22 @@ Assign, pin, tag, or record a fix reference. Saving a pull request never resolve
 
 ```json
 {
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "idempotency_key": "attach-refund-fix-pr",
-  "items": [
-    {
-      "issue_id": "22222222-2222-4222-8222-222222222222",
-      "pinned": true,
-      "fix_references": [
-        {
-          "url": "https://github.com/acme/support-agent/pull/412"
-        }
-      ]
-    }
-  ]
+  "operation_id": "update_issue_metadata",
+  "input": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "idempotency_key": "attach-refund-fix-pr",
+    "items": [
+      {
+        "issue_id": "22222222-2222-4222-8222-222222222222",
+        "pinned": true,
+        "fix_references": [
+          {
+            "url": "https://github.com/acme/support-agent/pull/412"
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
 
@@ -99,11 +112,14 @@ Request only the provider sections you need. Require both `allowed` and `availab
 
 ```json
 {
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "include": [
-    "readiness",
-    "linear"
-  ]
+  "operation_id": "get_project_capabilities",
+  "input": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "include": [
+      "readiness",
+      "linear"
+    ]
+  }
 }
 ```
 
@@ -113,8 +129,11 @@ Resolve one exact ticket the user named. It never searches or changes Linear.
 
 ```json
 {
-  "issue_id": "22222222-2222-4222-8222-222222222222",
-  "ticket_reference": "ENG-123"
+  "operation_id": "preview_linear_ticket",
+  "input": {
+    "issue_id": "22222222-2222-4222-8222-222222222222",
+    "ticket_reference": "ENG-123"
+  }
 }
 ```
 
@@ -124,8 +143,11 @@ Link exactly the previewed ticket from its fresh `preview_token`.
 
 ```json
 {
-  "issue_id": "22222222-2222-4222-8222-222222222222",
-  "preview_token": "token-from-preview"
+  "operation_id": "link_linear_ticket",
+  "input": {
+    "issue_id": "22222222-2222-4222-8222-222222222222",
+    "preview_token": "token-from-preview"
+  }
 }
 ```
 
@@ -135,8 +157,11 @@ Create and link one ticket, only when the user asked for a new one.
 
 ```json
 {
-  "issue_id": "22222222-2222-4222-8222-222222222222",
-  "idempotency_key": "create-refund-ticket"
+  "operation_id": "create_linear_ticket",
+  "input": {
+    "issue_id": "22222222-2222-4222-8222-222222222222",
+    "idempotency_key": "create-refund-ticket"
+  }
 }
 ```
 
@@ -150,19 +175,22 @@ Find traces by structure, initial request text, or span content over a half-open
 
 ```json
 {
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "match": {
-    "kind": "span_content",
-    "query": "output:timeout"
-  },
-  "start_inclusive": "2026-11-01T00:00:00.000Z",
-  "end_exclusive": "2026-11-08T00:00:00.000Z",
-  "filters": {
-    "has_error": true
-  },
-  "sort": "relevance",
-  "include_total": true,
-  "limit": 20
+  "operation_id": "query_traces",
+  "input": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "match": {
+      "kind": "span_content",
+      "query": "output:timeout"
+    },
+    "start_inclusive": "2026-11-01T00:00:00.000Z",
+    "end_exclusive": "2026-11-08T00:00:00.000Z",
+    "filters": {
+      "has_error": true
+    },
+    "sort": "relevance",
+    "include_total": true,
+    "limit": 20
+  }
 }
 ```
 
@@ -172,17 +200,20 @@ Read one trace in sections. Select `span_fields` only when you need payloads.
 
 ```json
 {
-  "trace_id": "44444444-4444-4444-8444-444444444444",
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "response_version": "sections",
-  "include": [
-    "summary",
-    "spans",
-    "issues"
-  ],
-  "span_fields": [
-    "attributes"
-  ]
+  "operation_id": "get_trace",
+  "input": {
+    "trace_id": "44444444-4444-4444-8444-444444444444",
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "response_version": "sections",
+    "include": [
+      "summary",
+      "spans",
+      "issues"
+    ],
+    "span_fields": [
+      "attributes"
+    ]
+  }
 }
 ```
 
@@ -192,10 +223,13 @@ Move through a conversation. Use `scope: "neighbors"` for adjacent turns.
 
 ```json
 {
-  "trace_id": "44444444-4444-4444-8444-444444444444",
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "response_version": "page",
-  "scope": "all"
+  "operation_id": "get_trace_thread",
+  "input": {
+    "trace_id": "44444444-4444-4444-8444-444444444444",
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "response_version": "page",
+    "scope": "all"
+  }
 }
 ```
 
@@ -209,12 +243,15 @@ A windowed view with a tagged result. Narrow the window if the result is too lar
 
 ```json
 {
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "view": "window",
-  "response_version": "tagged",
-  "start_inclusive": "2026-11-01T00:00:00.000Z",
-  "end_exclusive": "2026-11-08T00:00:00.000Z",
-  "granularity": "day"
+  "operation_id": "get_project_analytics",
+  "input": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "view": "window",
+    "response_version": "tagged",
+    "start_inclusive": "2026-11-01T00:00:00.000Z",
+    "end_exclusive": "2026-11-08T00:00:00.000Z",
+    "granularity": "day"
+  }
 }
 ```
 
@@ -228,12 +265,15 @@ Discover bounded monitors; a summary needs a window.
 
 ```json
 {
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "agent_name": "support",
-  "response_version": "page",
-  "include_summary": true,
-  "start_inclusive": "2026-11-01T00:00:00.000Z",
-  "end_exclusive": "2026-11-08T00:00:00.000Z"
+  "operation_id": "list_monitors",
+  "input": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "agent_name": "support",
+    "response_version": "page",
+    "include_summary": true,
+    "start_inclusive": "2026-11-01T00:00:00.000Z",
+    "end_exclusive": "2026-11-08T00:00:00.000Z"
+  }
 }
 ```
 
@@ -243,15 +283,18 @@ Investigate one monitor. Include only the sections the question needs.
 
 ```json
 {
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "monitor_id": "33333333-3333-4333-8333-333333333333",
-  "start_inclusive": "2026-11-01T00:00:00.000Z",
-  "end_exclusive": "2026-11-08T00:00:00.000Z",
-  "include": [
-    "summary",
-    "traces",
-    "feedback"
-  ]
+  "operation_id": "get_monitor",
+  "input": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "monitor_id": "33333333-3333-4333-8333-333333333333",
+    "start_inclusive": "2026-11-01T00:00:00.000Z",
+    "end_exclusive": "2026-11-08T00:00:00.000Z",
+    "include": [
+      "summary",
+      "traces",
+      "feedback"
+    ]
+  }
 }
 ```
 
@@ -261,13 +304,16 @@ Change whether a trace fits one monitor. It does not dismiss an issue or recalib
 
 ```json
 {
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "monitor_id": "33333333-3333-4333-8333-333333333333",
-  "action": "record",
-  "idempotency_key": "correct-refund-trace",
-  "trace_id": "44444444-4444-4444-8444-444444444444",
-  "verdict": "exclude",
-  "reason": "The agent was not handling a refund here."
+  "operation_id": "correct_monitor_judgment",
+  "input": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "monitor_id": "33333333-3333-4333-8333-333333333333",
+    "action": "record",
+    "idempotency_key": "correct-refund-trace",
+    "trace_id": "44444444-4444-4444-8444-444444444444",
+    "verdict": "exclude",
+    "reason": "The agent was not handling a refund here."
+  }
 }
 ```
 
@@ -277,11 +323,14 @@ Accept or dismiss one pending phrasing suggestion.
 
 ```json
 {
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "monitor_id": "33333333-3333-4333-8333-333333333333",
-  "suggestion_id": "55555555-5555-4555-8555-555555555555",
-  "decision": "accept",
-  "idempotency_key": "accept-refund-suggestion"
+  "operation_id": "decide_monitor_suggestion",
+  "input": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "monitor_id": "33333333-3333-4333-8333-333333333333",
+    "suggestion_id": "55555555-5555-4555-8555-555555555555",
+    "decision": "accept",
+    "idempotency_key": "accept-refund-suggestion"
+  }
 }
 ```
 
@@ -295,14 +344,17 @@ Keep the selected fields fixed and send only unfinished field cursors on continu
 
 ```json
 {
-  "project_id": "11111111-1111-4111-8111-111111111111",
-  "selector": {
-    "kind": "agent_understanding",
-    "agent_name": "support",
-    "version": "latest"
-  },
-  "fields": [
-    "knowledge_md"
-  ]
+  "operation_id": "read_project_artifact",
+  "input": {
+    "project_id": "11111111-1111-4111-8111-111111111111",
+    "selector": {
+      "kind": "agent_understanding",
+      "agent_name": "support",
+      "version": "latest"
+    },
+    "fields": [
+      "knowledge_md"
+    ]
+  }
 }
 ```
