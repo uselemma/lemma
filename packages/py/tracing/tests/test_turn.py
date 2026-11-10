@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime, timezone
 
 import pytest
@@ -181,6 +182,111 @@ def test_turn_end_stays_strict():
     turn = host.start_turn("agent-turn")
     with pytest.raises(RuntimeError, match="failed to ingest trace"):
         turn.end(output="ok")
+
+
+def test_turn_end_retries_after_a_failed_send():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return (503, "nope") if len(calls) == 1 else (201, "{}")
+
+    host = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    turn = host.start_turn("agent-turn")
+    turn.record_tool(name="lookup_order", input={"order_id": "1843"})
+
+    with pytest.raises(RuntimeError, match="failed to ingest trace"):
+        turn.end(output="ok")
+    turn.end(output="ok")
+    # Delivered: a further end() is a no-op.
+    turn.end(output="ok")
+
+    assert len(calls) == 2
+    assert calls[1]["trace"]["id"] == calls[0]["trace"]["id"]
+    assert calls[1]["trace"]["started_at"] == calls[0]["trace"]["started_at"]
+    assert calls[1]["trace"]["ended_at"] == calls[0]["trace"]["ended_at"]
+    assert calls[1]["trace"]["spans"] == calls[0]["trace"]["spans"]
+
+
+def test_a_plain_trace_handle_still_sends_once():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 503, "nope"
+
+    handle = TraceHandle(Lemma(api_key="key", project_id=PROJECT_ID, transport=transport), name="agent")
+
+    with pytest.raises(RuntimeError, match="failed to ingest trace"):
+        handle.end(output="ok")
+    handle.end(output="ok")  # only turns retry; a plain handle sends once, as before
+
+    assert len(calls) == 1
+
+
+def test_turn_end_retries_after_a_network_error():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        if len(calls) == 1:
+            raise ConnectionResetError("connection reset by peer")
+        return 201, "{}"
+
+    turn = Lemma(
+        api_key="key", project_id=PROJECT_ID, transport=transport
+    ).start_turn("agent-turn")
+
+    with pytest.raises(ConnectionResetError):
+        turn.end(output="ok")
+    turn.end(output="ok")
+
+    assert len(calls) == 2
+
+
+def test_turn_end_retry_uses_a_new_end_time():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return (503, "nope") if len(calls) == 1 else (201, "{}")
+
+    turn = Lemma(
+        api_key="key", project_id=PROJECT_ID, transport=transport
+    ).start_turn("agent-turn")
+
+    with pytest.raises(RuntimeError):
+        turn.end(ended_at=datetime(2020, 1, 1, 0, 0, 5, tzinfo=timezone.utc))
+    turn.end(ended_at=datetime(2020, 1, 1, 0, 0, 9, tzinfo=timezone.utc))
+
+    assert calls[1]["trace"]["ended_at"] == "2020-01-01T00:00:09Z"
+
+
+def test_turn_end_during_a_send_does_not_send_again():
+    calls = []
+    started = threading.Event()
+    release = threading.Event()
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        started.set()
+        release.wait(10)
+        return 201, "{}"
+
+    turn = Lemma(
+        api_key="key", project_id=PROJECT_ID, transport=transport
+    ).start_turn("agent-turn")
+    sender = threading.Thread(target=turn.end, kwargs={"output": "ok"})
+    sender.start()
+    assert started.wait(10)
+
+    # A second end() while the first is sending returns without sending.
+    turn.end(output="ok")
+    release.set()
+    sender.join(10)
+    turn.end(output="ok")
+
+    assert len(calls) == 1
 
 
 def test_turn_handle_extends_trace_handle():

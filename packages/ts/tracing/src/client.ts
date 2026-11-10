@@ -925,7 +925,7 @@ export class TraceHandle extends TraceContext {
 
   constructor(
     options: TraceOptions,
-    private readonly sendFn: (
+    protected readonly sendFn: (
       trace: TraceHandle,
       startedAt: Date,
       endedAt: Date,
@@ -936,10 +936,9 @@ export class TraceHandle extends TraceContext {
     this.startedAt = startedAt ?? coerceDate(options.startedAt) ?? new Date();
     // A trace is delivered only when it is explicitly ended (`end()`). We
     // deliberately do NOT auto-send on construction or on every recorded span:
-    // the ingest API is append-only and treats each submission's spans as new,
-    // so streaming partial snapshots re-sends every prior span and accumulates
-    // duplicates. Recording mutates the in-memory trace only; the single
-    // terminal send from `end()` carries the complete trace.
+    // a partial snapshot overwrites root fields and Lemma processes a trace
+    // once. Recording mutates the in-memory trace only; the send from `end()`
+    // carries the complete trace.
   }
 
   async end(): Promise<void>;
@@ -949,8 +948,21 @@ export class TraceHandle extends TraceContext {
     // Ending is idempotent: a trace is sent exactly once so a second end()
     // can't duplicate its spans.
     if (this.ended) return this.sendPromise;
-    let endedAtOverride: Date | undefined;
-    let startedAtOverride: Date | undefined;
+    const times = this.applyEndArguments(outputOrOptions, arguments.length > 0);
+    this.ended = true;
+    const startedAt = times.startedAt ?? this.startedAt;
+    const endedAt = times.endedAt ?? new Date();
+    this.sendPromise = this.sendPromise.then(() =>
+      this.sendFn(this, startedAt, endedAt),
+    );
+    await this.sendPromise;
+  }
+
+  /** Records `end()`'s output and duration; returns the times it passed. */
+  protected applyEndArguments(
+    outputOrOptions: unknown,
+    hasArgument: boolean,
+  ): { startedAt?: Date; endedAt?: Date } {
     if (isTraceEndOptions(outputOrOptions)) {
       if ("output" in outputOrOptions) {
         this.output(outputOrOptions.output);
@@ -958,18 +970,15 @@ export class TraceHandle extends TraceContext {
       if (outputOrOptions.durationMs != null) {
         this.duration(outputOrOptions.durationMs);
       }
-      startedAtOverride = coerceDate(outputOrOptions.startedAt);
-      endedAtOverride = coerceDate(outputOrOptions.endedAt);
-    } else if (arguments.length > 0) {
+      return {
+        startedAt: coerceDate(outputOrOptions.startedAt),
+        endedAt: coerceDate(outputOrOptions.endedAt),
+      };
+    }
+    if (hasArgument) {
       this.output(outputOrOptions);
     }
-    this.ended = true;
-    const startedAt = startedAtOverride ?? this.startedAt;
-    const endedAt = endedAtOverride ?? new Date();
-    this.sendPromise = this.sendPromise.then(() =>
-      this.sendFn(this, startedAt, endedAt),
-    );
-    await this.sendPromise;
+    return {};
   }
 
   /** Whether this trace has already been delivered via `end()`. */

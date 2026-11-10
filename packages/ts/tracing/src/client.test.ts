@@ -525,8 +525,8 @@ describe("Lemma", () => {
     await trace.end({ output: "done" });
     await trace.end({ output: "ignored" });
 
-    // A second end() is a no-op: the append-only ingest API would otherwise
-    // duplicate every span on the re-send.
+    // A second end() is a no-op: the trace was already sent, so nothing
+    // (not even the new output) goes out again.
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(jsonBody(fetchMock.mock.calls[0]).trace.output).toBe("done");
   });
