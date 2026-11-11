@@ -8,7 +8,7 @@
 |---|---|
 | [`lemma-tracing`](./lemma-tracing/SKILL.md) | Integrate Lemma tracing into any codebase — supports the direct SDK, Vercel AI SDK v6/v7, OpenAI Agents SDK, LangChain, LangGraph, Langfuse side-by-side installs, trace handles, debug mode, and manual instrumentation |
 | [`lemma-diagnostics`](./lemma-diagnostics/SKILL.md) | Improve the quality of traces already landing in Lemma — audit local instrumentation, score received shape against live docs, and hand off apply-work to `lemma-tracing` |
-| [`lemma-mcp`](./lemma-mcp/SKILL.md) | Drive the Lemma MCP from the terminal — triage issues, read occurrence evidence, and record confirm / dismiss / resolve verdicts with explicit user consent |
+| [`lemma-mcp`](./lemma-mcp/SKILL.md) | Drive the Lemma MCP from the terminal — find and read issues, check traces and monitors, and choose the right action (lifecycle, metadata, monitor correction, or ticket) within what the user authorized |
 | [`lemma-analytics`](./lemma-analytics/SKILL.md) | Answer questions about production numbers with the analytics API — volume, latency, tool failures, and estimated cost by agent, model, tool, or day, over the Lemma MCP or REST |
 | [`lemma-artifacts`](./lemma-artifacts/SKILL.md) | Read a codebase and record what its agents are for in Lemma — tell production agents from examples, propose claims with the evidence behind them, and write agent understanding and context files only after the user approves the specifics — then, after its closing report, offer to hand off to `lemma-tracing` when the agent it settled on is not instrumented, written or not |
 
