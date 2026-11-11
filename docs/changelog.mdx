@@ -16,12 +16,11 @@ meta:
   - **Query:** `POST /traces/query` and `query_traces` match structure, input text, or span content. The start is included and the end is not. A cursor expires after 15 minutes.
   - **Relevance:** Relevance sort applies only to span content. `search_traces` keeps its inclusive window.
   - **Thread:** `GET /traces/{trace_id}/thread` and `get_trace_thread` with `response_version=page` pages one conversation. `scope=all` lists turns. `scope=neighbors` returns the adjacent turns. These pages aren’t capped at 500 turns.
-  - **Previous thread:** Omit `response_version` and the previous thread response stays, capped at 500 turns.
-  - **Sections:** `get_trace` with `response_version=sections` returns the summary, spans, issues, and context you include, each with its own cursor. Omit the version and the previous trace stays.
+  - **Sections:** `get_trace` with `response_version=sections` returns the summary, spans, issues, and context you include, each with its own cursor.
 
   ## Issues
 
-  - **Filtered pages:** `GET /issues` and `list_issues` with `response_version=2` filter by status, exact agent name, and a case-insensitive title, then page that set. A cursor expires after 15 minutes. Omit the version and the previous list stays.
+  - **Filtered pages:** `GET /issues` and `list_issues` with `response_version=2` filter by status, exact agent name, and a case-insensitive title, then page that set. A cursor expires after 15 minutes.
   - **Known issues:** `POST /issues/read` and `read_issues` read up to 50 issue ids. `include` selects `state`, `evidence`, `metrics`, and `fixes`.
   - **Status:** `POST /issues/transitions` and `transition_issues` dismiss, resolve, reopen, or start review. A dismissal needs a reason and a detail. A resolution needs evidence. Send an idempotency key.
   - **Fields:** `PATCH /issues` and `update_issue_metadata` assign, pin, tag, or save a fix link for up to 50 issues. A fix link doesn’t resolve the issue. Send an idempotency key.
@@ -30,12 +29,12 @@ meta:
   ## Analytics
 
   - **View:** `GET /projects/{project_id}/analytics` and `get_project_analytics` select `base`, `window`, `model_scorecard`, `agent_scorecard`, `tool_aggregates`, or `roi`.
-  - **Tagged result:** `response_version=tagged` returns that view’s payload. Omit it and the previous payload stays. The view-specific tools still answer.
+  - **Tagged result:** `response_version=tagged` returns that view’s payload. The view-specific tools still answer.
 
   ## Dashboard
 
   - **One monitor:** `GET /projects/{project_id}/monitors/{monitor_id}` and `get_monitor` return the summary, traces, issues, and feedback you include. The start of the window is included and the end is not.
-  - **Monitor list:** `list_monitors` with `response_version=page` pages the list. A summary on that page needs `start_inclusive` and `end_exclusive`. Omit the version and the previous list stays.
+  - **Monitor list:** `list_monitors` with `response_version=page` pages the list. A summary on that page needs `start_inclusive` and `end_exclusive`.
   - **Fit:** `POST /projects/{project_id}/monitors/{monitor_id}/corrections` records whether a trace fits that monitor. It doesn’t dismiss an issue.
   - **Suggestion:** `POST /projects/{project_id}/monitors/{monitor_id}/suggestions/{suggestion_id}/decision` accepts or dismisses one pending phrasing suggestion. The separate accept and dismiss routes still answer.
 
@@ -45,6 +44,7 @@ meta:
 
   ## API
 
+  - **Versioned responses:** Omit `response_version` and the previous response stays. The unversioned thread is capped at 500 turns. This covers the thread, trace sections, the issue list, the analytics payload, and the monitor list.
   - **Readiness:** `GET /projects/{project_id}/capabilities` and `get_project_capabilities` return the readiness, Linear, GitHub, and ingest sections you name. One section can fail without dropping the others.
 
 </Update>
