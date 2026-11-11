@@ -68,8 +68,8 @@ Dismiss, resolve, reopen, or start review. This example resolves with a deployme
         "issue_id": "22222222-2222-4222-8222-222222222222",
         "resolution_evidence": {
           "kind": "deployment_reference",
-          "explanation": "Refund handler fix is live in the latest release.",
-          "reference": "https://github.com/acme/support-agent/pull/412"
+          "explanation": "Refund handler fix shipped in release v2.14.0.",
+          "reference": "https://github.com/acme/support-agent/releases/tag/v2.14.0"
         }
       }
     ]
@@ -104,11 +104,11 @@ Assign, pin, tag, or record a fix reference. Saving a pull request never resolve
 
 ## Tickets and project capabilities
 
-Check what the credential may do and what is usable before promising an external write.
+Readiness rules for external writes are in [Follow a fix through accurately](issues.md#follow-a-fix-through-accurately).
 
 ### `get_project_capabilities`
 
-Request only the provider sections you need. Require both `allowed` and `available`.
+Request only the provider sections you need.
 
 ```json
 {
