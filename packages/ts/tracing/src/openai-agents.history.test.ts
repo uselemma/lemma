@@ -83,4 +83,26 @@ describe("openAIAgents history roles", () => {
     );
     expect(attributes["llm.input_messages.5.message.role"]).toBe("user");
   });
+
+  it("keeps a non-object response value as the span output", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await processor.onTraceStart({ traceId: "trace_raw", name: "agent" });
+    await processor.onSpanEnd({
+      traceId: "trace_raw",
+      spanId: "span_raw",
+      spanData: { type: "response", response: "raw-response-text" },
+    });
+    await processor.onTraceEnd({ traceId: "trace_raw", name: "agent" });
+    await processor.forceFlush();
+
+    expect(jsonBody(fetchMock.mock.calls[0]).trace.spans[0].output).toBe(
+      "raw-response-text",
+    );
+  });
 });

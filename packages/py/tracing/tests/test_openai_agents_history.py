@@ -76,3 +76,24 @@ def test_openai_agents_history_items_get_roles():
     assert attributes["llm.input_messages.4.message.role"] == "tool"
     assert attributes["llm.input_messages.4.message.type"] == "function_call_result"
     assert attributes["llm.input_messages.5.message.role"] == "user"
+
+
+def test_openai_agents_non_mapping_response_stays_the_output():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_raw", name="agent"))
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_raw",
+            span_id="span_raw",
+            span_data={"type": "response", "response": "raw-response-text"},
+        )
+    )
+    processor.on_trace_end(FakeTrace(trace_id="trace_raw", name="agent"))
+    assert calls[0]["trace"]["spans"][0]["output"] == "raw-response-text"
