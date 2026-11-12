@@ -18,6 +18,7 @@ from .payload import BeforeSend
 from .error_message import describe_error
 from .langsmith_parent import resolve_traceable_ghost
 from .model import pick_generation_model_identity, pick_model_identity
+from .reply_text import read_content_reply
 from .tool_result import tool_result_error
 from .usage import normalize_token_usage
 
@@ -317,22 +318,15 @@ def root_trace_input(input_value: Any) -> Any:
 
 
 def _text_from_content_blocks(content: Any) -> str | None:
-    """Join ``type == "text"`` blocks for root-trace display.
+    """Join text and output_text blocks for root-trace display.
 
-    Reasoning / thinking / OpenAI reasoning items are skipped because they
-    are not ``type == "text"``. Returns ``None`` when there is no text block
-    so callers keep the original value.
+    Reasoning blocks are skipped. Returns ``None`` when there is no text
+    block so callers keep the original value.
     """
-    if not isinstance(content, list):
+    reply = read_content_reply(content)
+    if reply is None or not reply[0]:
         return None
-    texts = [
-        block["text"]
-        for block in content
-        if isinstance(block, dict)
-        and block.get("type") == "text"
-        and isinstance(block.get("text"), str)
-    ]
-    return "\n".join(texts) if texts else None
+    return "\n".join(reply[0])
 
 
 def _structured_assistant_output(message: dict[str, Any]) -> Any:

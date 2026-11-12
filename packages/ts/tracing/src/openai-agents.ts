@@ -7,6 +7,7 @@ import {
   replyFromResponse,
 } from "./openai-agents-generation";
 import { pickModelIdentity } from "./model";
+import { isReplyReasoning, readContentReply } from "./reply-text";
 
 const INTEGRATION_ATTRS = {
   "lemma.sdk.integration": "openai-agents",
@@ -123,34 +124,12 @@ function rootTraceInput(input: unknown): unknown {
   return messageContent(input[input.length - 1]);
 }
 
-function isReasoningItem(record: Record<string, unknown>): boolean {
-  return (
-    record.type === "reasoning" || typeof record.encrypted_content === "string"
-  );
-}
-
 /** Text parts of a chat or Responses content list. Reasoning parts are skipped. */
 function textFromContentParts(content: unknown): string | undefined {
   if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return undefined;
-  let text = "";
-  let sawPart = false;
-  for (const part of content) {
-    if (!part || typeof part !== "object") continue;
-    const record = part as Record<string, unknown>;
-    if (isReasoningItem(record)) {
-      sawPart = true;
-      continue;
-    }
-    if (
-      (record.type === "output_text" || record.type === "text") &&
-      typeof record.text === "string"
-    ) {
-      text += record.text;
-      sawPart = true;
-    }
-  }
-  return sawPart ? text : undefined;
+  const reply = readContentReply(content);
+  if (!reply || !reply.recognized) return undefined;
+  return reply.parts.join("");
 }
 
 function textFromGenerationOutput(output: unknown) {
@@ -163,7 +142,7 @@ function textFromGenerationOutput(output: unknown) {
       continue;
     }
     const record = item as Record<string, unknown>;
-    if (isReasoningItem(record)) continue;
+    if (isReplyReasoning(record)) continue;
     if (typeof record.text === "string") {
       text += record.text;
       continue;

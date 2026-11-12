@@ -11,6 +11,7 @@ from .debug_mode import _lemma_debug
 from .error_message import describe_error
 from .model import pick_model_identity
 from .openai_agents_generation import generation_snapshot, reply_from_response
+from .reply_text import is_reply_reasoning, read_content_reply
 from .tool_result import tool_result_error
 
 _LIVE_SPAN_DATA_KEYS = (
@@ -144,30 +145,14 @@ def _root_trace_input(input_value: Any) -> Any:
     return _message_content(input_value[-1])
 
 
-def _is_reasoning_item(record: dict[str, Any]) -> bool:
-    return record.get("type") == "reasoning" or isinstance(
-        record.get("encrypted_content"), str
-    )
-
-
 def _text_from_content_parts(content: Any) -> str | None:
     """Text parts of a chat or Responses content list. Reasoning parts are skipped."""
     if isinstance(content, str):
         return content
-    if not isinstance(content, list):
+    reply = read_content_reply(content)
+    if reply is None or not reply[1]:
         return None
-    text = ""
-    saw_part = False
-    for part in content:
-        if not isinstance(part, dict):
-            continue
-        if _is_reasoning_item(part):
-            saw_part = True
-            continue
-        if part.get("type") in {"output_text", "text"} and isinstance(part.get("text"), str):
-            text += part["text"]
-            saw_part = True
-    return text if saw_part else None
+    return "".join(reply[0])
 
 
 def _generation_output(output: Any) -> Any:
@@ -179,7 +164,7 @@ def _generation_output(output: Any) -> Any:
         if not isinstance(item, dict):
             saw_unhandled = True
             continue
-        if _is_reasoning_item(item):
+        if is_reply_reasoning(item):
             continue
         if isinstance(item.get("text"), str):
             text += item["text"]

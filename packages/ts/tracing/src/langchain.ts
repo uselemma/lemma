@@ -9,6 +9,7 @@ import { describeError } from "./error-message";
 import { scheduleMacrotask } from "./schedule";
 import { toolResultError } from "./tool-result";
 import { pickGenerationModelIdentity, pickModelIdentity } from "./model";
+import { readContentReply } from "./reply-text";
 import { normalizeTokenUsage, type TokenUsage } from "./usage";
 
 const INTEGRATION_ATTRS = {
@@ -143,7 +144,10 @@ function lookupString(
   return undefined;
 }
 
-function tagValue(tags: string[] | undefined, keys: string[]): string | undefined {
+function tagValue(
+  tags: string[] | undefined,
+  keys: string[],
+): string | undefined {
   if (!tags?.length) return undefined;
   for (const key of keys) {
     const prefix = `${key}:`;
@@ -250,7 +254,10 @@ function toolCallsFromMessage(
 }
 
 /** Normalize LangChain message classes / dicts to `{ role, content, ... }`. */
-function normalizeMessage(message: unknown): { role: string; content: unknown } {
+function normalizeMessage(message: unknown): {
+  role: string;
+  content: unknown;
+} {
   if (typeof message === "string") {
     return { role: "user", content: message };
   }
@@ -277,7 +284,9 @@ function normalizeMessage(message: unknown): { role: string; content: unknown } 
       content,
     };
 
-  const toolCalls = toolCallsFromMessage(record) ?? (kwargs ? toolCallsFromMessage(kwargs) : undefined);
+  const toolCalls =
+    toolCallsFromMessage(record) ??
+    (kwargs ? toolCallsFromMessage(kwargs) : undefined);
   if (toolCalls) normalized.tool_calls = toolCalls;
 
   const toolCallId =
@@ -348,16 +357,9 @@ function rootTraceInput(input: unknown): unknown {
 }
 
 function textFromContentBlocks(content: unknown): string | undefined {
-  if (!Array.isArray(content)) return undefined;
-  const texts: string[] = [];
-  for (const block of content) {
-    if (!block || typeof block !== "object") continue;
-    const record = block as Record<string, unknown>;
-    if (record.type === "text" && typeof record.text === "string") {
-      texts.push(record.text);
-    }
-  }
-  return texts.length > 0 ? texts.join("\n") : undefined;
+  const reply = readContentReply(content);
+  if (!reply || reply.parts.length === 0) return undefined;
+  return reply.parts.join("\n");
 }
 
 function flattenRootDisplay(value: unknown): unknown {
@@ -392,7 +394,9 @@ function rootTraceOutput(output: unknown): unknown {
       }
     }
     return flattenRootDisplay(
-      structuredAssistantOutput(normalizeMessage(messages[messages.length - 1])),
+      structuredAssistantOutput(
+        normalizeMessage(messages[messages.length - 1]),
+      ),
     );
   }
 
@@ -481,11 +485,13 @@ function llmStructuredOutput(result: LLMResult): unknown {
   }
 
   if (messages.length === 1) {
-    return structuredAssistantOutput(messages[0] as {
-      role: string;
-      content: unknown;
-      tool_calls?: unknown;
-    });
+    return structuredAssistantOutput(
+      messages[0] as {
+        role: string;
+        content: unknown;
+        tool_calls?: unknown;
+      },
+    );
   }
   if (messages.length > 1) return messages;
 
@@ -722,7 +728,13 @@ export class LemmaLangChainCallbackHandler {
     tags?: string[],
   ): string | undefined {
     const key = this.options.threadIdKey ?? "threadId";
-    const keys = [key, "threadId", "thread_id", "conversation_id", "session_id"];
+    const keys = [
+      key,
+      "threadId",
+      "thread_id",
+      "conversation_id",
+      "session_id",
+    ];
     return (
       lookupString([metadata, this.options.metadata], keys) ??
       tagValue(tags, keys)
@@ -996,8 +1008,7 @@ export class LemmaLangChainCallbackHandler {
     name?: string,
   ) {
     const startedAt = new Date();
-    const chainName =
-      name ?? serializedName(serialized, "langchain-chain");
+    const chainName = name ?? serializedName(serialized, "langchain-chain");
 
     const parent = this.parentRun(parentRunId);
     if (!parent) {
@@ -1040,11 +1051,7 @@ export class LemmaLangChainCallbackHandler {
       parentId: parent.handle?.id,
       input: inputs,
       metadata: this.options.metadata,
-      attributes: langchainAttributes(
-        runId,
-        parentRunId,
-        runType || "chain",
-      ),
+      attributes: langchainAttributes(runId, parentRunId, runType || "chain"),
       startedAt,
     });
     this.runs.set(runId, {
