@@ -372,6 +372,26 @@ def _output_messages(
     return None
 
 
+_HISTORY_ITEM_ROLES = {
+    "function_call": "assistant",
+    "reasoning": "assistant",
+    "function_call_result": "tool",
+    "function_call_output": "tool",
+}
+
+
+def _with_history_role(message: Any) -> Any:
+    """Responses items omit role. Keep an existing role and fill the missing ones."""
+    if not isinstance(message, dict):
+        return message
+    if isinstance(message.get("role"), str) and message.get("role"):
+        return message
+    role = _HISTORY_ITEM_ROLES.get(message.get("type"))
+    if role is None:
+        return message
+    return {**message, "role": role}
+
+
 def _generation_fields(
     data: dict[str, Any],
     input_value: Any,
@@ -383,6 +403,8 @@ def _generation_fields(
         response = _response_mapping(data)
     fields: dict[str, Any] = {}
     messages = _input_messages_with_instructions(input_value, response)
+    if messages is not None:
+        messages = [_with_history_role(message) for message in messages]
     if messages is not None:
         fields["llm_input_messages"] = messages
     parameters = _invocation_parameters(data, response)

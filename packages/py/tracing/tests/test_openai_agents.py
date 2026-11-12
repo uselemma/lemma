@@ -990,6 +990,61 @@ def test_openai_agents_streamed_response_records_model_prompt_tools_and_settings
     assert "response" not in json.loads(attributes["openai.agents.span_data"])
 
 
+def test_openai_agents_history_items_get_roles():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+    history = [
+        {"role": "user", "content": "look up the order"},
+        {
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "lookup_order",
+            "arguments": "{}",
+        },
+        {"type": "function_call_output", "call_id": "call_1", "output": "Friday"},
+        {"type": "reasoning", "id": "rs_1", "summary": []},
+        {"type": "function_call_result", "call_id": "call_2", "output": "kept"},
+        {"type": "function_call", "role": "user", "name": "custom"},
+    ]
+
+    processor.on_trace_start(FakeTrace(trace_id="trace_roles", name="support-agent"))
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_roles",
+            span_id="span_roles",
+            span_data={
+                "type": "response",
+                "_input": history,
+                "_response": {
+                    "model": "gpt-4.1",
+                    "output": [
+                        {"type": "message", "role": "assistant", "content": "Friday"}
+                    ],
+                },
+            },
+        )
+    )
+    processor.on_trace_end(FakeTrace(trace_id="trace_roles", name="support-agent"))
+
+    attributes = calls[0]["trace"]["spans"][0]["attributes"]
+    assert attributes["llm.input_messages.0.message.role"] == "user"
+    assert attributes["llm.input_messages.1.message.role"] == "assistant"
+    assert attributes["llm.input_messages.1.message.type"] == "function_call"
+    assert attributes["llm.input_messages.2.message.role"] == "tool"
+    assert attributes["llm.input_messages.2.message.type"] == "function_call_output"
+    assert attributes["llm.input_messages.3.message.role"] == "assistant"
+    assert attributes["llm.input_messages.3.message.type"] == "reasoning"
+    assert attributes["llm.input_messages.4.message.role"] == "tool"
+    assert attributes["llm.input_messages.4.message.type"] == "function_call_result"
+    assert attributes["llm.input_messages.5.message.role"] == "user"
+
+
 def test_openai_agents_force_flush_does_not_raise_on_ingest_503():
     lemma = Lemma(
         api_key="key",

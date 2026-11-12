@@ -244,12 +244,36 @@ function outputMessages(
   return undefined;
 }
 
+const HISTORY_ITEM_ROLES: Record<string, string> = {
+  function_call: "assistant",
+  reasoning: "assistant",
+  function_call_result: "tool",
+  function_call_output: "tool",
+};
+
+/** Responses items omit role. Keep an existing role and fill the missing ones. */
+function withHistoryRole(message: unknown): unknown {
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    return message;
+  }
+  const record = message as Record<string, unknown>;
+  if (typeof record.role === "string" && record.role) return message;
+  const role =
+    typeof record.type === "string"
+      ? HISTORY_ITEM_ROLES[record.type]
+      : undefined;
+  if (!role) return message;
+  return { ...record, role };
+}
+
 function generationFields(
   data: OpenAIAgentsSpanData,
   input: unknown,
   response: Record<string, unknown> | undefined = responseRecord(data),
 ) {
-  const messages = inputMessagesWithInstructions(input, response);
+  const messages = inputMessagesWithInstructions(input, response)?.map(
+    withHistoryRole,
+  );
   const tools = generationTools(data, response);
   const parameters = invocationParameters(data, response);
   return {
