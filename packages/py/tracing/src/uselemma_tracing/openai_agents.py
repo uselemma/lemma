@@ -49,10 +49,11 @@ class _SpanRecord:
     trace_id: str
     type: str | None
     parent_id: str | None
-    child_input: Any = None
-    child_output: Any = None
-    child_input_set: bool = False
-    child_output_set: bool = False
+    end_order: int = 0
+    generation_input: Any = None
+    has_generation_input: bool = False
+    generation_output: Any = None
+    has_generation_output: bool = False
     own_output: bool = False
 
 
@@ -259,6 +260,7 @@ class LemmaOpenAIAgentsProcessor:
         self._spans: dict[str, _SpanRecord] = {}
         self._span_trace_ids: dict[str, str] = {}
         self._ended_spans: dict[str, _SpanRecord] = {}
+        self._end_order = 0
         self._lock = threading.RLock()
 
     def on_trace_start(self, trace: Any) -> None:
@@ -500,32 +502,57 @@ class LemmaOpenAIAgentsProcessor:
             self._span_trace_ids[span_id] = _get(span, "trace_id")
         return record
 
-    def _patch_ended_container(self, record: _SpanRecord) -> None:
-        payload = record.handle.payload
-        if payload is None:
-            return
-        if payload.get("input") is None and record.child_input_set:
-            payload["input"] = record.child_input
-        if not record.own_output and record.child_output_set:
-            payload["output"] = record.child_output
+    def _is_under(self, record: _SpanRecord, ancestor_id: str) -> bool:
+        parent_id = record.parent_id
+        seen: set[str] = set()
+        while parent_id and parent_id not in seen:
+            if parent_id == ancestor_id:
+                return True
+            seen.add(parent_id)
+            parent = self._ended_spans.get(parent_id) or self._spans.get(parent_id)
+            parent_id = None if parent is None else parent.parent_id
+        return False
 
-    def _bubble_child_io(self, span: Any, input_value: Any, output: Any) -> None:
-        parent_id = _get(span, "parent_id")
+    def _child_generation_io(self, container_id: str) -> tuple[Any, bool, Any, bool]:
+        generations = sorted(
+            (
+                record
+                for record in self._ended_spans.values()
+                if _is_generation_type(record.type) and self._is_under(record, container_id)
+            ),
+            key=lambda record: record.end_order,
+        )
+        chosen_input = None
+        has_input = False
+        chosen_output = None
+        has_output = False
+        for generation in generations:
+            if not has_input and generation.has_generation_input:
+                chosen_input = generation.generation_input
+                has_input = True
+            if generation.has_generation_output:
+                chosen_output = generation.generation_output
+                has_output = True
+        return chosen_input, has_input, chosen_output, has_output
+
+    def _patch_ended_containers(self, record: _SpanRecord) -> None:
+        parent_id = record.parent_id
         seen: set[str] = set()
         while parent_id and parent_id not in seen:
             seen.add(parent_id)
-            parent = self._spans.get(parent_id) or self._ended_spans.get(parent_id)
+            parent = self._ended_spans.get(parent_id)
             if parent is None:
-                break
+                open_parent = self._spans.get(parent_id)
+                if open_parent is None:
+                    break
+                parent_id = open_parent.parent_id
+                continue
             if _is_container_type(parent.type):
-                if not parent.child_input_set and input_value is not None:
-                    parent.child_input = input_value
-                    parent.child_input_set = True
-                if output is not None:
-                    parent.child_output = output
-                    parent.child_output_set = True
-                if parent_id in self._ended_spans:
-                    self._patch_ended_container(parent)
+                parent.handle.fill_container_io(
+                    record.generation_input if record.has_generation_input else None,
+                    record.generation_output if record.has_generation_output else None,
+                    parent.own_output,
+                )
             parent_id = parent.parent_id
 
     def _end_span(self, handle: SpanHandle, span: Any, meta: _SpanRecord) -> None:
@@ -582,14 +609,27 @@ class LemmaOpenAIAgentsProcessor:
         if not error_message and _is_generation_type(span_type) and output is not None:
             self._note_root_output(stored, output)
 
+        if _is_generation_type(span_type):
+            self._end_order += 1
+            meta.end_order = self._end_order
+            if input_value is not None:
+                meta.generation_input = input_value
+                meta.has_generation_input = True
+            if output is not None:
+                meta.generation_output = output
+                meta.has_generation_output = True
+
         ended_input = input_value
         ended_output = output
         if _is_container_type(span_type):
             meta.own_output = data.get("output") is not None
-            if ended_input is None and meta.child_input_set:
-                ended_input = meta.child_input
-            if not meta.own_output and not error_message and meta.child_output_set:
-                ended_output = meta.child_output
+            child_input, has_input, child_output, has_output = self._child_generation_io(
+                _get(span, "span_id")
+            )
+            if ended_input is None and has_input:
+                ended_input = child_input
+            if not meta.own_output and not error_message and has_output:
+                ended_output = child_output
 
         # Prefer the original string timestamp so payload ISO matches the SDK.
         ended_at_value = raw_ended_at if raw_ended_at is not None else span_ended_at
@@ -620,12 +660,12 @@ class LemmaOpenAIAgentsProcessor:
             duration_ms=_duration_ms(raw_started_at, ended_at_value),
             usage=None if snapshot is None else snapshot["usage"],
         )
-        if _is_generation_type(span_type):
-            self._bubble_child_io(span, input_value, output)
         span_id = _get(span, "span_id")
         if span_id is not None:
             self._ended_spans[span_id] = meta
             self._span_trace_ids[span_id] = _get(span, "trace_id")
+        if _is_generation_type(span_type):
+            self._patch_ended_containers(meta)
 
         parent_id = _get(span, "parent_id")
         if parent_id and span_type == "function":

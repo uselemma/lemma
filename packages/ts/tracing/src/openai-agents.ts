@@ -199,10 +199,11 @@ type SpanRecord = {
   traceId: string;
   type: string;
   parentId?: string | null;
-  childInput?: unknown;
-  childOutput?: unknown;
-  childInputSet: boolean;
-  childOutputSet: boolean;
+  endOrder: number;
+  generationInput?: unknown;
+  hasGenerationInput: boolean;
+  generationOutput?: unknown;
+  hasGenerationOutput: boolean;
   ownOutput: boolean;
 };
 
@@ -228,6 +229,7 @@ export function openAIAgents(
       release: options.release,
     });
   const traces = new Map<string, StoredTrace>();
+  let endOrder = 0;
   const spans = new Map<string, SpanRecord>();
   /** Ended handles kept only until their trace finalizes (for parent extend). */
   const endedSpans = new Map<string, SpanRecord>();
@@ -338,39 +340,71 @@ export function openAIAgents(
       traceId: span.traceId,
       type: span.spanData.type,
       parentId: span.parentId,
-      childInputSet: false,
-      childOutputSet: false,
+      endOrder: 0,
+      hasGenerationInput: false,
+      hasGenerationOutput: false,
       ownOutput: false,
     };
   }
 
-  function bubbleChildIo(
-    span: OpenAIAgentsSpan,
-    input: unknown,
-    output: unknown,
-  ) {
-    let parentId = span.parentId ?? null;
+  function isUnder(record: SpanRecord, ancestorId: string): boolean {
+    let parentId = record.parentId ?? null;
+    const seen = new Set<string>();
+    while (parentId && !seen.has(parentId)) {
+      if (parentId === ancestorId) return true;
+      seen.add(parentId);
+      const parent = endedSpans.get(parentId) ?? spans.get(parentId);
+      parentId = parent?.parentId ?? null;
+    }
+    return false;
+  }
+
+  function childGenerationIo(containerId: string): {
+    input?: unknown;
+    output?: unknown;
+    hasOutput: boolean;
+  } {
+    const generations = [...endedSpans.values()]
+      .filter(
+        (record) =>
+          isGenerationType(record.type) && isUnder(record, containerId),
+      )
+      .sort((left, right) => left.endOrder - right.endOrder);
+    let input: unknown;
+    let hasInput = false;
+    let output: unknown;
+    let hasOutput = false;
+    for (const generation of generations) {
+      if (!hasInput && generation.hasGenerationInput) {
+        input = generation.generationInput;
+        hasInput = true;
+      }
+      if (generation.hasGenerationOutput) {
+        output = generation.generationOutput;
+        hasOutput = true;
+      }
+    }
+    return { input, output, hasOutput };
+  }
+
+  function patchEndedContainers(record: SpanRecord) {
+    let parentId = record.parentId ?? null;
     const seen = new Set<string>();
     while (parentId && !seen.has(parentId)) {
       seen.add(parentId);
-      const parent = spans.get(parentId) ?? endedSpans.get(parentId);
-      if (!parent) break;
+      const parent = endedSpans.get(parentId);
+      if (!parent) {
+        const open = spans.get(parentId);
+        if (!open) break;
+        parentId = open.parentId ?? null;
+        continue;
+      }
       if (isContainerType(parent.type)) {
-        if (!parent.childInputSet && input != null) {
-          parent.childInput = input;
-          parent.childInputSet = true;
-        }
-        if (output !== undefined) {
-          parent.childOutput = output;
-          parent.childOutputSet = true;
-        }
-        if (endedSpans.has(parentId)) {
-          parent.handle.fillContainerIo(
-            parent.childInputSet ? parent.childInput : undefined,
-            parent.childOutputSet ? parent.childOutput : undefined,
-            parent.ownOutput,
-          );
-        }
+        parent.handle.fillContainerIo(
+          record.hasGenerationInput ? record.generationInput : undefined,
+          record.hasGenerationOutput ? record.generationOutput : undefined,
+          parent.ownOutput,
+        );
       }
       parentId = parent.parentId ?? null;
     }
@@ -472,13 +506,26 @@ export function openAIAgents(
 
     let endedInput = input;
     let endedOutput = parsedOutput;
+    if (isGenerationType(data.type)) {
+      record.endOrder = endOrder++;
+      if (input != null) {
+        record.generationInput = input;
+        record.hasGenerationInput = true;
+      }
+      if (parsedOutput !== undefined) {
+        record.generationOutput = parsedOutput;
+        record.hasGenerationOutput = true;
+      }
+    }
+
     if (isContainerType(data.type)) {
       record.ownOutput = data["output"] != null;
-      if (endedInput == null && record.childInputSet) {
-        endedInput = record.childInput;
+      const children = childGenerationIo(span.spanId);
+      if (endedInput == null && children.input !== undefined) {
+        endedInput = children.input;
       }
-      if (!record.ownOutput && !errorMessage && record.childOutputSet) {
-        endedOutput = record.childOutput;
+      if (!record.ownOutput && !errorMessage && children.hasOutput) {
+        endedOutput = children.output;
       }
     }
 
@@ -500,10 +547,10 @@ export function openAIAgents(
       ...(errorMessage || !messages ? {} : { llmOutputMessages: messages }),
       usage: snapshot?.usage,
     });
-    if (isGenerationType(data.type)) {
-      bubbleChildIo(span, input, parsedOutput);
-    }
     endedSpans.set(span.spanId, record);
+    if (isGenerationType(data.type)) {
+      patchEndedContainers(record);
+    }
 
     // Tools that finish after their parent generation must not outlast it.
     if (span.parentId && data.type === "function") {
