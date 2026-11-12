@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readContentReply } from "./reply-text";
+import { readContentReply, textFromGenerationOutput } from "./reply-text";
 
 describe("readContentReply", () => {
   it("joins output_text and text parts and skips reasoning", () => {
@@ -27,5 +27,22 @@ describe("readContentReply", () => {
       recognized: false,
     });
     expect(readContentReply("plain")).toBeUndefined();
+  });
+
+  it("flattens a generation list and skips encrypted reasoning", () => {
+    expect(
+      textFromGenerationOutput([
+        { type: "reasoning", encrypted_content: "gAAAA-secret-blob" },
+        {
+          type: "message",
+          content: [{ type: "output_text", text: "It arrives Friday." }],
+        },
+      ]),
+    ).toBe("It arrives Friday.");
+    expect(
+      textFromGenerationOutput([
+        { type: "reasoning", encrypted_content: "gAAAA-secret-blob" },
+      ]),
+    ).toBe("");
   });
 });

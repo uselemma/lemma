@@ -36,3 +36,45 @@ export function readContentReply(content: unknown): ContentReply | undefined {
   }
   return { parts, recognized };
 }
+
+function textFromContentParts(content: unknown): string | undefined {
+  if (typeof content === "string") return content;
+  const reply = readContentReply(content);
+  if (!reply || !reply.recognized) return undefined;
+  return reply.parts.join("");
+}
+
+/** Reply text for a generation or Responses output list. */
+export function textFromGenerationOutput(output: unknown): unknown {
+  if (!Array.isArray(output)) return output;
+  let text = "";
+  let sawUnhandled = false;
+  for (const item of output) {
+    if (!item || typeof item !== "object") {
+      sawUnhandled = true;
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    if (isReplyReasoning(record)) continue;
+    if (typeof record.text === "string") {
+      text += record.text;
+      continue;
+    }
+    if (typeof record.content === "string") {
+      text += record.content;
+      continue;
+    }
+    if (Array.isArray(record.content)) {
+      const fromParts = textFromContentParts(record.content);
+      if (fromParts !== undefined) {
+        text += fromParts;
+        continue;
+      }
+    }
+    sawUnhandled = true;
+  }
+  if (text) return text;
+  // Reasoning-only output must not fall back to the raw item array.
+  if (!sawUnhandled && output.length > 0) return "";
+  return output;
+}

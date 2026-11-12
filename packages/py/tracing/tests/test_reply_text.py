@@ -1,4 +1,4 @@
-from uselemma_tracing.reply_text import read_content_reply
+from uselemma_tracing.reply_text import generation_output, read_content_reply
 
 
 def test_read_content_reply_keeps_text_and_skips_reasoning():
@@ -20,3 +20,18 @@ def test_read_content_reply_recognizes_reasoning_only():
 def test_read_content_reply_ignores_unrelated_blocks():
     assert read_content_reply([{"type": "tool-call", "name": "lookup"}]) == ([], False)
     assert read_content_reply("plain") is None
+
+
+def test_generation_output_skips_encrypted_reasoning():
+    assert generation_output(
+        [
+            {"type": "reasoning", "encrypted_content": "gAAAA-secret-blob"},
+            {
+                "type": "message",
+                "content": [{"type": "output_text", "text": "It arrives Friday."}],
+            },
+        ]
+    ) == "It arrives Friday."
+    assert generation_output(
+        [{"type": "reasoning", "encrypted_content": "gAAAA-secret-blob"}]
+    ) == ""

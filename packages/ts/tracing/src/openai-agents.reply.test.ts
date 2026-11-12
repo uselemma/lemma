@@ -42,9 +42,7 @@ describe("openAIAgents reply text", () => {
             {
               type: "message",
               role: "assistant",
-              content: [
-                { type: "output_text", text: "It arrives Friday." },
-              ],
+              content: [{ type: "output_text", text: "It arrives Friday." }],
             },
           ],
         },

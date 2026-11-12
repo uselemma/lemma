@@ -7,7 +7,7 @@ import {
   replyFromResponse,
 } from "./openai-agents-generation";
 import { pickModelIdentity } from "./model";
-import { isReplyReasoning, readContentReply } from "./reply-text";
+import { textFromGenerationOutput } from "./reply-text";
 
 const INTEGRATION_ATTRS = {
   "lemma.sdk.integration": "openai-agents",
@@ -122,48 +122,6 @@ function rootTraceInput(input: unknown): unknown {
   }
 
   return messageContent(input[input.length - 1]);
-}
-
-/** Text parts of a chat or Responses content list. Reasoning parts are skipped. */
-function textFromContentParts(content: unknown): string | undefined {
-  if (typeof content === "string") return content;
-  const reply = readContentReply(content);
-  if (!reply || !reply.recognized) return undefined;
-  return reply.parts.join("");
-}
-
-function textFromGenerationOutput(output: unknown) {
-  if (!Array.isArray(output)) return output;
-  let text = "";
-  let sawUnhandled = false;
-  for (const item of output) {
-    if (!item || typeof item !== "object") {
-      sawUnhandled = true;
-      continue;
-    }
-    const record = item as Record<string, unknown>;
-    if (isReplyReasoning(record)) continue;
-    if (typeof record.text === "string") {
-      text += record.text;
-      continue;
-    }
-    if (typeof record.content === "string") {
-      text += record.content;
-      continue;
-    }
-    if (Array.isArray(record.content)) {
-      const fromParts = textFromContentParts(record.content);
-      if (fromParts !== undefined) {
-        text += fromParts;
-        continue;
-      }
-    }
-    sawUnhandled = true;
-  }
-  if (text) return text;
-  // Reasoning-only output must not fall back to the raw item array.
-  if (!sawUnhandled && output.length > 0) return "";
-  return output;
 }
 
 function spanName(data: OpenAIAgentsSpanData): string {

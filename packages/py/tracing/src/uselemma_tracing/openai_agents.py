@@ -11,7 +11,7 @@ from .debug_mode import _lemma_debug
 from .error_message import describe_error
 from .model import pick_model_identity
 from .openai_agents_generation import generation_snapshot, reply_from_response
-from .reply_text import is_reply_reasoning, read_content_reply
+from .reply_text import generation_output
 from .tool_result import tool_result_error
 
 _LIVE_SPAN_DATA_KEYS = (
@@ -145,45 +145,6 @@ def _root_trace_input(input_value: Any) -> Any:
     return _message_content(input_value[-1])
 
 
-def _text_from_content_parts(content: Any) -> str | None:
-    """Text parts of a chat or Responses content list. Reasoning parts are skipped."""
-    if isinstance(content, str):
-        return content
-    reply = read_content_reply(content)
-    if reply is None or not reply[1]:
-        return None
-    return "".join(reply[0])
-
-
-def _generation_output(output: Any) -> Any:
-    if not isinstance(output, list):
-        return output
-    text = ""
-    saw_unhandled = False
-    for item in output:
-        if not isinstance(item, dict):
-            saw_unhandled = True
-            continue
-        if is_reply_reasoning(item):
-            continue
-        if isinstance(item.get("text"), str):
-            text += item["text"]
-            continue
-        if isinstance(item.get("content"), str):
-            text += item["content"]
-            continue
-        if isinstance(item.get("content"), list):
-            from_parts = _text_from_content_parts(item.get("content"))
-            if from_parts is not None:
-                text += from_parts
-                continue
-        saw_unhandled = True
-    if text:
-        return text
-    # Reasoning-only output must not fall back to the raw item array.
-    if not saw_unhandled and output:
-        return ""
-    return output
 
 
 def _span_name(data: dict[str, Any]) -> str:
@@ -523,12 +484,12 @@ class LemmaOpenAIAgentsProcessor:
         )
         # Parse outputs for soft-error detection even when payloads are not recorded.
         if span_type == "generation":
-            raw_output = _generation_output(data.get("output"))
+            raw_output = generation_output(data.get("output"))
         elif span_type == "response":
             raw_output = reply_from_response(
                 data,
                 None if snapshot is None else snapshot["response"],
-                _generation_output,
+                generation_output,
             )
         else:
             raw_output = _parse_maybe_json(
