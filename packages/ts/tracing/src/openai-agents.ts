@@ -123,18 +123,68 @@ function rootTraceInput(input: unknown): unknown {
   return messageContent(input[input.length - 1]);
 }
 
+function isReasoningItem(record: Record<string, unknown>): boolean {
+  return (
+    record.type === "reasoning" || typeof record.encrypted_content === "string"
+  );
+}
+
+/** Text parts of a chat or Responses content list. Reasoning parts are skipped. */
+function textFromContentParts(content: unknown): string | undefined {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return undefined;
+  let text = "";
+  let sawPart = false;
+  for (const part of content) {
+    if (!part || typeof part !== "object") continue;
+    const record = part as Record<string, unknown>;
+    if (isReasoningItem(record)) {
+      sawPart = true;
+      continue;
+    }
+    if (
+      (record.type === "output_text" || record.type === "text") &&
+      typeof record.text === "string"
+    ) {
+      text += record.text;
+      sawPart = true;
+    }
+  }
+  return sawPart ? text : undefined;
+}
+
 function textFromGenerationOutput(output: unknown) {
   if (!Array.isArray(output)) return output;
-  const text = output
-    .map((item) => {
-      if (!item || typeof item !== "object") return "";
-      const record = item as Record<string, unknown>;
-      if (typeof record["text"] === "string") return record["text"];
-      if (typeof record["content"] === "string") return record["content"];
-      return "";
-    })
-    .join("");
-  return text || output;
+  let text = "";
+  let sawUnhandled = false;
+  for (const item of output) {
+    if (!item || typeof item !== "object") {
+      sawUnhandled = true;
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    if (isReasoningItem(record)) continue;
+    if (typeof record.text === "string") {
+      text += record.text;
+      continue;
+    }
+    if (typeof record.content === "string") {
+      text += record.content;
+      continue;
+    }
+    if (Array.isArray(record.content)) {
+      const fromParts = textFromContentParts(record.content);
+      if (fromParts !== undefined) {
+        text += fromParts;
+        continue;
+      }
+    }
+    sawUnhandled = true;
+  }
+  if (text) return text;
+  // Reasoning-only output must not fall back to the raw item array.
+  if (!sawUnhandled && output.length > 0) return "";
+  return output;
 }
 
 function spanName(data: OpenAIAgentsSpanData): string {

@@ -144,15 +144,61 @@ def _root_trace_input(input_value: Any) -> Any:
     return _message_content(input_value[-1])
 
 
+def _is_reasoning_item(record: dict[str, Any]) -> bool:
+    return record.get("type") == "reasoning" or isinstance(
+        record.get("encrypted_content"), str
+    )
+
+
+def _text_from_content_parts(content: Any) -> str | None:
+    """Text parts of a chat or Responses content list. Reasoning parts are skipped."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return None
+    text = ""
+    saw_part = False
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        if _is_reasoning_item(part):
+            saw_part = True
+            continue
+        if part.get("type") in {"output_text", "text"} and isinstance(part.get("text"), str):
+            text += part["text"]
+            saw_part = True
+    return text if saw_part else None
+
+
 def _generation_output(output: Any) -> Any:
     if not isinstance(output, list):
         return output
-    text = "".join(
-        str(item.get("text") or item.get("content") or "")
-        for item in output
-        if isinstance(item, dict)
-    )
-    return text or output
+    text = ""
+    saw_unhandled = False
+    for item in output:
+        if not isinstance(item, dict):
+            saw_unhandled = True
+            continue
+        if _is_reasoning_item(item):
+            continue
+        if isinstance(item.get("text"), str):
+            text += item["text"]
+            continue
+        if isinstance(item.get("content"), str):
+            text += item["content"]
+            continue
+        if isinstance(item.get("content"), list):
+            from_parts = _text_from_content_parts(item.get("content"))
+            if from_parts is not None:
+                text += from_parts
+                continue
+        saw_unhandled = True
+    if text:
+        return text
+    # Reasoning-only output must not fall back to the raw item array.
+    if not saw_unhandled and output:
+        return ""
+    return output
 
 
 def _span_name(data: dict[str, Any]) -> str:
