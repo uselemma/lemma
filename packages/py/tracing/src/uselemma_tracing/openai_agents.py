@@ -465,12 +465,6 @@ class LemmaOpenAIAgentsProcessor:
                 **common,
                 model=pick_model_identity(data),
                 llm_provider="openai",
-                # Streamed response spans fill `_response` after start.
-                **(
-                    {}
-                    if span_type == "response"
-                    else generation_snapshot(data, input_value)["fields"]
-                ),
             )
         if span_type == "function":
             return stored.context.start_tool(

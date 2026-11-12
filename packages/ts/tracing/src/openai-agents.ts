@@ -358,10 +358,6 @@ export function openAIAgents(
         ...base,
         model: pickModelIdentity(data),
         llmProvider: "openai",
-        // Streamed response spans fill `_response` after start.
-        ...(data.type === "response"
-          ? {}
-          : generationSnapshot(data, input).fields),
       });
     }
 
