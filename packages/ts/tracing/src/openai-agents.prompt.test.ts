@@ -80,4 +80,49 @@ describe("openAIAgents prompt snapshot", () => {
     );
     expect(span.attributes["openai.agents.span_data"]).not.toContain(reply);
   });
+
+  it("omits live response input from the span snapshot", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+    const prompt = "LIVE-INPUT-once-history";
+    const reply = "LIVE-OUTPUT-once";
+
+    await processor.onTraceStart({
+      traceId: "trace_live_input",
+      name: "support-agent",
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_live_input",
+      spanId: "span_live",
+      spanData: {
+        type: "response",
+        input: [{ role: "user", content: prompt }],
+        response: {
+          model: "gpt-4.1",
+          output_text: reply,
+          output: [{ type: "message", content: reply }],
+        },
+      },
+    });
+    await processor.onTraceEnd({
+      traceId: "trace_live_input",
+      name: "support-agent",
+    });
+    await processor.forceFlush();
+
+    const span = jsonBody(fetchMock.mock.calls[0]).trace.spans[0];
+    const spanData = JSON.parse(span.attributes["openai.agents.span_data"]);
+    expect(span.input).toEqual([{ role: "user", content: prompt }]);
+    expect(span.output).toBe(reply);
+    expect(spanData.input).toBeUndefined();
+    expect(spanData.output).toBeUndefined();
+    expect(spanData.response.model).toBe("gpt-4.1");
+    expect(spanData.response.output).toBeUndefined();
+    expect(span.attributes["openai.agents.span_data"]).not.toContain(prompt);
+    expect(span.attributes["openai.agents.span_data"]).not.toContain(reply);
+  });
 });

@@ -15,7 +15,11 @@ from .openai_agents_containers import (
     is_container_type,
     propagate_generation_io,
 )
-from .openai_agents_generation import generation_snapshot, reply_from_response
+from .openai_agents_generation import (
+    as_response_dict as _as_response_dict,
+    generation_snapshot,
+    reply_from_response,
+)
 from .reply_text import generation_output
 from .tool_result import tool_result_error
 
@@ -180,30 +184,18 @@ def _span_name(data: dict[str, Any]) -> str:
 _RESPONSE_BODY_KEYS = ("output", "output_text", "instructions", "input")
 
 
-def _mapping_copy(value: Any) -> dict[str, Any] | None:
-    if isinstance(value, dict):
-        return dict(value)
-    model_dump = getattr(value, "model_dump", None)
-    if callable(model_dump):
-        try:
-            dumped = model_dump()
-        except Exception:
-            return None
-        if isinstance(dumped, dict):
-            return dumped
-    return None
-
-
 def _span_data_for_attribute(data: dict[str, Any]) -> dict[str, Any]:
     """Drop message bodies already stored on the span input and output."""
     copy = dict(data)
     copy.pop("_input", None)
+    if copy.get("type") == "response":
+        copy.pop("input", None)
+        copy.pop("output", None)
     for key in ("response", "_response"):
         if key not in copy:
             continue
-        response_copy = _mapping_copy(copy.get(key))
+        response_copy = _as_response_dict(copy.get(key))
         if response_copy is None:
-            copy.pop(key, None)
             continue
         for body_key in _RESPONSE_BODY_KEYS:
             response_copy.pop(body_key, None)

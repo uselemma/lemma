@@ -81,3 +81,48 @@ def test_openai_agents_span_data_omits_prompt_bodies():
     assert prompt not in raw
     assert instructions not in raw
     assert reply not in raw
+
+
+def test_openai_agents_live_response_input_is_omitted_from_span_data():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    class LiveResponse:
+        model = "gpt-4.1"
+        instructions = "LIVE-SYSTEM-once"
+        output = [{"type": "message", "content": "LIVE-OUTPUT-once"}]
+        tools = [{"type": "function", "name": "lookup_order"}]
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+    prompt = "LIVE-INPUT-once-history"
+    processor.on_trace_start(FakeTrace(trace_id="trace_live_input", name="support-agent"))
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_live_input",
+            span_id="span_live",
+            span_data={
+                "type": "response",
+                "input": [{"role": "user", "content": prompt}],
+                "response": LiveResponse(),
+            },
+        )
+    )
+    processor.on_trace_end(FakeTrace(trace_id="trace_live_input", name="support-agent"))
+
+    span = calls[0]["trace"]["spans"][0]
+    span_data = json.loads(span["attributes"]["openai.agents.span_data"])
+    assert span["input"] == [{"role": "user", "content": prompt}]
+    assert span["output"] == "LIVE-OUTPUT-once"
+    assert "input" not in span_data
+    assert span_data["response"]["model"] == "gpt-4.1"
+    assert span_data["response"]["tools"] == [{"type": "function", "name": "lookup_order"}]
+    assert "output" not in span_data["response"]
+    assert "instructions" not in span_data["response"]
+    raw = span["attributes"]["openai.agents.span_data"]
+    assert prompt not in raw
+    assert "LIVE-OUTPUT-once" not in raw
+    assert "LIVE-SYSTEM-once" not in raw
