@@ -9,17 +9,25 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
-<Update label="November 11, 2026" tags={["Improvements", "Bug fixes", "[API]", "[MCP]", "[Artifacts]", "[Billing]"]} rss={{ title: "Paged reads include the next call, and writes omit version checks" }}>
+<Update label="November 11, 2026" tags={["Improvements", "Bug fixes", "[API]", "[Issues]", "[MCP]", "[Artifacts]", "[Billing]"]} rss={{ title: "Paged reads include the next call, and writes omit version checks" }}>
 
   ## API
 
-  - **Next page:** An unfinished page returns `next_request` with the operation and the arguments for the next page. Call that operation with those arguments until `next_request` is null. The page keeps the filters, window, and sections you already sent. Those reads are `query_traces`, `get_trace`, `get_trace_thread`, `list_issues`, `read_issues`, `list_issue_occurrences`, `list_issue_dismissal_reasons`, `get_monitor`, `list_monitors`, `read_project_artifact`, `get_project_capabilities`, `list_audit_events`, `list_slack_deliveries`, `list_traces`, and `search_trace_evidence`. `list_monitor_traces` continues through `get_monitor`. `next_cursor` still continues a page when you repeat the other arguments. `next_page` alone is not the next call. REST and MCP return the same object.
-  - **Issue writes:** Leave `expected_updated_at` out of `update_issue_metadata` and `transition_issues`. The API rejects that field. Keep the idempotency key. A change since your last read does not reject the write.
-  - **Artifact writes:** Leave `expected_content_sha256` out of an uploaded-artifact update, and leave `expected_latest_version` out of an Agent understanding write. The API rejects either field. Read the stored text back to see what landed. An anchored edit still has to match the current text.
+  - **Next request:** An unfinished page returns `next_request` with the operation and the arguments for the next page. Call that operation with those arguments until `next_request` is null. The page keeps the filters, window, and sections you already sent. REST and MCP return the same object.
+  - **Older cursors:** `next_cursor` still continues a page when you repeat the other arguments. `next_page` alone is not the next call.
+  - **Paged reads:** Trace, issue, monitor, artifact, audit log, and Slack delivery reads return `next_request`. `list_monitor_traces` continues through `get_monitor`. The operation list is in the [API Reference](/api-reference).
+  - **Artifact writes:** Leave `expected_content_sha256` out of an uploaded-artifact update, and leave `expected_latest_version` out of an Agent understanding write. REST and MCP reject either field. Read the stored text back to see what landed. An anchored edit still has to match the current text.
+
+  ## Issues
+
+  - **Issue writes:** Leave `expected_updated_at` out of `update_issue_metadata` and `transition_issues`. REST and MCP reject that field. Keep the idempotency key. A change since your last read does not reject the write.
 
   ## MCP
 
-  - **Selection guide:** `lemma://tool-selection-guide` names one canonical operation for each intent. Each entry says what the call returns, what a write changes, how to retry, and which older tool it replaces. The resolve example cites a release. Put a pull request in `fix_references` on `update_issue_metadata`. A pull request alone does not resolve an issue.
+  - **Selection guide:** `lemma://tool-selection-guide` names one canonical operation for each intent. Each entry says what the call returns, what a write changes, how to retry, and which older tool it replaces.
+  - **Resolve example:** The resolve example cites a release.
+  - **Fix references:** Put a pull request in `fix_references` on `update_issue_metadata`.
+  - **Resolve evidence:** A pull request alone does not resolve an issue.
 
   ## Artifacts
 
