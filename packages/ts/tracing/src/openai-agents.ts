@@ -158,6 +158,10 @@ function spanDataForAttribute(
 ): OpenAIAgentsSpanData {
   const copy: OpenAIAgentsSpanData = { ...data };
   delete copy._input;
+  if (copy.type === "response") {
+    delete copy.input;
+    delete copy.output;
+  }
   for (const key of ["response", "_response"] as const) {
     const response = copy[key];
     if (!response || typeof response !== "object" || Array.isArray(response)) {
