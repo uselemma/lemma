@@ -145,6 +145,31 @@ function spanName(data: OpenAIAgentsSpanData): string {
   return `openai-agents-${data.type || "span"}`;
 }
 
+const RESPONSE_BODY_KEYS = [
+  "output",
+  "output_text",
+  "instructions",
+  "input",
+] as const;
+
+/** Drop message bodies already stored on the span input and output. */
+function spanDataForAttribute(
+  data: OpenAIAgentsSpanData,
+): OpenAIAgentsSpanData {
+  const copy: OpenAIAgentsSpanData = { ...data };
+  delete copy._input;
+  for (const key of ["response", "_response"] as const) {
+    const response = copy[key];
+    if (!response || typeof response !== "object" || Array.isArray(response)) {
+      continue;
+    }
+    const responseCopy = { ...(response as Record<string, unknown>) };
+    for (const bodyKey of RESPONSE_BODY_KEYS) delete responseCopy[bodyKey];
+    copy[key] = responseCopy;
+  }
+  return copy;
+}
+
 function openAIAttributes(span: OpenAIAgentsSpan): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries({
@@ -156,7 +181,9 @@ function openAIAttributes(span: OpenAIAgentsSpan): Record<string, unknown> {
       "openai.agents.trace_metadata": span.traceMetadata
         ? JSON.stringify(span.traceMetadata)
         : undefined,
-      "openai.agents.span_data": JSON.stringify(span.spanData),
+      "openai.agents.span_data": JSON.stringify(
+        spanDataForAttribute(span.spanData),
+      ),
     }).filter(([, value]) => value !== undefined && value !== null),
   );
 }
