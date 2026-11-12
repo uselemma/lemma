@@ -30,8 +30,9 @@ meta:
 
   ## Artifacts
 
-  - **Uploaded artifact writes:** Leave `expected_content_sha256` out of an uploaded-artifact update. REST and MCP reject that field. Read the stored text back to see what landed. An anchored edit still has to match the current text.
-  - **Understanding writes:** Leave `expected_latest_version` out of an Agent understanding write. REST and MCP reject that field. Read the stored text back to see what landed. An anchored edit still has to match the current text.
+  - **Uploaded artifact writes:** Leave `expected_content_sha256` out of an uploaded-artifact update. REST and MCP reject that field.
+  - **Understanding writes:** Leave `expected_latest_version` out of an Agent understanding write. REST and MCP reject that field.
+  - **Stored text:** Read the stored text back to see what landed. An anchored edit still has to match the current text.
   - **Unavailable:** When an agent’s knowledge content isn’t available to read, [Artifacts](/platform/artifacts) shows **Content unavailable** and **Refresh**. It doesn’t open the page error.
 
   ## Billing
