@@ -190,6 +190,21 @@ function isGenerationType(type: string) {
   return type === "generation" || type === "response";
 }
 
+function isContainerType(type: string) {
+  return type === "agent" || type === "task" || type === "turn";
+}
+
+type SpanRecord = {
+  handle: SpanHandle;
+  traceId: string;
+  type: string;
+  parentId?: string | null;
+  childInput?: unknown;
+  childOutput?: unknown;
+  childInputSet: boolean;
+  childOutputSet: boolean;
+};
+
 function isTerminalFailureType(type: string) {
   return (
     type === "agent" ||
@@ -212,9 +227,9 @@ export function openAIAgents(
       release: options.release,
     });
   const traces = new Map<string, StoredTrace>();
-  const spans = new Map<string, { handle: SpanHandle; traceId: string }>();
+  const spans = new Map<string, SpanRecord>();
   /** Ended handles kept only until their trace finalizes (for parent extend). */
-  const endedSpans = new Map<string, { handle: SpanHandle; traceId: string }>();
+  const endedSpans = new Map<string, SpanRecord>();
   const pending = new Set<Promise<void>>();
 
   function recordResult(result: unknown): number {
@@ -316,6 +331,42 @@ export function openAIAgents(
     return stored;
   }
 
+  function blankRecord(span: OpenAIAgentsSpan, handle: SpanHandle): SpanRecord {
+    return {
+      handle,
+      traceId: span.traceId,
+      type: span.spanData.type,
+      parentId: span.parentId,
+      childInputSet: false,
+      childOutputSet: false,
+    };
+  }
+
+  function bubbleChildIo(
+    span: OpenAIAgentsSpan,
+    input: unknown,
+    output: unknown,
+  ) {
+    let parentId = span.parentId ?? null;
+    const seen = new Set<string>();
+    while (parentId && !seen.has(parentId)) {
+      seen.add(parentId);
+      const parent = spans.get(parentId) ?? endedSpans.get(parentId);
+      if (!parent) break;
+      if (isContainerType(parent.type)) {
+        if (!parent.childInputSet && input != null) {
+          parent.childInput = input;
+          parent.childInputSet = true;
+        }
+        if (output !== undefined) {
+          parent.childOutput = output;
+          parent.childOutputSet = true;
+        }
+      }
+      parentId = parent.parentId ?? null;
+    }
+  }
+
   function startSpan(span: OpenAIAgentsSpan): SpanHandle | undefined {
     const trace = traces.get(span.traceId);
     if (!trace) return undefined;
@@ -360,8 +411,10 @@ export function openAIAgents(
 
   function endSpan(span: OpenAIAgentsSpan) {
     const storedTrace = traces.get(span.traceId);
-    const handle = spans.get(span.spanId)?.handle ?? startSpan(span);
+    const existing = spans.get(span.spanId);
+    const handle = existing?.handle ?? startSpan(span);
     if (!handle || !storedTrace) return;
+    const record = existing ?? blankRecord(span, handle);
     spans.delete(span.spanId);
 
     applyIdentity(storedTrace, undefined, span.traceMetadata);
@@ -408,16 +461,27 @@ export function openAIAgents(
       noteRootOutput(storedTrace, parsedOutput);
     }
 
+    let endedInput = input;
+    let endedOutput = parsedOutput;
+    if (isContainerType(data.type)) {
+      if (endedInput == null && record.childInputSet) {
+        endedInput = record.childInput;
+      }
+      if (data["output"] == null && !errorMessage && record.childOutputSet) {
+        endedOutput = record.childOutput;
+      }
+    }
+
     const messages = snapshot?.outputMessages;
     handle.end({
       // The Agents SDK fills spanData.input after onSpanStart (tool arguments,
       // generation messages), so re-read it here. Skip an absent input so it
       // can't erase one captured at start.
-      ...(input != null ? { input } : {}),
+      ...(endedInput != null ? { input: endedInput } : {}),
       ...(snapshot ? snapshot.fields : {}),
       attributes: openAIAttributes(span),
       // Failures must not invent an output — record error instead.
-      output: parsedOutput,
+      output: endedOutput,
       error: errorMessage,
       status: errorMessage ? "ERROR" : undefined,
       model: pickModelIdentity(data),
@@ -426,7 +490,10 @@ export function openAIAgents(
       ...(errorMessage || !messages ? {} : { llmOutputMessages: messages }),
       usage: snapshot?.usage,
     });
-    endedSpans.set(span.spanId, { handle, traceId: span.traceId });
+    if (isGenerationType(data.type)) {
+      bubbleChildIo(span, input, parsedOutput);
+    }
+    endedSpans.set(span.spanId, record);
 
     // Tools that finish after their parent generation must not outlast it.
     if (span.parentId && data.type === "function") {
@@ -514,7 +581,7 @@ export function openAIAgents(
       // Repair missing parents only when the owning trace is already known.
       if (!traces.has(span.traceId)) return;
       const handle = startSpan(span);
-      if (handle) spans.set(span.spanId, { handle, traceId: span.traceId });
+      if (handle) spans.set(span.spanId, blankRecord(span, handle));
     },
     onSpanEnd: async (span) => {
       if (!traces.has(span.traceId)) return;
