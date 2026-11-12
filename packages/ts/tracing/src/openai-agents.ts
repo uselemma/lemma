@@ -203,6 +203,7 @@ type SpanRecord = {
   childOutput?: unknown;
   childInputSet: boolean;
   childOutputSet: boolean;
+  ownOutput: boolean;
 };
 
 function isTerminalFailureType(type: string) {
@@ -339,6 +340,7 @@ export function openAIAgents(
       parentId: span.parentId,
       childInputSet: false,
       childOutputSet: false,
+      ownOutput: false,
     };
   }
 
@@ -361,6 +363,13 @@ export function openAIAgents(
         if (output !== undefined) {
           parent.childOutput = output;
           parent.childOutputSet = true;
+        }
+        if (endedSpans.has(parentId)) {
+          parent.handle.fillContainerIo(
+            parent.childInputSet ? parent.childInput : undefined,
+            parent.childOutputSet ? parent.childOutput : undefined,
+            parent.ownOutput,
+          );
         }
       }
       parentId = parent.parentId ?? null;
@@ -464,10 +473,11 @@ export function openAIAgents(
     let endedInput = input;
     let endedOutput = parsedOutput;
     if (isContainerType(data.type)) {
+      record.ownOutput = data["output"] != null;
       if (endedInput == null && record.childInputSet) {
         endedInput = record.childInput;
       }
-      if (data["output"] == null && !errorMessage && record.childOutputSet) {
+      if (!record.ownOutput && !errorMessage && record.childOutputSet) {
         endedOutput = record.childOutput;
       }
     }

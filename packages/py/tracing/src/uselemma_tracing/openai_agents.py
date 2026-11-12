@@ -43,6 +43,19 @@ class _StoredTrace:
     _has_root_input: bool = False
 
 
+@dataclass
+class _SpanRecord:
+    handle: SpanHandle
+    trace_id: str
+    type: str | None
+    parent_id: str | None
+    child_input: Any = None
+    child_output: Any = None
+    child_input_set: bool = False
+    child_output_set: bool = False
+    own_output: bool = False
+
+
 def _get(obj: Any, name: str, default: Any = None) -> Any:
     if isinstance(obj, dict):
         return obj.get(name, default)
@@ -243,10 +256,9 @@ class LemmaOpenAIAgentsProcessor:
         self.thread_id_key = thread_id_key
         self.user_id_key = user_id_key
         self._traces: dict[str, _StoredTrace] = {}
-        self._spans: dict[str, SpanHandle] = {}
+        self._spans: dict[str, _SpanRecord] = {}
         self._span_trace_ids: dict[str, str] = {}
-        self._span_meta: dict[str, dict[str, Any]] = {}
-        self._ended_spans: dict[str, SpanHandle] = {}
+        self._ended_spans: dict[str, _SpanRecord] = {}
         self._lock = threading.RLock()
 
     def on_trace_start(self, trace: Any) -> None:
@@ -276,21 +288,20 @@ class LemmaOpenAIAgentsProcessor:
                 return
             handle = self._start_span(span)
             if handle is not None:
-                span_id = _get(span, "span_id")
-                self._spans[span_id] = handle
-                self._span_trace_ids[span_id] = _get(span, "trace_id")
-                self._remember_span(span)
+                self._track_span(span, handle)
 
     def on_span_end(self, span: Any) -> None:
         with self._lock:
             if _get(span, "trace_id") not in self._traces:
                 return
             span_id = _get(span, "span_id")
-            handle = self._spans.pop(span_id, None) or self._start_span(span)
-            if handle is None:
-                return
-            meta = self._span_meta.get(span_id) or self._remember_span(span)
-            self._end_span(handle, span, meta)
+            record = self._spans.pop(span_id, None)
+            if record is None:
+                handle = self._start_span(span)
+                if handle is None:
+                    return
+                record = self._new_record(span, handle)
+            self._end_span(record.handle, span, record)
 
     def shutdown(self) -> None:
         self.force_flush()
@@ -376,7 +387,6 @@ class LemmaOpenAIAgentsProcessor:
             self._span_trace_ids.pop(span_id, None)
             self._spans.pop(span_id, None)
             self._ended_spans.pop(span_id, None)
-            self._span_meta.pop(span_id, None)
 
     def _finalize(self, trace_id: str, stored: _StoredTrace) -> None:
         self._traces.pop(trace_id, None)
@@ -473,42 +483,52 @@ class LemmaOpenAIAgentsProcessor:
             )
         return stored.context.start_span(**common)
 
-    def _remember_span(self, span: Any) -> dict[str, Any]:
-        span_id = _get(span, "span_id")
-        existing = self._span_meta.get(span_id)
-        if existing is not None:
-            return existing
+    def _new_record(self, span: Any, handle: SpanHandle) -> _SpanRecord:
         data = _span_data(span)
-        meta = {
-            "type": data.get("type"),
-            "parent_id": _get(span, "parent_id"),
-            "child_input_set": False,
-            "child_output_set": False,
-            "child_input": None,
-            "child_output": None,
-        }
+        return _SpanRecord(
+            handle=handle,
+            trace_id=_get(span, "trace_id"),
+            type=data.get("type"),
+            parent_id=_get(span, "parent_id"),
+        )
+
+    def _track_span(self, span: Any, handle: SpanHandle) -> _SpanRecord:
+        span_id = _get(span, "span_id")
+        record = self._spans.get(span_id) or self._new_record(span, handle)
         if span_id is not None:
-            self._span_meta[span_id] = meta
-        return meta
+            self._spans[span_id] = record
+            self._span_trace_ids[span_id] = _get(span, "trace_id")
+        return record
+
+    def _patch_ended_container(self, record: _SpanRecord) -> None:
+        payload = record.handle.payload
+        if payload is None:
+            return
+        if payload.get("input") is None and record.child_input_set:
+            payload["input"] = record.child_input
+        if not record.own_output and record.child_output_set:
+            payload["output"] = record.child_output
 
     def _bubble_child_io(self, span: Any, input_value: Any, output: Any) -> None:
         parent_id = _get(span, "parent_id")
         seen: set[str] = set()
         while parent_id and parent_id not in seen:
             seen.add(parent_id)
-            parent = self._span_meta.get(parent_id)
+            parent = self._spans.get(parent_id) or self._ended_spans.get(parent_id)
             if parent is None:
                 break
-            if _is_container_type(parent.get("type")):
-                if not parent["child_input_set"] and input_value is not None:
-                    parent["child_input"] = input_value
-                    parent["child_input_set"] = True
+            if _is_container_type(parent.type):
+                if not parent.child_input_set and input_value is not None:
+                    parent.child_input = input_value
+                    parent.child_input_set = True
                 if output is not None:
-                    parent["child_output"] = output
-                    parent["child_output_set"] = True
-            parent_id = parent.get("parent_id")
+                    parent.child_output = output
+                    parent.child_output_set = True
+                if parent_id in self._ended_spans:
+                    self._patch_ended_container(parent)
+            parent_id = parent.parent_id
 
-    def _end_span(self, handle: SpanHandle, span: Any, meta: dict[str, Any]) -> None:
+    def _end_span(self, handle: SpanHandle, span: Any, meta: _SpanRecord) -> None:
         stored = self._stored_for_span(span)
         if stored is None:
             return
@@ -565,14 +585,11 @@ class LemmaOpenAIAgentsProcessor:
         ended_input = input_value
         ended_output = output
         if _is_container_type(span_type):
-            if ended_input is None and meta.get("child_input_set"):
-                ended_input = meta.get("child_input")
-            if (
-                data.get("output") is None
-                and not error_message
-                and meta.get("child_output_set")
-            ):
-                ended_output = meta.get("child_output")
+            meta.own_output = data.get("output") is not None
+            if ended_input is None and meta.child_input_set:
+                ended_input = meta.child_input
+            if not meta.own_output and not error_message and meta.child_output_set:
+                ended_output = meta.child_output
 
         # Prefer the original string timestamp so payload ISO matches the SDK.
         ended_at_value = raw_ended_at if raw_ended_at is not None else span_ended_at
@@ -607,14 +624,14 @@ class LemmaOpenAIAgentsProcessor:
             self._bubble_child_io(span, input_value, output)
         span_id = _get(span, "span_id")
         if span_id is not None:
-            self._ended_spans[span_id] = handle
+            self._ended_spans[span_id] = meta
             self._span_trace_ids[span_id] = _get(span, "trace_id")
 
         parent_id = _get(span, "parent_id")
         if parent_id and span_type == "function":
             parent = self._spans.get(parent_id) or self._ended_spans.get(parent_id)
             if parent is not None:
-                parent.ensure_ended_at(ended_at_value)
+                parent.handle.ensure_ended_at(ended_at_value)
 
 
 def openai_agents(

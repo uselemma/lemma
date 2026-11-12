@@ -175,3 +175,46 @@ def test_openai_agents_agent_keeps_its_own_input():
     agent = next(span for span in calls[0]["trace"]["spans"] if span["id"] == "span_agent")
     assert agent["input"] == "owned"
     assert agent["output"] == "child reply"
+
+
+def test_openai_agents_agent_span_fills_when_generation_ends_later():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_late_child", name="agent"))
+    processor.on_span_start(
+        FakeSpan(
+            trace_id="trace_late_child",
+            span_id="span_agent",
+            span_data={"type": "agent", "name": "agent"},
+        )
+    )
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_late_child",
+            span_id="span_agent",
+            span_data={"type": "agent", "name": "agent"},
+        )
+    )
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_late_child",
+            span_id="span_gen",
+            parent_id="span_agent",
+            span_data={
+                "type": "generation",
+                "input": "late ask",
+                "output": [{"role": "assistant", "content": "late reply"}],
+            },
+        )
+    )
+    processor.on_trace_end(FakeTrace(trace_id="trace_late_child", name="agent"))
+
+    agent = next(span for span in calls[0]["trace"]["spans"] if span["id"] == "span_agent")
+    assert agent["input"] == "late ask"
+    assert agent["output"] == "late reply"

@@ -153,4 +153,45 @@ describe("openAIAgents container spans", () => {
     );
     expect(agent).toMatchObject({ input: "owned", output: "child reply" });
   });
+
+  it("fills an agent span when its model call ends afterward", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await processor.onTraceStart({
+      traceId: "trace_late_child",
+      name: "agent",
+    });
+    await processor.onSpanStart({
+      traceId: "trace_late_child",
+      spanId: "span_agent",
+      spanData: { type: "agent", name: "agent" },
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_late_child",
+      spanId: "span_agent",
+      spanData: { type: "agent", name: "agent" },
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_late_child",
+      spanId: "span_gen",
+      parentId: "span_agent",
+      spanData: {
+        type: "generation",
+        input: "late ask",
+        output: [{ role: "assistant", content: "late reply" }],
+      },
+    });
+    await processor.onTraceEnd({ traceId: "trace_late_child", name: "agent" });
+    await processor.forceFlush();
+
+    const agent = jsonBody(fetchMock.mock.calls[0]).trace.spans.find(
+      (span: { id?: string }) => span.id === "span_agent",
+    );
+    expect(agent).toMatchObject({ input: "late ask", output: "late reply" });
+  });
 });
