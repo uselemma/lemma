@@ -134,18 +134,28 @@ function textFromGenerationOutput(output: unknown) {
   return text || output;
 }
 
-function responseOutput(data: OpenAIAgentsSpanData): unknown {
+function responseRecord(
+  data: OpenAIAgentsSpanData,
+): Record<string, unknown> | undefined {
   const response = data["response"] ?? data["_response"];
-  if (response == null) {
-    return textFromGenerationOutput(data["output"]);
+  if (!response || typeof response !== "object" || Array.isArray(response)) {
+    return undefined;
   }
-  if (typeof response === "object" && response !== null) {
-    const record = response as Record<string, unknown>;
-    if (typeof record.output_text === "string") return record.output_text;
-    if (Array.isArray(record.output)) {
-      return textFromGenerationOutput(record.output);
-    }
-    return response;
+  return response as Record<string, unknown>;
+}
+
+function responseOutput(
+  data: OpenAIAgentsSpanData,
+  response: Record<string, unknown> | undefined = responseRecord(data),
+): unknown {
+  if (!response) {
+    const raw = data["response"] ?? data["_response"];
+    if (raw == null) return textFromGenerationOutput(data["output"]);
+    return raw;
+  }
+  if (typeof response.output_text === "string") return response.output_text;
+  if (Array.isArray(response.output)) {
+    return textFromGenerationOutput(response.output);
   }
   return response;
 }
@@ -163,16 +173,6 @@ const RESPONSE_SETTING_KEYS = [
   "service_tier",
 ] as const;
 
-function responseRecord(
-  data: OpenAIAgentsSpanData,
-): Record<string, unknown> | undefined {
-  const response = data["response"] ?? data["_response"];
-  if (!response || typeof response !== "object" || Array.isArray(response)) {
-    return undefined;
-  }
-  return response as Record<string, unknown>;
-}
-
 function instructionsText(value: unknown): string | undefined {
   return typeof value === "string" && value ? value : undefined;
 }
@@ -188,9 +188,9 @@ function isSameSystemMessage(message: unknown, instructions: string): boolean {
 /** Prepend Responses `instructions` when the history has no matching system message. */
 function inputMessagesWithInstructions(
   input: unknown,
-  data: OpenAIAgentsSpanData,
+  response: Record<string, unknown> | undefined,
 ): unknown[] | undefined {
-  const instructions = instructionsText(responseRecord(data)?.instructions);
+  const instructions = instructionsText(response?.instructions);
   const messages = Array.isArray(input) ? (input as unknown[]) : undefined;
   if (!instructions) return messages;
   if (messages?.some((message) => isSameSystemMessage(message, instructions))) {
@@ -206,16 +206,20 @@ function inputMessagesWithInstructions(
   return [system, ...messages];
 }
 
-function generationTools(data: OpenAIAgentsSpanData): unknown {
-  const response = responseRecord(data);
+function generationTools(
+  data: OpenAIAgentsSpanData,
+  response: Record<string, unknown> | undefined,
+): unknown {
   if (response && response.tools != null) return response.tools;
   if (data["tools"] != null) return data["tools"];
   return undefined;
 }
 
-function invocationParameters(data: OpenAIAgentsSpanData): unknown {
+function invocationParameters(
+  data: OpenAIAgentsSpanData,
+  response: Record<string, unknown> | undefined,
+): unknown {
   if (data["model_config"] != null) return data["model_config"];
-  const response = responseRecord(data);
   if (!response) return undefined;
   const settings: Record<string, unknown> = {};
   for (const key of RESPONSE_SETTING_KEYS) {
@@ -225,12 +229,14 @@ function invocationParameters(data: OpenAIAgentsSpanData): unknown {
   return Object.keys(settings).length > 0 ? settings : undefined;
 }
 
-function outputMessages(data: OpenAIAgentsSpanData): unknown[] | undefined {
+function outputMessages(
+  data: OpenAIAgentsSpanData,
+  response: Record<string, unknown> | undefined,
+): unknown[] | undefined {
   if (!isGenerationType(data.type)) return undefined;
   if (data.type === "generation" && Array.isArray(data["output"])) {
     return data["output"] as unknown[];
   }
-  const response = responseRecord(data);
   if (response && Array.isArray(response.output)) {
     return response.output as unknown[];
   }
@@ -238,10 +244,14 @@ function outputMessages(data: OpenAIAgentsSpanData): unknown[] | undefined {
   return undefined;
 }
 
-function generationFields(data: OpenAIAgentsSpanData, input: unknown) {
-  const messages = inputMessagesWithInstructions(input, data);
-  const tools = generationTools(data);
-  const parameters = invocationParameters(data);
+function generationFields(
+  data: OpenAIAgentsSpanData,
+  input: unknown,
+  response: Record<string, unknown> | undefined = responseRecord(data),
+) {
+  const messages = inputMessagesWithInstructions(input, response);
+  const tools = generationTools(data, response);
+  const parameters = invocationParameters(data, response);
   return {
     ...(messages ? { llmInputMessages: messages } : {}),
     ...(parameters !== undefined
@@ -289,17 +299,14 @@ function openAIAttributes(span: OpenAIAgentsSpan): Record<string, unknown> {
 }
 
 /** Extract usage from spanData.usage or nested response.usage when present. */
-function generationUsage(data: OpenAIAgentsSpanData): TokenUsage | undefined {
+function generationUsage(
+  data: OpenAIAgentsSpanData,
+  response: Record<string, unknown> | undefined = responseRecord(data),
+): TokenUsage | undefined {
   const direct = normalizeTokenUsage(data["usage"]);
   if (direct) return direct;
-
-  const response = data["response"] ?? data["_response"];
-  if (response && typeof response === "object") {
-    const record = response as Record<string, unknown>;
-    const fromResponse = normalizeTokenUsage(record.usage);
-    if (fromResponse) return fromResponse;
-  }
-  return undefined;
+  if (!response) return undefined;
+  return normalizeTokenUsage(response.usage);
 }
 
 function coerceDate(value: string | Date | null | undefined): Date | undefined {
@@ -486,7 +493,8 @@ export function openAIAgents(
         ...base,
         model: pickModelIdentity(data),
         llmProvider: "openai",
-        ...generationFields(data, input),
+        // Streamed response spans fill `_response` after start.
+        ...(data.type === "response" ? {} : generationFields(data, input)),
       });
     }
 
@@ -513,12 +521,15 @@ export function openAIAgents(
       noteRootInput(storedTrace, input);
     }
 
+    const response = isGenerationType(data.type)
+      ? responseRecord(data)
+      : undefined;
     // Parse outputs for soft-error detection even when payloads are not recorded.
     let rawOutput: unknown;
     if (data.type === "generation") {
       rawOutput = textFromGenerationOutput(data["output"]);
     } else if (data.type === "response") {
-      rawOutput = responseOutput(data);
+      rawOutput = responseOutput(data, response);
     } else {
       rawOutput = parseMaybeJson(data["output"] ?? data["_response"]);
     }
@@ -543,13 +554,15 @@ export function openAIAgents(
       noteRootOutput(storedTrace, parsedOutput);
     }
 
-    const messages = outputMessages(data);
+    const messages = outputMessages(data, response);
     handle.end({
       // The Agents SDK fills spanData.input after onSpanStart (tool arguments,
       // generation messages), so re-read it here. Skip an absent input so it
       // can't erase one captured at start.
       ...(input != null ? { input } : {}),
-      ...(isGenerationType(data.type) ? generationFields(data, input) : {}),
+      ...(isGenerationType(data.type)
+        ? generationFields(data, input, response)
+        : {}),
       attributes: openAIAttributes(span),
       // Failures must not invent an output — record error instead.
       output: parsedOutput,
@@ -559,7 +572,9 @@ export function openAIAgents(
       endedAt: spanEndedAt,
       durationMs: durationMs(spanStartedAt, spanEndedAt),
       ...(errorMessage || !messages ? {} : { llmOutputMessages: messages }),
-      usage: isGenerationType(data.type) ? generationUsage(data) : undefined,
+      usage: isGenerationType(data.type)
+        ? generationUsage(data, response)
+        : undefined,
     });
     endedSpans.set(span.spanId, { handle, traceId: span.traceId });
 
