@@ -16,7 +16,6 @@ meta:
   - **Next request:** An unfinished page returns `next_request` with the operation and the arguments for the next page. Call that operation with those arguments until `next_request` is null. The page keeps the filters, window, and sections you already sent. REST and MCP return the same object.
   - **Older cursors:** `next_cursor` still continues a page when you repeat the other arguments. `next_page` alone is not the next call.
   - **Paged reads:** Trace, issue, monitor, artifact, audit log, and Slack delivery reads return `next_request`. `list_monitor_traces` continues through `get_monitor`. The operation list is in the [API Reference](/api-reference).
-  - **Artifact writes:** Leave `expected_content_sha256` out of an uploaded-artifact update, and leave `expected_latest_version` out of an Agent understanding write. REST and MCP reject either field. Read the stored text back to see what landed. An anchored edit still has to match the current text.
 
   ## Issues
 
@@ -31,6 +30,8 @@ meta:
 
   ## Artifacts
 
+  - **Uploaded artifact writes:** Leave `expected_content_sha256` out of an uploaded-artifact update. REST and MCP reject that field. Read the stored text back to see what landed. An anchored edit still has to match the current text.
+  - **Understanding writes:** Leave `expected_latest_version` out of an Agent understanding write. REST and MCP reject that field. Read the stored text back to see what landed. An anchored edit still has to match the current text.
   - **Unavailable:** When an agent’s knowledge content isn’t available to read, [Artifacts](/platform/artifacts) shows **Content unavailable** and **Refresh**. It doesn’t open the page error.
 
   ## Billing
