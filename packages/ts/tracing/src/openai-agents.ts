@@ -148,11 +148,7 @@ function responseOutput(
   data: OpenAIAgentsSpanData,
   response: Record<string, unknown> | undefined = responseRecord(data),
 ): unknown {
-  if (!response) {
-    const raw = data["response"] ?? data["_response"];
-    if (raw == null) return textFromGenerationOutput(data["output"]);
-    return raw;
-  }
+  if (!response) return textFromGenerationOutput(data["output"]);
   if (typeof response.output_text === "string") return response.output_text;
   if (Array.isArray(response.output)) {
     return textFromGenerationOutput(response.output);
@@ -185,25 +181,51 @@ function isSameSystemMessage(message: unknown, instructions: string): boolean {
   return record.role === "system" && record.content === instructions;
 }
 
-/** Prepend Responses `instructions` when the history has no matching system message. */
+const HISTORY_ITEM_ROLES: Record<string, string> = {
+  function_call: "assistant",
+  reasoning: "assistant",
+  function_call_result: "tool",
+  function_call_output: "tool",
+};
+
+/** Responses items omit role. Keep an existing role. */
+function withHistoryRole(message: unknown): unknown {
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    return message;
+  }
+  const record = message as Record<string, unknown>;
+  if (typeof record.role === "string" && record.role) return message;
+  const role =
+    typeof record.type === "string"
+      ? HISTORY_ITEM_ROLES[record.type]
+      : undefined;
+  if (!role) return message;
+  return { ...record, role };
+}
+
+function historyMessages(messages: unknown[]): unknown[] {
+  return messages.map(withHistoryRole);
+}
+
+/** Prepend Responses `instructions` and fill missing history roles. */
 function inputMessagesWithInstructions(
   input: unknown,
   response: Record<string, unknown> | undefined,
 ): unknown[] | undefined {
   const instructions = instructionsText(response?.instructions);
   const messages = Array.isArray(input) ? (input as unknown[]) : undefined;
-  if (!instructions) return messages;
+  if (!instructions) return messages ? historyMessages(messages) : undefined;
   if (messages?.some((message) => isSameSystemMessage(message, instructions))) {
-    return messages;
+    return historyMessages(messages);
   }
   const system = { role: "system", content: instructions };
   if (!messages) {
     if (typeof input === "string" && input) {
-      return [system, { role: "user", content: input }];
+      return historyMessages([system, { role: "user", content: input }]);
     }
-    return [system];
+    return historyMessages([system]);
   }
-  return [system, ...messages];
+  return historyMessages([system, ...messages]);
 }
 
 function generationTools(
@@ -244,36 +266,12 @@ function outputMessages(
   return undefined;
 }
 
-const HISTORY_ITEM_ROLES: Record<string, string> = {
-  function_call: "assistant",
-  reasoning: "assistant",
-  function_call_result: "tool",
-  function_call_output: "tool",
-};
-
-/** Responses items omit role. Keep an existing role and fill the missing ones. */
-function withHistoryRole(message: unknown): unknown {
-  if (!message || typeof message !== "object" || Array.isArray(message)) {
-    return message;
-  }
-  const record = message as Record<string, unknown>;
-  if (typeof record.role === "string" && record.role) return message;
-  const role =
-    typeof record.type === "string"
-      ? HISTORY_ITEM_ROLES[record.type]
-      : undefined;
-  if (!role) return message;
-  return { ...record, role };
-}
-
 function generationFields(
   data: OpenAIAgentsSpanData,
   input: unknown,
   response: Record<string, unknown> | undefined = responseRecord(data),
 ) {
-  const messages = inputMessagesWithInstructions(input, response)?.map(
-    withHistoryRole,
-  );
+  const messages = inputMessagesWithInstructions(input, response);
   const tools = generationTools(data, response);
   const parameters = invocationParameters(data, response);
   return {

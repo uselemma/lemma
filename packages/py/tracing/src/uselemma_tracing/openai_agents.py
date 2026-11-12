@@ -158,12 +158,7 @@ def _generation_output(output: Any) -> Any:
 def _response_output(data: dict[str, Any], response: dict[str, Any] | None) -> Any:
     """Read reply text from an already-normalized response mapping."""
     if response is None:
-        raw = data.get("response")
-        if raw is None:
-            raw = data.get("_response")
-        if raw is None:
-            return _generation_output(data.get("output"))
-        return str(raw)
+        return _generation_output(data.get("output"))
     if isinstance(response.get("output_text"), str):
         return response["output_text"]
     if isinstance(response.get("output"), list):
@@ -313,25 +308,49 @@ def _is_same_system_message(message: Any, instructions: str) -> bool:
     )
 
 
+_HISTORY_ITEM_ROLES = {
+    "function_call": "assistant",
+    "reasoning": "assistant",
+    "function_call_result": "tool",
+    "function_call_output": "tool",
+}
+
+
+def _with_history_role(message: Any) -> Any:
+    """Responses items omit role. Keep an existing role."""
+    if not isinstance(message, dict):
+        return message
+    if isinstance(message.get("role"), str) and message.get("role"):
+        return message
+    role = _HISTORY_ITEM_ROLES.get(message.get("type"))
+    if role is None:
+        return message
+    return {**message, "role": role}
+
+
+def _history_messages(messages: list[Any]) -> list[Any]:
+    return [_with_history_role(message) for message in messages]
+
+
 def _input_messages_with_instructions(
     input_value: Any,
     response: dict[str, Any] | None,
 ) -> list[Any] | None:
-    """Prepend Responses instructions when the history has no matching system message."""
+    """Prepend Responses instructions and fill missing history roles."""
     instructions = _instructions_text(None if response is None else response.get("instructions"))
     messages = input_value if isinstance(input_value, list) else None
     if instructions is None:
-        return messages
+        return None if messages is None else _history_messages(messages)
     if messages is not None and any(
         _is_same_system_message(message, instructions) for message in messages
     ):
-        return messages
+        return _history_messages(messages)
     system = {"role": "system", "content": instructions}
     if messages is None:
         if isinstance(input_value, str) and input_value:
-            return [system, {"role": "user", "content": input_value}]
-        return [system]
-    return [system, *messages]
+            return _history_messages([system, {"role": "user", "content": input_value}])
+        return _history_messages([system])
+    return _history_messages([system, *messages])
 
 
 def _generation_tools(data: dict[str, Any], response: dict[str, Any] | None) -> Any:
@@ -372,26 +391,6 @@ def _output_messages(
     return None
 
 
-_HISTORY_ITEM_ROLES = {
-    "function_call": "assistant",
-    "reasoning": "assistant",
-    "function_call_result": "tool",
-    "function_call_output": "tool",
-}
-
-
-def _with_history_role(message: Any) -> Any:
-    """Responses items omit role. Keep an existing role and fill the missing ones."""
-    if not isinstance(message, dict):
-        return message
-    if isinstance(message.get("role"), str) and message.get("role"):
-        return message
-    role = _HISTORY_ITEM_ROLES.get(message.get("type"))
-    if role is None:
-        return message
-    return {**message, "role": role}
-
-
 def _generation_fields(
     data: dict[str, Any],
     input_value: Any,
@@ -403,8 +402,6 @@ def _generation_fields(
         response = _response_mapping(data)
     fields: dict[str, Any] = {}
     messages = _input_messages_with_instructions(input_value, response)
-    if messages is not None:
-        messages = [_with_history_role(message) for message in messages]
     if messages is not None:
         fields["llm_input_messages"] = messages
     parameters = _invocation_parameters(data, response)
