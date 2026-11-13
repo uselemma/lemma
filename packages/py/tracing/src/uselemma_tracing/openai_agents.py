@@ -15,7 +15,11 @@ from .openai_agents_containers import (
     is_container_type,
     propagate_generation_io,
 )
-from .openai_agents_generation import generation_snapshot, reply_from_response
+from .openai_agents_generation import (
+    generation_snapshot,
+    reply_from_response,
+    span_data_for_attribute,
+)
 from .reply_text import generation_output
 from .tool_result import tool_result_error
 
@@ -187,7 +191,7 @@ def _attributes(span: Any, data: dict[str, Any]) -> dict[str, Any]:
             "openai.agents.parent_id": _get(span, "parent_id"),
             "openai.agents.span_type": data.get("type"),
             "openai.agents.trace_metadata": _json(_get(span, "trace_metadata")),
-            "openai.agents.span_data": _json(data),
+            "openai.agents.span_data": _json(span_data_for_attribute(data)),
         }.items()
         if value is not None
     }
