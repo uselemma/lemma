@@ -10,8 +10,8 @@ from .client import Lemma, SpanHandle, TraceContext, _datetime_or_now, _duration
 from .debug_mode import _lemma_debug
 from .error_message import describe_error
 from .model import pick_model_identity
+from .openai_agents_generation import generation_snapshot, reply_from_response
 from .tool_result import tool_result_error
-from .usage import normalize_token_usage
 
 _LIVE_SPAN_DATA_KEYS = (
     "type",
@@ -155,22 +155,6 @@ def _generation_output(output: Any) -> Any:
     return text or output
 
 
-def _response_output(data: dict[str, Any], response: dict[str, Any] | None) -> Any:
-    """Read reply text from an already-normalized response mapping."""
-    if response is None:
-        raw = data.get("response")
-        if raw is None:
-            raw = data.get("_response")
-        if raw is None:
-            return _generation_output(data.get("output"))
-        return str(raw)
-    if isinstance(response.get("output_text"), str):
-        return response["output_text"]
-    if isinstance(response.get("output"), list):
-        return _generation_output(response["output"])
-    return response
-
-
 def _span_name(data: dict[str, Any]) -> str:
     if isinstance(data.get("name"), str) and data["name"]:
         return data["name"]
@@ -212,18 +196,6 @@ def _attributes(span: Any, data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _generation_usage(
-    data: dict[str, Any],
-    response: dict[str, Any] | None,
-) -> dict[str, int | float] | None:
-    direct = normalize_token_usage(data.get("usage"))
-    if direct is not None:
-        return direct
-    if response is None:
-        return None
-    return normalize_token_usage(response.get("usage"))
-
-
 def _is_generation_type(span_type: Any) -> bool:
     return span_type in {"generation", "response"}
 
@@ -250,148 +222,6 @@ def _error_payload(error: Any) -> Any:
 
 def _span_input(data: dict[str, Any]) -> Any:
     return _parse_maybe_json(data.get("input") if data.get("input") is not None else data.get("_input"))
-
-
-_RESPONSE_SETTING_KEYS = (
-    "temperature",
-    "top_p",
-    "max_output_tokens",
-    "max_tool_calls",
-    "tool_choice",
-    "parallel_tool_calls",
-    "truncation",
-    "reasoning",
-    "text",
-    "service_tier",
-)
-
-
-def _response_mapping(data: dict[str, Any]) -> dict[str, Any] | None:
-    response = data.get("response")
-    if response is None:
-        response = data.get("_response")
-    if response is None:
-        return None
-    if isinstance(response, dict):
-        return response
-    model_dump = getattr(response, "model_dump", None)
-    if callable(model_dump):
-        try:
-            dumped = model_dump()
-        except Exception:
-            dumped = None
-        if isinstance(dumped, dict):
-            return dumped
-    if isinstance(response, (str, int, float, bool, list, tuple)):
-        return None
-    mapping: dict[str, Any] = {}
-    for key in (
-        "model",
-        "instructions",
-        "output",
-        "output_text",
-        "tools",
-        "usage",
-        *_RESPONSE_SETTING_KEYS,
-    ):
-        if hasattr(response, key):
-            mapping[key] = getattr(response, key)
-    return mapping or None
-
-
-def _instructions_text(value: Any) -> str | None:
-    if isinstance(value, str) and value:
-        return value
-    return None
-
-
-def _is_same_system_message(message: Any, instructions: str) -> bool:
-    return (
-        isinstance(message, dict)
-        and message.get("role") == "system"
-        and message.get("content") == instructions
-    )
-
-
-def _input_messages_with_instructions(
-    input_value: Any,
-    response: dict[str, Any] | None,
-) -> list[Any] | None:
-    """Prepend Responses instructions when the history has no matching system message."""
-    instructions = _instructions_text(None if response is None else response.get("instructions"))
-    messages = input_value if isinstance(input_value, list) else None
-    if instructions is None:
-        return messages
-    if messages is not None and any(
-        _is_same_system_message(message, instructions) for message in messages
-    ):
-        return messages
-    system = {"role": "system", "content": instructions}
-    if messages is None:
-        if isinstance(input_value, str) and input_value:
-            return [system, {"role": "user", "content": input_value}]
-        return [system]
-    return [system, *messages]
-
-
-def _generation_tools(data: dict[str, Any], response: dict[str, Any] | None) -> Any:
-    if response is not None and response.get("tools") is not None:
-        return response.get("tools")
-    if data.get("tools") is not None:
-        return data.get("tools")
-    return None
-
-
-def _invocation_parameters(data: dict[str, Any], response: dict[str, Any] | None) -> Any:
-    if data.get("model_config") is not None:
-        return data.get("model_config")
-    if response is None:
-        return None
-    settings = {
-        key: response.get(key)
-        for key in _RESPONSE_SETTING_KEYS
-        if response.get(key) is not None
-    }
-    return settings or None
-
-
-def _output_messages(
-    data: dict[str, Any],
-    response: dict[str, Any] | None,
-) -> list[Any] | None:
-    span_type = data.get("type")
-    if not _is_generation_type(span_type):
-        return None
-    if span_type == "generation" and isinstance(data.get("output"), list):
-        return data.get("output")
-    if response is not None and isinstance(response.get("output"), list):
-        return response.get("output")
-    output = data.get("output")
-    if isinstance(output, list):
-        return output
-    return None
-
-
-def _generation_fields(
-    data: dict[str, Any],
-    input_value: Any,
-    response: dict[str, Any] | None = None,
-    *,
-    resolved: bool = False,
-) -> dict[str, Any]:
-    if not resolved:
-        response = _response_mapping(data)
-    fields: dict[str, Any] = {}
-    messages = _input_messages_with_instructions(input_value, response)
-    if messages is not None:
-        fields["llm_input_messages"] = messages
-    parameters = _invocation_parameters(data, response)
-    if parameters is not None:
-        fields["llm_invocation_parameters"] = parameters
-    tools = _generation_tools(data, response)
-    if tools is not None:
-        fields["llm_tools"] = tools
-    return fields
 
 
 class LemmaOpenAIAgentsProcessor:
@@ -635,12 +465,6 @@ class LemmaOpenAIAgentsProcessor:
                 **common,
                 model=pick_model_identity(data),
                 llm_provider="openai",
-                # Streamed response spans fill `_response` after start.
-                **(
-                    {}
-                    if span_type == "response"
-                    else _generation_fields(data, input_value)
-                ),
             )
         if span_type == "function":
             return stored.context.start_tool(
@@ -661,12 +485,20 @@ class LemmaOpenAIAgentsProcessor:
         if _is_generation_type(span_type):
             self._note_root_input(stored, input_value)
 
-        response = _response_mapping(data) if _is_generation_type(span_type) else None
+        snapshot = (
+            generation_snapshot(data, input_value)
+            if _is_generation_type(span_type)
+            else None
+        )
         # Parse outputs for soft-error detection even when payloads are not recorded.
         if span_type == "generation":
             raw_output = _generation_output(data.get("output"))
         elif span_type == "response":
-            raw_output = _response_output(data, response)
+            raw_output = reply_from_response(
+                data,
+                None if snapshot is None else snapshot["response"],
+                _generation_output,
+            )
         else:
             raw_output = _parse_maybe_json(
                 data.get("output") if data.get("output") is not None else data.get("_response")
@@ -703,11 +535,9 @@ class LemmaOpenAIAgentsProcessor:
         late_input: dict[str, Any] = {}
         if input_value is not None:
             late_input["input"] = input_value
-        if _is_generation_type(span_type):
-            late_input.update(
-                _generation_fields(data, input_value, response, resolved=True)
-            )
-        messages = None if error_message else _output_messages(data, response)
+        if snapshot is not None:
+            late_input.update(snapshot["fields"])
+        messages = None if error_message or snapshot is None else snapshot["output_messages"]
         if messages is not None:
             late_input["llm_output_messages"] = messages
         handle.end(
@@ -720,11 +550,7 @@ class LemmaOpenAIAgentsProcessor:
             model=pick_model_identity(data),
             ended_at=ended_at_value,
             duration_ms=_duration_ms(raw_started_at, ended_at_value),
-            usage=(
-                _generation_usage(data, response)
-                if _is_generation_type(span_type)
-                else None
-            ),
+            usage=None if snapshot is None else snapshot["usage"],
         )
         span_id = _get(span, "span_id")
         if span_id is not None:
