@@ -125,4 +125,58 @@ describe("openAIAgents prompt snapshot", () => {
     expect(span.attributes["openai.agents.span_data"]).not.toContain(prompt);
     expect(span.attributes["openai.agents.span_data"]).not.toContain(reply);
   });
+
+  it("omits prompt bodies from a self-serializing response and the span root", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+    const prompt = "PROMPT-BODY-live";
+    const instructions = "SYSTEM-BODY-live";
+    const reply = "OUTPUT-BODY-live";
+    class LiveResponse {
+      model = "gpt-4.1";
+      toJSON() {
+        return {
+          model: this.model,
+          instructions,
+          output_text: reply,
+          output: [{ type: "message", content: reply }],
+        };
+      }
+    }
+
+    await processor.onTraceStart({
+      traceId: "trace_live_response",
+      name: "support-agent",
+    });
+    await processor.onSpanEnd({
+      traceId: "trace_live_response",
+      spanId: "span_live_response",
+      spanData: {
+        type: "response",
+        _input: [{ role: "user", content: prompt }],
+        instructions,
+        output_text: reply,
+        _response: new LiveResponse(),
+      },
+    });
+    await processor.onTraceEnd({
+      traceId: "trace_live_response",
+      name: "support-agent",
+    });
+    await processor.forceFlush();
+
+    const span = jsonBody(fetchMock.mock.calls[0]).trace.spans[0];
+    const attribute = span.attributes["openai.agents.span_data"];
+    const spanData = JSON.parse(attribute);
+    expect(spanData._response.model).toBe("gpt-4.1");
+    expect(spanData.instructions).toBeUndefined();
+    expect(spanData.output_text).toBeUndefined();
+    for (const body of [prompt, instructions, reply]) {
+      expect(attribute).not.toContain(body);
+    }
+  });
 });

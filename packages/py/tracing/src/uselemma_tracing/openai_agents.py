@@ -16,9 +16,9 @@ from .openai_agents_containers import (
     propagate_generation_io,
 )
 from .openai_agents_generation import (
-    as_response_dict as _as_response_dict,
     generation_snapshot,
     reply_from_response,
+    span_data_for_attribute,
 )
 from .reply_text import generation_output
 from .tool_result import tool_result_error
@@ -181,28 +181,6 @@ def _span_name(data: dict[str, Any]) -> str:
     return f"openai-agents-{span_type or 'span'}"
 
 
-_RESPONSE_BODY_KEYS = ("output", "output_text", "instructions", "input")
-
-
-def _span_data_for_attribute(data: dict[str, Any]) -> dict[str, Any]:
-    """Drop message bodies already stored on the span input and output."""
-    copy = dict(data)
-    copy.pop("_input", None)
-    if copy.get("type") == "response":
-        copy.pop("input", None)
-        copy.pop("output", None)
-    for key in ("response", "_response"):
-        if key not in copy:
-            continue
-        response_copy = _as_response_dict(copy.get(key))
-        if response_copy is None:
-            continue
-        for body_key in _RESPONSE_BODY_KEYS:
-            response_copy.pop(body_key, None)
-        copy[key] = response_copy
-    return copy
-
-
 def _attributes(span: Any, data: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
@@ -213,7 +191,7 @@ def _attributes(span: Any, data: dict[str, Any]) -> dict[str, Any]:
             "openai.agents.parent_id": _get(span, "parent_id"),
             "openai.agents.span_type": data.get("type"),
             "openai.agents.trace_metadata": _json(_get(span, "trace_metadata")),
-            "openai.agents.span_data": _json(_span_data_for_attribute(data)),
+            "openai.agents.span_data": _json(span_data_for_attribute(data)),
         }.items()
         if value is not None
     }

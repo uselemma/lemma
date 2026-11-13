@@ -126,3 +126,41 @@ def test_openai_agents_live_response_input_is_omitted_from_span_data():
     assert prompt not in raw
     assert "LIVE-OUTPUT-once" not in raw
     assert "LIVE-SYSTEM-once" not in raw
+
+
+def test_openai_agents_span_root_prompt_bodies_are_omitted_from_span_data():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+    prompt = "PROMPT-BODY-root"
+    instructions = "SYSTEM-BODY-root"
+    reply = "OUTPUT-BODY-root"
+
+    processor.on_trace_start(FakeTrace(trace_id="trace_root_bodies", name="support-agent"))
+    processor.on_span_end(
+        FakeSpan(
+            trace_id="trace_root_bodies",
+            span_id="span_root_bodies",
+            span_data={
+                "type": "response",
+                "_input": [{"role": "user", "content": prompt}],
+                "instructions": instructions,
+                "output_text": reply,
+                "_response": {"model": "gpt-4.1", "output_text": reply},
+            },
+        )
+    )
+    processor.on_trace_end(FakeTrace(trace_id="trace_root_bodies", name="support-agent"))
+
+    attribute = calls[0]["trace"]["spans"][0]["attributes"]["openai.agents.span_data"]
+    span_data = json.loads(attribute)
+    assert span_data["_response"]["model"] == "gpt-4.1"
+    assert "instructions" not in span_data
+    assert "output_text" not in span_data
+    for body in (prompt, instructions, reply):
+        assert body not in attribute

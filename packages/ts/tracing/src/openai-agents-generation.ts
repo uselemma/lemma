@@ -25,15 +25,60 @@ const HISTORY_ITEM_ROLES: Record<string, string> = {
   function_call_output: "tool",
 };
 
+/**
+ * A response object as a plain record. Live SDK objects that serialize
+ * themselves (`toJSON`) are read through it; anything else is copied as is.
+ */
+export function asResponseRecord(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const toJSON = (value as { toJSON?: unknown }).toJSON;
+  if (typeof toJSON === "function") {
+    try {
+      const dumped: unknown = toJSON.call(value);
+      if (dumped && typeof dumped === "object" && !Array.isArray(dumped)) {
+        return { ...(dumped as Record<string, unknown>) };
+      }
+    } catch {
+      // Fall through to the object's own fields.
+    }
+  }
+  return { ...(value as Record<string, unknown>) };
+}
+
 /** The Responses object on span data, whether the SDK used `response` or `_response`. */
 export function responseRecord(
   data: SpanData,
 ): Record<string, unknown> | undefined {
-  const response = data["response"] ?? data["_response"];
-  if (!response || typeof response !== "object" || Array.isArray(response)) {
-    return undefined;
+  return asResponseRecord(data["response"] ?? data["_response"]);
+}
+
+/** Message bodies a response span already stores as the span input and output. */
+const RESPONSE_BODY_KEYS = [
+  "output",
+  "output_text",
+  "instructions",
+  "input",
+] as const;
+
+/** Span data for the `openai.agents.span_data` attribute, without prompt bodies. */
+export function spanDataForAttribute<T extends SpanData>(data: T): T {
+  const copy: SpanData = { ...data };
+  delete copy._input;
+  if (copy.type === "response") {
+    for (const key of RESPONSE_BODY_KEYS) delete copy[key];
   }
-  return response as Record<string, unknown>;
+  for (const key of ["response", "_response"] as const) {
+    if (!(key in copy)) continue;
+    const response = asResponseRecord(copy[key]);
+    if (!response) continue;
+    for (const bodyKey of RESPONSE_BODY_KEYS) delete response[bodyKey];
+    copy[key] = response;
+  }
+  return copy as T;
 }
 
 function instructionsText(value: unknown): string | undefined {

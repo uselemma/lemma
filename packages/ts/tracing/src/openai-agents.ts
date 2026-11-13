@@ -5,6 +5,7 @@ import { toolResultError } from "./tool-result";
 import {
   generationSnapshot,
   replyFromResponse,
+  spanDataForAttribute,
 } from "./openai-agents-generation";
 import {
   isContainerType,
@@ -148,35 +149,6 @@ function spanName(data: OpenAIAgentsSpanData): string {
   }
   if (data.type === "mcp_tools") return "openai-agents-mcp-tools";
   return `openai-agents-${data.type || "span"}`;
-}
-
-const RESPONSE_BODY_KEYS = [
-  "output",
-  "output_text",
-  "instructions",
-  "input",
-] as const;
-
-/** Drop message bodies already stored on the span input and output. */
-function spanDataForAttribute(
-  data: OpenAIAgentsSpanData,
-): OpenAIAgentsSpanData {
-  const copy: OpenAIAgentsSpanData = { ...data };
-  delete copy._input;
-  if (copy.type === "response") {
-    delete copy.input;
-    delete copy.output;
-  }
-  for (const key of ["response", "_response"] as const) {
-    const response = copy[key];
-    if (!response || typeof response !== "object" || Array.isArray(response)) {
-      continue;
-    }
-    const responseCopy = { ...(response as Record<string, unknown>) };
-    for (const bodyKey of RESPONSE_BODY_KEYS) delete responseCopy[bodyKey];
-    copy[key] = responseCopy;
-  }
-  return copy;
 }
 
 function openAIAttributes(span: OpenAIAgentsSpan): Record<string, unknown> {
