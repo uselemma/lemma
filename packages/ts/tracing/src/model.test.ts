@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  pickGenerationModelIdentity,
-  pickModelIdentity,
-} from "./model";
+import { pickGenerationModelIdentity, pickModelIdentity } from "./model";
 
 describe("pickModelIdentity", () => {
   it("returns undefined for empty payloads and bare strings", () => {
@@ -17,11 +14,27 @@ describe("pickModelIdentity", () => {
 
   it("reads model aliases including ls_model_name", () => {
     expect(pickModelIdentity({ model: "gpt-4o" })).toBe("gpt-4o");
-    expect(pickModelIdentity({ model_name: "gpt-4o-mini" })).toBe("gpt-4o-mini");
+    expect(pickModelIdentity({ model_name: "gpt-4o-mini" })).toBe(
+      "gpt-4o-mini",
+    );
     expect(pickModelIdentity({ modelName: "claude-3" })).toBe("claude-3");
     expect(pickModelIdentity({ model_id: "o3" })).toBe("o3");
     expect(pickModelIdentity({ modelId: "gpt-4.1" })).toBe("gpt-4.1");
     expect(pickModelIdentity({ ls_model_name: "gpt-4o" })).toBe("gpt-4o");
+  });
+
+  it("reads a model id from _response when response is absent", () => {
+    expect(
+      pickModelIdentity({
+        _response: { model: "gpt-4.1", output_text: "hello" },
+      }),
+    ).toBe("gpt-4.1");
+    expect(
+      pickModelIdentity({
+        model: "gpt-4o",
+        _response: { model: "gpt-4.1" },
+      }),
+    ).toBe("gpt-4o");
   });
 
   it("reads nested response_metadata and model objects", () => {
