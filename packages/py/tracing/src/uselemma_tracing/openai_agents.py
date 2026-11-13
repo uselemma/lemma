@@ -11,6 +11,7 @@ from .debug_mode import _lemma_debug
 from .error_message import describe_error
 from .model import pick_model_identity
 from .openai_agents_generation import generation_snapshot, reply_from_response
+from .reply_text import generation_output
 from .tool_result import tool_result_error
 
 _LIVE_SPAN_DATA_KEYS = (
@@ -144,15 +145,6 @@ def _root_trace_input(input_value: Any) -> Any:
     return _message_content(input_value[-1])
 
 
-def _generation_output(output: Any) -> Any:
-    if not isinstance(output, list):
-        return output
-    text = "".join(
-        str(item.get("text") or item.get("content") or "")
-        for item in output
-        if isinstance(item, dict)
-    )
-    return text or output
 
 
 def _span_name(data: dict[str, Any]) -> str:
@@ -492,12 +484,12 @@ class LemmaOpenAIAgentsProcessor:
         )
         # Parse outputs for soft-error detection even when payloads are not recorded.
         if span_type == "generation":
-            raw_output = _generation_output(data.get("output"))
+            raw_output = generation_output(data.get("output"))
         elif span_type == "response":
             raw_output = reply_from_response(
                 data,
                 None if snapshot is None else snapshot["response"],
-                _generation_output,
+                generation_output,
             )
         else:
             raw_output = _parse_maybe_json(
