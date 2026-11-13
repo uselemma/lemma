@@ -1,9 +1,44 @@
 import { describe, expect, it } from "vitest";
+import { ToolMessage } from "@langchain/core/messages";
 import { toolResultError } from "./tool-result";
 
 describe("toolResultError", () => {
+  it.each([
+    ["  Connection refused  ", "Connection refused"],
+    [
+      ["Service unavailable", { type: "text", text: "Try later" }],
+      "Service unavailable\nTry later",
+    ],
+  ])("extracts error-status ToolMessage content %j", (content, expected) => {
+    const message = new ToolMessage({
+      content: content as string | Array<string | Record<string, unknown>>,
+      tool_call_id: "call-1",
+      status: "error",
+    });
+    expect(toolResultError(message)).toBe(expected);
+  });
+
+  it("preserves successful ToolMessages", () => {
+    expect(
+      toolResultError(
+        new ToolMessage({
+          content: "No error was found",
+          tool_call_id: "call-1",
+          status: "success",
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("uses a fallback for empty serialized error tool messages", () => {
+    expect(
+      toolResultError({ type: "tool", status: "error", content: "" }),
+    ).toBe("Tool returned an error result");
+  });
   it("returns null for successful payloads", () => {
-    expect(toolResultError({ content: [{ text: "ok", type: "text" }] })).toBeNull();
+    expect(
+      toolResultError({ content: [{ text: "ok", type: "text" }] }),
+    ).toBeNull();
     expect(toolResultError({ isError: false, content: [] })).toBeNull();
     expect(toolResultError("plain text")).toBeNull();
   });
@@ -45,9 +80,9 @@ describe("toolResultError", () => {
   });
 
   it("treats a string error field as a tool failure", () => {
-    expect(
-      toolResultError({ error: "Error: Payment method not found" }),
-    ).toBe("Error: Payment method not found");
+    expect(toolResultError({ error: "Error: Payment method not found" })).toBe(
+      "Error: Payment method not found",
+    );
     expect(toolResultError({ error: "" })).toBeNull();
     expect(toolResultError({ error: null })).toBeNull();
   });
