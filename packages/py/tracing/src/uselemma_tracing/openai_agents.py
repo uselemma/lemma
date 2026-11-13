@@ -10,6 +10,11 @@ from .client import Lemma, SpanHandle, TraceContext, _datetime_or_now, _duration
 from .debug_mode import _lemma_debug
 from .error_message import describe_error
 from .model import pick_model_identity
+from .openai_agents_containers import (
+    SpanRecord,
+    is_container_type,
+    propagate_generation_io,
+)
 from .openai_agents_generation import generation_snapshot, reply_from_response
 from .reply_text import generation_output
 from .tool_result import tool_result_error
@@ -41,20 +46,6 @@ class _StoredTrace:
     earliest_start: datetime | None = None
     latest_end: datetime | None = None
     _has_root_input: bool = False
-
-
-@dataclass
-class _SpanRecord:
-    handle: SpanHandle
-    trace_id: str
-    type: str | None
-    parent_id: str | None
-    end_order: int = 0
-    generation_input: Any = None
-    has_generation_input: bool = False
-    generation_output: Any = None
-    has_generation_output: bool = False
-    own_output: bool = False
 
 
 def _get(obj: Any, name: str, default: Any = None) -> Any:
@@ -206,10 +197,6 @@ def _is_generation_type(span_type: Any) -> bool:
     return span_type in {"generation", "response"}
 
 
-def _is_container_type(span_type: Any) -> bool:
-    return span_type in {"agent", "task", "turn"}
-
-
 def _is_terminal_failure_type(span_type: Any) -> bool:
     return span_type in {"agent", "task", "custom", "guardrail"}
 
@@ -257,10 +244,9 @@ class LemmaOpenAIAgentsProcessor:
         self.thread_id_key = thread_id_key
         self.user_id_key = user_id_key
         self._traces: dict[str, _StoredTrace] = {}
-        self._spans: dict[str, _SpanRecord] = {}
+        self._spans: dict[str, SpanRecord] = {}
         self._span_trace_ids: dict[str, str] = {}
-        self._ended_spans: dict[str, _SpanRecord] = {}
-        self._end_order = 0
+        self._ended_spans: dict[str, SpanRecord] = {}
         self._lock = threading.RLock()
 
     def on_trace_start(self, trace: Any) -> None:
@@ -485,16 +471,16 @@ class LemmaOpenAIAgentsProcessor:
             )
         return stored.context.start_span(**common)
 
-    def _new_record(self, span: Any, handle: SpanHandle) -> _SpanRecord:
+    def _new_record(self, span: Any, handle: SpanHandle) -> SpanRecord:
         data = _span_data(span)
-        return _SpanRecord(
+        return SpanRecord(
             handle=handle,
             trace_id=_get(span, "trace_id"),
             type=data.get("type"),
             parent_id=_get(span, "parent_id"),
         )
 
-    def _track_span(self, span: Any, handle: SpanHandle) -> _SpanRecord:
+    def _track_span(self, span: Any, handle: SpanHandle) -> SpanRecord:
         span_id = _get(span, "span_id")
         record = self._spans.get(span_id) or self._new_record(span, handle)
         if span_id is not None:
@@ -502,60 +488,7 @@ class LemmaOpenAIAgentsProcessor:
             self._span_trace_ids[span_id] = _get(span, "trace_id")
         return record
 
-    def _is_under(self, record: _SpanRecord, ancestor_id: str) -> bool:
-        parent_id = record.parent_id
-        seen: set[str] = set()
-        while parent_id and parent_id not in seen:
-            if parent_id == ancestor_id:
-                return True
-            seen.add(parent_id)
-            parent = self._ended_spans.get(parent_id) or self._spans.get(parent_id)
-            parent_id = None if parent is None else parent.parent_id
-        return False
-
-    def _child_generation_io(self, container_id: str) -> tuple[Any, bool, Any, bool]:
-        generations = sorted(
-            (
-                record
-                for record in self._ended_spans.values()
-                if _is_generation_type(record.type) and self._is_under(record, container_id)
-            ),
-            key=lambda record: record.end_order,
-        )
-        chosen_input = None
-        has_input = False
-        chosen_output = None
-        has_output = False
-        for generation in generations:
-            if not has_input and generation.has_generation_input:
-                chosen_input = generation.generation_input
-                has_input = True
-            if generation.has_generation_output:
-                chosen_output = generation.generation_output
-                has_output = True
-        return chosen_input, has_input, chosen_output, has_output
-
-    def _patch_ended_containers(self, record: _SpanRecord) -> None:
-        parent_id = record.parent_id
-        seen: set[str] = set()
-        while parent_id and parent_id not in seen:
-            seen.add(parent_id)
-            parent = self._ended_spans.get(parent_id)
-            if parent is None:
-                open_parent = self._spans.get(parent_id)
-                if open_parent is None:
-                    break
-                parent_id = open_parent.parent_id
-                continue
-            if _is_container_type(parent.type):
-                parent.handle.fill_container_io(
-                    record.generation_input if record.has_generation_input else None,
-                    record.generation_output if record.has_generation_output else None,
-                    parent.own_output,
-                )
-            parent_id = parent.parent_id
-
-    def _end_span(self, handle: SpanHandle, span: Any, meta: _SpanRecord) -> None:
+    def _end_span(self, handle: SpanHandle, span: Any, meta: SpanRecord) -> None:
         stored = self._stored_for_span(span)
         if stored is None:
             return
@@ -609,27 +542,14 @@ class LemmaOpenAIAgentsProcessor:
         if not error_message and _is_generation_type(span_type) and output is not None:
             self._note_root_output(stored, output)
 
-        if _is_generation_type(span_type):
-            self._end_order += 1
-            meta.end_order = self._end_order
-            if input_value is not None:
-                meta.generation_input = input_value
-                meta.has_generation_input = True
-            if output is not None:
-                meta.generation_output = output
-                meta.has_generation_output = True
-
         ended_input = input_value
         ended_output = output
-        if _is_container_type(span_type):
+        if is_container_type(span_type):
             meta.own_output = data.get("output") is not None
-            child_input, has_input, child_output, has_output = self._child_generation_io(
-                _get(span, "span_id")
-            )
-            if ended_input is None and has_input:
-                ended_input = child_input
-            if not meta.own_output and not error_message and has_output:
-                ended_output = child_output
+            if ended_input is None:
+                ended_input = meta.child_input
+            if not meta.own_output and not error_message and meta.child_output is not None:
+                ended_output = meta.child_output
 
         # Prefer the original string timestamp so payload ISO matches the SDK.
         ended_at_value = raw_ended_at if raw_ended_at is not None else span_ended_at
@@ -665,7 +585,13 @@ class LemmaOpenAIAgentsProcessor:
             self._ended_spans[span_id] = meta
             self._span_trace_ids[span_id] = _get(span, "trace_id")
         if _is_generation_type(span_type):
-            self._patch_ended_containers(meta)
+            propagate_generation_io(
+                meta.parent_id,
+                input_value,
+                output,
+                self._spans,
+                self._ended_spans,
+            )
 
         parent_id = _get(span, "parent_id")
         if parent_id and span_type == "function":

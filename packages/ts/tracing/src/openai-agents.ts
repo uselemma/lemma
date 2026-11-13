@@ -6,6 +6,11 @@ import {
   generationSnapshot,
   replyFromResponse,
 } from "./openai-agents-generation";
+import {
+  isContainerType,
+  propagateGenerationIo,
+  type SpanRecord,
+} from "./openai-agents-containers";
 import { pickModelIdentity } from "./model";
 import { textFromGenerationOutput } from "./reply-text";
 
@@ -190,23 +195,6 @@ function isGenerationType(type: string) {
   return type === "generation" || type === "response";
 }
 
-function isContainerType(type: string) {
-  return type === "agent" || type === "task" || type === "turn";
-}
-
-type SpanRecord = {
-  handle: SpanHandle;
-  traceId: string;
-  type: string;
-  parentId?: string | null;
-  endOrder: number;
-  generationInput?: unknown;
-  hasGenerationInput: boolean;
-  generationOutput?: unknown;
-  hasGenerationOutput: boolean;
-  ownOutput: boolean;
-};
-
 function isTerminalFailureType(type: string) {
   return (
     type === "agent" ||
@@ -229,7 +217,6 @@ export function openAIAgents(
       release: options.release,
     });
   const traces = new Map<string, StoredTrace>();
-  let endOrder = 0;
   const spans = new Map<string, SpanRecord>();
   /** Ended handles kept only until their trace finalizes (for parent extend). */
   const endedSpans = new Map<string, SpanRecord>();
@@ -340,74 +327,8 @@ export function openAIAgents(
       traceId: span.traceId,
       type: span.spanData.type,
       parentId: span.parentId,
-      endOrder: 0,
-      hasGenerationInput: false,
-      hasGenerationOutput: false,
       ownOutput: false,
     };
-  }
-
-  function isUnder(record: SpanRecord, ancestorId: string): boolean {
-    let parentId = record.parentId ?? null;
-    const seen = new Set<string>();
-    while (parentId && !seen.has(parentId)) {
-      if (parentId === ancestorId) return true;
-      seen.add(parentId);
-      const parent = endedSpans.get(parentId) ?? spans.get(parentId);
-      parentId = parent?.parentId ?? null;
-    }
-    return false;
-  }
-
-  function childGenerationIo(containerId: string): {
-    input?: unknown;
-    output?: unknown;
-    hasOutput: boolean;
-  } {
-    const generations = [...endedSpans.values()]
-      .filter(
-        (record) =>
-          isGenerationType(record.type) && isUnder(record, containerId),
-      )
-      .sort((left, right) => left.endOrder - right.endOrder);
-    let input: unknown;
-    let hasInput = false;
-    let output: unknown;
-    let hasOutput = false;
-    for (const generation of generations) {
-      if (!hasInput && generation.hasGenerationInput) {
-        input = generation.generationInput;
-        hasInput = true;
-      }
-      if (generation.hasGenerationOutput) {
-        output = generation.generationOutput;
-        hasOutput = true;
-      }
-    }
-    return { input, output, hasOutput };
-  }
-
-  function patchEndedContainers(record: SpanRecord) {
-    let parentId = record.parentId ?? null;
-    const seen = new Set<string>();
-    while (parentId && !seen.has(parentId)) {
-      seen.add(parentId);
-      const parent = endedSpans.get(parentId);
-      if (!parent) {
-        const open = spans.get(parentId);
-        if (!open) break;
-        parentId = open.parentId ?? null;
-        continue;
-      }
-      if (isContainerType(parent.type)) {
-        parent.handle.fillContainerIo(
-          record.hasGenerationInput ? record.generationInput : undefined,
-          record.hasGenerationOutput ? record.generationOutput : undefined,
-          parent.ownOutput,
-        );
-      }
-      parentId = parent.parentId ?? null;
-    }
   }
 
   function startSpan(span: OpenAIAgentsSpan): SpanHandle | undefined {
@@ -506,26 +427,15 @@ export function openAIAgents(
 
     let endedInput = input;
     let endedOutput = parsedOutput;
-    if (isGenerationType(data.type)) {
-      record.endOrder = endOrder++;
-      if (input != null) {
-        record.generationInput = input;
-        record.hasGenerationInput = true;
-      }
-      if (parsedOutput !== undefined) {
-        record.generationOutput = parsedOutput;
-        record.hasGenerationOutput = true;
-      }
-    }
-
     if (isContainerType(data.type)) {
       record.ownOutput = data["output"] != null;
-      const children = childGenerationIo(span.spanId);
-      if (endedInput == null && children.input !== undefined) {
-        endedInput = children.input;
-      }
-      if (!record.ownOutput && !errorMessage && children.hasOutput) {
-        endedOutput = children.output;
+      if (endedInput == null) endedInput = record.childInput;
+      if (
+        !record.ownOutput &&
+        !errorMessage &&
+        record.childOutput !== undefined
+      ) {
+        endedOutput = record.childOutput;
       }
     }
 
@@ -549,7 +459,15 @@ export function openAIAgents(
     });
     endedSpans.set(span.spanId, record);
     if (isGenerationType(data.type)) {
-      patchEndedContainers(record);
+      propagateGenerationIo(
+        record.parentId,
+        {
+          input: input ?? undefined,
+          output: parsedOutput,
+        },
+        spans,
+        endedSpans,
+      );
     }
 
     // Tools that finish after their parent generation must not outlast it.
