@@ -9,6 +9,23 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="November 12, 2026" tags={["Improvements", "Bug fixes", "[Issues]", "[Traces]"]} rss={{ title: "Issue occurrences load a page at a time" }}>
+
+  ## Issues
+
+  - **Load more:** When an [issue](/platform/issues) has more than 100 occurrences, the list opens with the first 100. **Load more** fetches the next 100.
+  - **Showing:** Under that list, **Showing** states the loaded row count of the issue total.
+  - **Counts:** **Occurrences** and **Sessions** show the issue totals on the first page. **Sessions** counts distinct traces. `list_issue_occurrences` returns that count as `trace_total`.
+  - **Failed page:** A failed later page keeps the rows already shown, and **Retry** loads that page. A failed first page says **Couldn’t load occurrences**, and **Retry** loads it.
+  - **See conversation:** **See conversation** opens the trace, and the issue page stays loaded.
+
+  ## Traces
+
+  - **Spans:** A [trace](/platform/traces) loads up to 100 spans in one request. A longer trace takes another request for each further 100.
+  - **Byte budget:** On REST, `get_trace` with `response_version=sections` takes the `max_bytes` you set, with no 64 KB cap. MCP still rejects a `max_bytes` above 64 KB. Omitting `max_bytes` uses 32 KB. Each page holds at most 100 records.
+
+</Update>
+
 <Update label="November 9, 2026" tags={["Improvements", "Bug fixes", "[Issues]", "[Slack]", "[Dashboard]", "[API keys]", "[Artifacts]"]} rss={{ title: "Issues open on Open, and Slack pages yellow once and red once" }}>
 
   ## Issues
