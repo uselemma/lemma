@@ -7,6 +7,7 @@ import {
   replyFromResponse,
 } from "./openai-agents-generation";
 import { pickModelIdentity } from "./model";
+import { textFromGenerationOutput } from "./reply-text";
 
 const INTEGRATION_ATTRS = {
   "lemma.sdk.integration": "openai-agents",
@@ -121,20 +122,6 @@ function rootTraceInput(input: unknown): unknown {
   }
 
   return messageContent(input[input.length - 1]);
-}
-
-function textFromGenerationOutput(output: unknown) {
-  if (!Array.isArray(output)) return output;
-  const text = output
-    .map((item) => {
-      if (!item || typeof item !== "object") return "";
-      const record = item as Record<string, unknown>;
-      if (typeof record["text"] === "string") return record["text"];
-      if (typeof record["content"] === "string") return record["content"];
-      return "";
-    })
-    .join("");
-  return text || output;
 }
 
 function spanName(data: OpenAIAgentsSpanData): string {
