@@ -923,6 +923,73 @@ def test_openai_agents_copies_model_from_response_when_span_data_omits_it():
     assert span["attributes"]["ai.model.id"] == "o3-mini"
 
 
+def test_openai_agents_streamed_response_records_model_prompt_tools_and_settings():
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(json.loads(body.decode()))
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+    tools = [
+        {"type": "function", "name": "lookup_order", "parameters": {"type": "object"}}
+    ]
+    output = [
+        {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "It arrives Friday."}],
+        }
+    ]
+    span = FakeSpan(
+        trace_id="trace_streamed",
+        span_id="span_streamed",
+        started_at="2026-06-29T10:00:00Z",
+        span_data={
+            "type": "response",
+            "_input": [{"role": "user", "content": "where is my order?"}],
+        },
+    )
+
+    processor.on_trace_start(FakeTrace(trace_id="trace_streamed", name="support-agent"))
+    processor.on_span_start(span)
+    span.span_data["_response"] = {
+        "model": "gpt-4.1",
+        "instructions": "Answer briefly.",
+        "tools": tools,
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 256,
+        "tool_choice": "auto",
+        "output": output,
+    }
+    span.ended_at = "2026-06-29T10:00:00.080Z"
+    processor.on_span_end(span)
+    processor.on_trace_end(FakeTrace(trace_id="trace_streamed", name="support-agent"))
+
+    recorded = calls[0]["trace"]["spans"][0]
+    attributes = recorded["attributes"]
+    assert recorded["model"] == "gpt-4.1"
+    assert attributes["llm.model_name"] == "gpt-4.1"
+    assert attributes["gen_ai.request.model"] == "gpt-4.1"
+    assert attributes["ai.model.id"] == "gpt-4.1"
+    assert attributes["llm.input_messages.0.message.role"] == "system"
+    assert attributes["llm.input_messages.0.message.content"] == "Answer briefly."
+    assert attributes["llm.input_messages.1.message.role"] == "user"
+    assert attributes["llm.input_messages.1.message.content"] == "where is my order?"
+    assert attributes["llm.output_messages.0.message.role"] == "assistant"
+    assert attributes["llm.output_messages.0.message.type"] == "message"
+    assert json.loads(attributes["llm.tools"]) == tools
+    assert json.loads(attributes["llm.invocation_parameters"]) == {
+        "temperature": 0.2,
+        "top_p": 1,
+        "max_output_tokens": 256,
+        "tool_choice": "auto",
+    }
+    assert "response" not in json.loads(attributes["openai.agents.span_data"])
+
+
 def test_openai_agents_force_flush_does_not_raise_on_ingest_503():
     lemma = Lemma(
         api_key="key",

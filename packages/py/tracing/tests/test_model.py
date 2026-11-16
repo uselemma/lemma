@@ -22,6 +22,17 @@ def test_pick_model_identity_aliases():
     assert pick_model_identity({"ls_model_name": "gpt-4o"}) == "gpt-4o"
 
 
+def test_pick_model_identity_reads_underscore_response():
+    assert (
+        pick_model_identity({"_response": {"model": "gpt-4.1", "output_text": "hello"}})
+        == "gpt-4.1"
+    )
+    assert (
+        pick_model_identity({"model": "gpt-4o", "_response": {"model": "gpt-4.1"}})
+        == "gpt-4o"
+    )
+
+
 def test_pick_model_identity_nested_response_metadata():
     assert (
         pick_model_identity({"response_metadata": {"model_name": "gpt-4o-mini"}})

@@ -29,6 +29,7 @@ _NESTED_CONTAINERS = (
     "additional_kwargs",
     "message",
     "response",
+    "_response",
 )
 
 _SKIP_TYPES = (bool, int, float, str, list, tuple, bytes)

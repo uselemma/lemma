@@ -26,6 +26,7 @@ const NESTED_CONTAINERS = [
   "additional_kwargs",
   "message",
   "response",
+  "_response",
 ] as const;
 
 function asNonEmptyString(value: unknown): string | undefined {

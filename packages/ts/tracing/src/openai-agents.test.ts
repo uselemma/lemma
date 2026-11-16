@@ -985,4 +985,87 @@ describe("openAIAgents", () => {
       },
     });
   });
+
+  it("records model, instructions, output, tools, and settings from a streamed _response", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const processor = openAIAgents({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+    });
+    const tools = [
+      {
+        type: "function",
+        name: "lookup_order",
+        parameters: { type: "object" },
+      },
+    ];
+    const output = [
+      {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "It arrives Friday." }],
+      },
+    ];
+    const span = {
+      traceId: "trace_streamed_response",
+      spanId: "span_streamed_response",
+      spanData: {
+        type: "response",
+        _input: [{ role: "user", content: "where is my order?" }],
+      } as Record<string, unknown> & { type: string },
+      startedAt: "2026-06-29T10:00:00.000Z",
+      endedAt: null as string | null,
+    };
+
+    await processor.onTraceStart({
+      traceId: "trace_streamed_response",
+      name: "support-agent",
+    });
+    await processor.onSpanStart(span);
+    span.spanData._response = {
+      model: "gpt-4.1",
+      instructions: "Answer briefly.",
+      tools,
+      temperature: 0.2,
+      top_p: 1,
+      max_output_tokens: 256,
+      tool_choice: "auto",
+      output,
+    };
+    span.endedAt = "2026-06-29T10:00:00.080Z";
+    await processor.onSpanEnd(span);
+    await processor.onTraceEnd({
+      traceId: "trace_streamed_response",
+      name: "support-agent",
+    });
+    await processor.forceFlush();
+
+    const recorded = jsonBody(fetchMock.mock.calls[0]).trace.spans[0];
+    expect(recorded).toMatchObject({
+      type: "generation",
+      model: "gpt-4.1",
+      attributes: {
+        "llm.model_name": "gpt-4.1",
+        "gen_ai.request.model": "gpt-4.1",
+        "ai.model.id": "gpt-4.1",
+        "llm.input_messages.0.message.role": "system",
+        "llm.input_messages.0.message.content": "Answer briefly.",
+        "llm.input_messages.1.message.role": "user",
+        "llm.input_messages.1.message.content": "where is my order?",
+        "llm.output_messages.0.message.role": "assistant",
+        "llm.output_messages.0.message.type": "message",
+        "llm.tools": JSON.stringify(tools),
+        "llm.invocation_parameters": JSON.stringify({
+          temperature: 0.2,
+          top_p: 1,
+          max_output_tokens: 256,
+          tool_choice: "auto",
+        }),
+      },
+    });
+    expect(
+      JSON.parse(recorded.attributes["openai.agents.span_data"]).response,
+    ).toBeUndefined();
+  });
 });
