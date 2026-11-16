@@ -346,6 +346,19 @@ class SpanHandle:
             self.payload.update(span)
         self.trace._debug_span("span ended", self.payload)
 
+    def fill_container_io(self, input_value: Any, output: Any, own_output: bool) -> None:
+        """Fill input or output after end() when a child model call finishes later.
+
+        Input is written only while this span still has none. Output is replaced
+        when the span did not carry its own output.
+        """
+        if not self.ended or self.payload is None:
+            return
+        if self.payload.get("input") is None and input_value is not None:
+            self.payload["input"] = input_value
+        if not own_output and output is not None:
+            self.payload["output"] = output
+
     def ensure_ended_at(self, ended_at: datetime | str) -> None:
         """Extend this span's end when a child finished later.
 

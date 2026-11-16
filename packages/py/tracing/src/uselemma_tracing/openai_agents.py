@@ -10,6 +10,11 @@ from .client import Lemma, SpanHandle, TraceContext, _datetime_or_now, _duration
 from .debug_mode import _lemma_debug
 from .error_message import describe_error
 from .model import pick_model_identity
+from .openai_agents_containers import (
+    SpanRecord,
+    is_container_type,
+    propagate_generation_io,
+)
 from .openai_agents_generation import generation_snapshot, reply_from_response
 from .reply_text import generation_output
 from .tool_result import tool_result_error
@@ -239,9 +244,9 @@ class LemmaOpenAIAgentsProcessor:
         self.thread_id_key = thread_id_key
         self.user_id_key = user_id_key
         self._traces: dict[str, _StoredTrace] = {}
-        self._spans: dict[str, SpanHandle] = {}
+        self._spans: dict[str, SpanRecord] = {}
         self._span_trace_ids: dict[str, str] = {}
-        self._ended_spans: dict[str, SpanHandle] = {}
+        self._ended_spans: dict[str, SpanRecord] = {}
         self._lock = threading.RLock()
 
     def on_trace_start(self, trace: Any) -> None:
@@ -271,19 +276,20 @@ class LemmaOpenAIAgentsProcessor:
                 return
             handle = self._start_span(span)
             if handle is not None:
-                span_id = _get(span, "span_id")
-                self._spans[span_id] = handle
-                self._span_trace_ids[span_id] = _get(span, "trace_id")
+                self._track_span(span, handle)
 
     def on_span_end(self, span: Any) -> None:
         with self._lock:
             if _get(span, "trace_id") not in self._traces:
                 return
             span_id = _get(span, "span_id")
-            handle = self._spans.pop(span_id, None) or self._start_span(span)
-            if handle is None:
-                return
-            self._end_span(handle, span)
+            record = self._spans.pop(span_id, None)
+            if record is None:
+                handle = self._start_span(span)
+                if handle is None:
+                    return
+                record = self._new_record(span, handle)
+            self._end_span(record.handle, span, record)
 
     def shutdown(self) -> None:
         self.force_flush()
@@ -465,7 +471,24 @@ class LemmaOpenAIAgentsProcessor:
             )
         return stored.context.start_span(**common)
 
-    def _end_span(self, handle: SpanHandle, span: Any) -> None:
+    def _new_record(self, span: Any, handle: SpanHandle) -> SpanRecord:
+        data = _span_data(span)
+        return SpanRecord(
+            handle=handle,
+            trace_id=_get(span, "trace_id"),
+            type=data.get("type"),
+            parent_id=_get(span, "parent_id"),
+        )
+
+    def _track_span(self, span: Any, handle: SpanHandle) -> SpanRecord:
+        span_id = _get(span, "span_id")
+        record = self._spans.get(span_id) or self._new_record(span, handle)
+        if span_id is not None:
+            self._spans[span_id] = record
+            self._span_trace_ids[span_id] = _get(span, "trace_id")
+        return record
+
+    def _end_span(self, handle: SpanHandle, span: Any, meta: SpanRecord) -> None:
         stored = self._stored_for_span(span)
         if stored is None:
             return
@@ -519,24 +542,37 @@ class LemmaOpenAIAgentsProcessor:
         if not error_message and _is_generation_type(span_type) and output is not None:
             self._note_root_output(stored, output)
 
+        ended_input = input_value
+        ended_output = output
+        if is_container_type(span_type):
+            meta.own_output = data.get("output") is not None
+            if ended_input is None:
+                ended_input = meta.child_input
+            if not meta.own_output and not error_message and meta.child_output is not None:
+                ended_output = meta.child_output
+
         # Prefer the original string timestamp so payload ISO matches the SDK.
         ended_at_value = raw_ended_at if raw_ended_at is not None else span_ended_at
         # The Agents SDK fills span_data.input after on_span_start (tool
         # arguments, generation messages), so re-read it here. Skip an absent
         # input so it can't erase one captured at start.
         late_input: dict[str, Any] = {}
-        if input_value is not None:
-            late_input["input"] = input_value
+        if ended_input is not None:
+            late_input["input"] = ended_input
         if snapshot is not None:
             late_input.update(snapshot["fields"])
-        messages = None if error_message or snapshot is None else snapshot["output_messages"]
+        messages = (
+            None
+            if error_message or snapshot is None
+            else snapshot["output_messages"]
+        )
         if messages is not None:
             late_input["llm_output_messages"] = messages
         handle.end(
             **late_input,
             attributes=_attributes(span, data),
             # Failures must not invent an output — record error instead.
-            output=output,
+            output=ended_output,
             error=error_message,
             status="ERROR" if error_message else None,
             model=pick_model_identity(data),
@@ -546,14 +582,22 @@ class LemmaOpenAIAgentsProcessor:
         )
         span_id = _get(span, "span_id")
         if span_id is not None:
-            self._ended_spans[span_id] = handle
+            self._ended_spans[span_id] = meta
             self._span_trace_ids[span_id] = _get(span, "trace_id")
+        if _is_generation_type(span_type):
+            propagate_generation_io(
+                meta.parent_id,
+                input_value,
+                output,
+                self._spans,
+                self._ended_spans,
+            )
 
         parent_id = _get(span, "parent_id")
         if parent_id and span_type == "function":
             parent = self._spans.get(parent_id) or self._ended_spans.get(parent_id)
             if parent is not None:
-                parent.ensure_ended_at(ended_at_value)
+                parent.handle.ensure_ended_at(ended_at_value)
 
 
 def openai_agents(

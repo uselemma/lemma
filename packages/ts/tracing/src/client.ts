@@ -554,6 +554,22 @@ export class SpanHandle {
   }
 
   /**
+   * Fill input or output after end() when a child model call finishes later.
+   * Input is written only while this span still has none. Output is replaced
+   * when the span did not carry its own output.
+   */
+  fillContainerIo(input: unknown, output: unknown, ownOutput: boolean) {
+    if (!this.ended) return;
+    if (this.payload.input === undefined && input !== undefined) {
+      this.payload.input = input;
+    }
+    if (!ownOutput && output !== undefined) {
+      this.payload.output = output;
+    }
+    this.trace.changed();
+  }
+
+  /**
    * Extend this span's end time if a child finished later.
    * Only applies after end() — open parents are left alone so a later end()
    * cannot overwrite a premature extension with a shorter duration.
