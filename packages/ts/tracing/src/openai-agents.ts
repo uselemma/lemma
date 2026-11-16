@@ -5,6 +5,7 @@ import { toolResultError } from "./tool-result";
 import {
   generationSnapshot,
   replyFromResponse,
+  spanDataForAttribute,
 } from "./openai-agents-generation";
 import {
   isContainerType,
@@ -161,7 +162,9 @@ function openAIAttributes(span: OpenAIAgentsSpan): Record<string, unknown> {
       "openai.agents.trace_metadata": span.traceMetadata
         ? JSON.stringify(span.traceMetadata)
         : undefined,
-      "openai.agents.span_data": JSON.stringify(span.spanData),
+      "openai.agents.span_data": JSON.stringify(
+        spanDataForAttribute(span.spanData),
+      ),
     }).filter(([, value]) => value !== undefined && value !== null),
   );
 }

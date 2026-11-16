@@ -65,6 +65,29 @@ def as_response_dict(value: Any) -> dict[str, Any] | None:
     return mapping or None
 
 
+# Message bodies a response span already stores as the span input and output.
+_RESPONSE_BODY_KEYS = ("output", "output_text", "instructions", "input")
+
+
+def span_data_for_attribute(data: dict[str, Any]) -> dict[str, Any]:
+    """Span data for the ``openai.agents.span_data`` attribute, without prompt bodies."""
+    copy = dict(data)
+    copy.pop("_input", None)
+    if copy.get("type") == "response":
+        for key in _RESPONSE_BODY_KEYS:
+            copy.pop(key, None)
+    for key in ("response", "_response"):
+        if key not in copy:
+            continue
+        response = as_response_dict(copy[key])
+        if response is None:
+            continue
+        for body_key in _RESPONSE_BODY_KEYS:
+            response.pop(body_key, None)
+        copy[key] = response
+    return copy
+
+
 def _instructions_text(value: Any) -> str | None:
     if isinstance(value, str) and value:
         return value

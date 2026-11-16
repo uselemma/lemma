@@ -9,7 +9,7 @@ meta:
   audience: "Engineers using the Python tracing SDK"
 ---
 
-<Update label="7.12.4" description="November 12, 2026" tags={["Bug fixes", "[OpenAI Agents]"]} rss={{ title: "OpenAI Agents response spans record the model call" }}>
+<Update label="7.12.4" description="November 12, 2026" tags={["Bug fixes", "[OpenAI Agents]"]} rss={{ title: "OpenAI Agents traces show the model call and the reply" }}>
 
   ## OpenAI Agents
 
@@ -17,6 +17,7 @@ meta:
   - **History roles:** Tool calls and reasoning items are recorded as assistant messages. Tool results are recorded as tool messages. A message that already has a role keeps it.
   - **Reply text:** The trace output and the model span store the reply text. A streamed response with no `output_text` still yields that text, and encrypted reasoning stays out of the preview.
   - **Agent spans:** Agent, task, and turn spans record the input and output of their own child model calls when the span itself has none.
+  - **Prompt once:** The OpenAI Agents span snapshot no longer repeats the input history or the response message body already stored on the span.
 
 </Update>
 
