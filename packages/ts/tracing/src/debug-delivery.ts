@@ -3,6 +3,15 @@ export const INGEST_PATH = "/traces/ingest";
 export const INGEST_STATUS_PATH = "/traces/ingest-status";
 export const EXPECTED_INGEST_SUCCESS_STATUS = 201;
 
+/**
+ * Deadline for each ingest request, response body included. Automatic
+ * delivery runs after the agent returns, so an unanswered ingest request must
+ * not hold the caller indefinitely.
+ */
+export const INGEST_TIMEOUT_MS = 10_000;
+/** Largest delay a Node timer accepts. */
+export const MAX_INGEST_TIMEOUT_MS = 2_147_483_647;
+
 /** Poll interval for LEMMA_DEBUG_VERIFY ingest-status checks. */
 export const INGEST_STATUS_POLL_INTERVAL_MS = 1_000;
 /** Total wait budget for LEMMA_DEBUG_VERIFY ingest-status checks. */

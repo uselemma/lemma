@@ -7,6 +7,13 @@ INGEST_PATH = "/traces/ingest"
 INGEST_STATUS_PATH = "/traces/ingest-status"
 EXPECTED_INGEST_SUCCESS_STATUS = 201
 
+# Per socket operation (connect, each read) on the default urllib transport.
+# Automatic delivery runs after the agent returns, so an unanswered ingest
+# request must not hold the caller indefinitely.
+INGEST_TIMEOUT_SECONDS = 10.0
+# Largest delay a Node timer accepts (2**31 - 1 ms); both SDKs share the cap.
+MAX_INGEST_TIMEOUT_SECONDS = 2_147_483.647
+
 # Poll interval / budget for LEMMA_DEBUG_VERIFY ingest-status checks.
 INGEST_STATUS_POLL_INTERVAL_SECONDS = 1.0
 INGEST_STATUS_POLL_TIMEOUT_SECONDS = 15.0

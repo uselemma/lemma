@@ -460,8 +460,9 @@ Pass the `trace` or span handle into helpers that need to record child work. The
 | `apiKey`    | `LEMMA_API_KEY`      | Required                  |
 | `projectId` | `LEMMA_PROJECT_ID`   | Required                  |
 | `baseUrl`   | none                 | `https://api.uselemma.ai` |
+| `timeoutMs` | none                 | `10000`                   |
 
-The SDK sends to `${baseUrl}/traces/ingest`.
+The SDK sends to `${baseUrl}/traces/ingest`. `timeoutMs` is a total deadline for each request, including uploading the payload and reading the response; `null` disables it. When it passes, automatic delivery drops the trace and `ingest()` rejects. A custom `fetch` receives the deadline as `signal`. A trace that takes longer than `timeoutMs` to upload, such as a large payload on a slow connection, is dropped, so raise it if you send large traces.
 
 You can pass configuration directly to the constructor instead of using
 environment variables:
