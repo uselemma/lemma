@@ -9,6 +9,25 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="November 16, 2026" tags={["Bug fixes", "[Dashboard]", "[Issues]", "[Settings]"]} rss={{ title: "Header links return to the list, and Linear names a workspace conflict" }}>
+
+  ## Dashboard
+
+  - **Monitors:** On a [monitor](/platform/monitors), **Monitors** opens that project’s monitor list.
+
+  ## Issues
+
+  - **Loading:** While an [issue](/platform/issues) page loads, **Issues** and the back arrow open the issue list with the current filters.
+  - **Linear card:** An issue with no Linear ticket hides the Linear card while the workspace is disconnected. A linked ticket still opens and unlinks. Connect and reconnect stay in organization settings.
+
+  ## Settings
+
+  - **Already connected:** Project **Linear** and organization **Linear** show **Linear workspace already connected** when this [Linear](/connections/linear) workspace belongs to another Lemma organization. Disconnect that workspace from the other organization before you try again. The notice stays while settings load.
+  - **Organization settings:** When the workspace is already connected, **Open organization settings** on the project card opens organization **Linear** with the same notice.
+  - **Other errors:** Any other Linear connection error still shows a toast.
+
+</Update>
+
 <Update label="November 9, 2026" tags={["Improvements", "Bug fixes", "[Issues]", "[Slack]", "[Dashboard]", "[API keys]", "[Artifacts]"]} rss={{ title: "Issues open on Open, and Slack pages yellow once and red once" }}>
 
   ## Issues
