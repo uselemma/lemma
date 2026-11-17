@@ -9,6 +9,51 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="November 15, 2026" tags={["New releases", "Improvements", "Bug fixes", "[Analytics]", "[Inspect]", "[Issues]", "[Linear]", "[Accounts]", "[Artifacts]"]} rss={{ title: "Analytics, Inspect, and Linear are in the dashboard" }}>
+
+  ## Analytics
+
+  - **Dashboard:** [Analytics](/platform/analytics) charts volume, latency, errors, tools, models, and estimated cost once a project has traces. Pick this week, this month, this quarter, this year, a custom range, or all time. Charts include the last 90 days.
+  - **Widgets:** Add, remove, and reorder a widget when its telemetry is present: agent scorecard, trace latency, model comparison, cost by model, tool call volume, tool comparison, error rate, and tool error concentration.
+  - **Cost:** A cost figure is an estimate from recorded usage, not an invoice.
+
+  ## Inspect
+
+  - **Ask:** [Inspect](/platform/inspect) answers from this project’s traces, issues, artifacts, and settings. Open **Inspect** in the sidebar, or the widget on other project pages.
+  - **Context:** It uses the URL and an open trace drawer, so “this issue” and “this trace” mean what you’re viewing. An open trace drawer wins over the issue page behind it.
+  - **History:** Conversations stay saved. Resume one from history, or share it with your organization.
+
+  ## Issues
+
+  - **Releases:** When an issue has a release, the detail rail shows **Releases**. **seen in** names the first release and the latest. **seen only in** names that release when they match.
+  - **Occurrence release:** Each occurrence row shows its release. A missing release shows a dash.
+  - **Trace release:** The trace drawer says **ran on** one release, or **ran across** the first and last when they differ. If no exchange has a release, it says **no release on any exchange**. If some exchanges have no release, it adds **some exchanges unreleased**.
+  - **Release fields:** `list_issues` and `get_issue` include `introduced_in_release` and `last_seen_in_release`. `list_issue_occurrences` includes `release` on each occurrence and on its trace summary. MCP returns the same objects.
+  - **Time window:** `GET /issues/{issue_id}/occurrences` and `list_issue_occurrences` take `start_inclusive` and `end_exclusive`. The list includes occurrences created at or after the start and before the end.
+  - **Counts:** `total`, `trace_total`, `has_more`, and the page include only that window. `limit=1` returns the windowed count.
+  - **Bounds:** Omit either bound to leave that side open. Omit both and the list matches the unwindowed read. `start_inclusive` has to be earlier than `end_exclusive`.
+  - **Next page:** `next_request` keeps the window and the `release` filter.
+  - **Titles:** A new issue name is a complete short phrase. It is not cut off at 80 characters. Names already on an issue stay as they are.
+
+  ## Linear
+
+  - **Workspace:** An organization owner or admin connects one Linear workspace from **Manage organization → Integrations**. [Linear](/connections/linear) explains the connection.
+  - **Defaults:** **Settings → Linear** sets the default team, and optionally a Linear project under that team.
+  - **Tickets:** From an issue, create one ticket, link an exact Linear URL or identifier, or unlink. Connecting the workspace does not create a ticket, and a new occurrence does not either.
+
+  ## Accounts
+
+  - **Wizard:** A new organization sets up in the wizard: **Set up your workspace**, **What Lemma does**, **Choose your plan**, **Connect to Slack**, **Connect your agent**, and **Describe your agent**.
+  - **Required:** **Set up your workspace** and **Choose your plan** have to be finished. The other steps can be skipped. An Enterprise organization skips **Choose your plan**.
+  - **Already set up:** An organization that is already set up stays on the dashboard.
+
+  ## Artifacts
+
+  - **Diagram:** The opened agent diagram on [Artifacts](/platform/artifacts) starts at half the canvas width, lined up with the top, so the first nodes don’t fill the view. Zoom out to see the rest of a tall chart.
+  - **Hint:** Pan and zoom instructions sit in a card at the bottom right, and they fade after you pan or zoom.
+
+</Update>
+
 <Update label="November 9, 2026" tags={["Improvements", "Bug fixes", "[Issues]", "[Slack]", "[Dashboard]", "[API keys]", "[Artifacts]"]} rss={{ title: "Issues open on Open, and Slack pages yellow once and red once" }}>
 
   ## Issues
