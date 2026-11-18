@@ -9,6 +9,35 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="November 17, 2026" tags={["Improvements", "Bug fixes", "[Dashboard]", "[Billing]", "[Accounts]", "[Artifacts]", "[API]"]} rss={{ title: "Every project can create a monitor, and active Pro can switch to Lemma Jr." }}>
+
+  ## Dashboard
+
+  - **New monitor:** **New monitor** works on every project, including a new one. Creating a monitor no longer fails with an internal server error.
+  - **Judging:** Monitors judge traces on every project, including a new one.
+  - **Failed setup:** A [monitor](/platform/monitors) that shows **Exploration failed** stays in the list until you delete it. It isn’t removed overnight.
+  - **To-do items:** **To-do items** stays empty until Slack, MCP, traces, context, and Linear have all settled. The full list then appears together.
+
+  ## Billing
+
+  - **Lemma Jr.:** On an active Pro plan, **Manage billing** can switch the plan to Lemma Jr. The change takes effect at the end of the current period.
+
+  ## Accounts
+
+  - **No plan:** An owner or admin of an organization that finished onboarding and has no plan signs in to the plan step. Sign-in no longer fails, and onboarding doesn’t start over.
+
+  ## Artifacts
+
+  - **Loading:** [Artifacts](/platform/artifacts) shows the diagram and understanding layout only after the agent artifact is readable. Until then, it keeps the generating message.
+
+  ## API
+
+  - **Thread tool calls:** With `include_details` true, `get_trace_thread` adds each tool call’s recorded span attributes. `include_tool_attributes` defaults to true. A tool call that is too large or unavailable sets `attributes_omitted` to true. REST and MCP share that operation.
+  - **Matched spans:** A span-content `query_traces` search with `include_matching_spans` true lists each match site. The first site for a span includes its kind, status, and attributes. When the attributes are too large, that site sets `attributes_omitted` to true. The default leaves matching spans out.
+  - **Unauthenticated:** A call without credentials returns HTTP 401 with `code` set to `unauthenticated`. The detail stays `You must be authenticated`. REST and MCP use the same body.
+
+</Update>
+
 <Update label="November 9, 2026" tags={["Improvements", "Bug fixes", "[Issues]", "[Slack]", "[Dashboard]", "[API keys]", "[Artifacts]"]} rss={{ title: "Issues open on Open, and Slack pages yellow once and red once" }}>
 
   ## Issues
