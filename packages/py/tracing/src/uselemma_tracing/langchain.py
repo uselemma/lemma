@@ -903,7 +903,8 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
             stored.context.fail(stored.root_error)
         elif stored.root_output is not None:
             stored.context.output(stored.root_output)
-        # A sync invoke() inside a running loop calls this on the loop's thread.
+        # Called on the event loop's thread for every ainvoke(), and for a sync
+        # invoke() inside a running loop; delivery is handed off in both cases.
         self.lemma._deliver_automatic_from_sync_hook(stored.context, started_at, ended_at)
 
     def _maybe_finalize_owner(self, run: StoredRun, ended_at: datetime) -> None:

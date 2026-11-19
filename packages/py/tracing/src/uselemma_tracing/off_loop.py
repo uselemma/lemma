@@ -184,8 +184,10 @@ def _reset() -> None:
 if hasattr(os, "register_at_fork"):
     os.register_at_fork(after_in_child=_reset)
 
-# Each pool's own exit hook joins its workers after running every queued
-# delivery. Hooks run newest first, and this one registers after it, so the
-# backlog is cut to the deadline before that join.
+# concurrent.futures registers one module-level exit hook,
+# concurrent.futures.thread._python_exit, that joins every executor's workers
+# after they run all queued work. Hooks run newest first, and this one
+# registers after it, so both pools' backlogs are cut to the deadline before
+# that join.
 if hasattr(threading, "_register_atexit"):
     threading._register_atexit(_drain_at_exit)
