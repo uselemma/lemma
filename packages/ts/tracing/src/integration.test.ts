@@ -5,7 +5,7 @@ import {
 } from "node:http";
 import { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { SDK_USER_AGENT } from "./client";
+import { SDK_USER_AGENT } from "./version";
 import { Lemma, langChain, openAIAgents, vercelAI } from "./index";
 
 type CapturedRequest = {

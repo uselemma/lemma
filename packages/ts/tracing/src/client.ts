@@ -37,7 +37,7 @@ import {
   type TokenUsage,
   type WireTokenUsage,
 } from "./usage";
-import { SDK_PACKAGE_NAME, SDK_VERSION } from "./version";
+import { SDK_USER_AGENT } from "./version";
 
 export type { OperationUsageResult, TokenUsage, WireTokenUsage } from "./usage";
 export {
@@ -53,9 +53,6 @@ export type JsonValue =
   | null
   | JsonValue[]
   | { [key: string]: JsonValue };
-
-/** Sent on every request so ingest can record which SDK version a project runs. */
-export const SDK_USER_AGENT = `${SDK_PACKAGE_NAME}/${SDK_VERSION}`;
 
 export type LemmaClientOptions = {
   apiKey?: string;
