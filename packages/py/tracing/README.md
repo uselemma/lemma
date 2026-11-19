@@ -158,19 +158,20 @@ span IDs are skipped — so a failed send can be retried as-is. It raises on a
 non-2xx response and never mutates the trace's status.
 
 Automatic delivery (`trace` / `async_trace`) fails open so it cannot fail the
-caller's application. The default transport times out a stalled socket after
-10 seconds. A network error, timeout, 408, 429, or 5xx is retried twice with
+caller's application. The default transport times out a stalled socket after 10
+seconds. A network error, timeout, 408, 429, or 5xx is retried twice with
 backoff; when every attempt fails, or Lemma rejects the trace with another 4xx,
 the trace is dropped with a warning on the `uselemma_tracing` logger. The first
 drop names the trace ID and the reason; drops in the minute after a warning are
 counted, the next warning says how many, and `LEMMA_DEBUG=1` logs each one.
 LangChain and OpenAI Agents flush through this path. `trace` and `async_trace`
 wait for delivery, retries included, before they return; `async_trace` waits on
-a worker thread, so retries don't block the event loop. If your own timeout or
-cancellation ends the call while delivery runs, that call's result is lost,
-though the trace is still delivered. Use `ingest()` when you need a failed send
-to raise so you can retry: it sends once and does not retry. `TraceHandle.end()` delivers through
-`ingest()`, so a failed send raises there too.
+the SDK's own worker threads, so retries block neither the event loop nor its
+default executor. If your own timeout or cancellation ends the call while
+delivery runs, that call's result is lost, though the trace is still delivered.
+Use `ingest()` when you need a failed send to raise so you can retry: it sends
+once and does not retry. `TraceHandle.end()` delivers through `ingest()`, so a
+failed send raises there too.
 
 ## Cross-process turns
 
@@ -247,16 +248,14 @@ become Lemma generations, function spans become Lemma tool spans, and parent
 IDs are preserved so tools stay nested under the generation or agent span that
 called them.
 
-Pass OpenAI Agents `group_id` for `thread_id` and metadata `user_id` /
-`userId` for `user_id`. Call `force_flush()` / `shutdown()` to finalize open
-traces once. In async code the processor hands each delivery to a worker pool,
-and `force_flush()` waits for those deliveries for up to 34 seconds, one
-delivery's worst case, so call it before a short-lived process returns.
-Deliveries that haven't started by then are dropped and reported in one
-warning; one that is already sending finishes on its own. Process exit waits
-the same way. At most 1,000 deliveries wait at once, which bounds memory while
-Lemma is unreachable; a trace that finishes past that is dropped with a
-warning.
+Pass OpenAI Agents `group_id` for `thread_id` and metadata `user_id` / `userId`
+for `user_id`. Call `force_flush()` / `shutdown()` to finalize open traces
+once. In async code the processor hands each delivery to a worker pool, so call
+`force_flush()` before a short-lived process returns: it waits up to 34 seconds
+for queued deliveries, plus any delivery already sending, then drops the rest
+with one warning. Process exit waits the same way. At most 1,000 deliveries
+wait at once, which bounds memory while Lemma is unreachable; a trace that
+finishes past that is dropped with a warning.
 
 Enable debug mode to validate live span shape while developing:
 
@@ -276,7 +275,9 @@ Install the optional integration dependency and pass `langchain()` as a callback
 handler. Each root run owns one Lemma trace with current-turn input, final
 output or root error, promoted `thread_id` / `user_id`, typed nested
 generations/tools/spans, and real wall-clock bounds. Call `flush()` /
-`shutdown()` to finalize open traces immediately. On long-lived hosts,
+`shutdown()` to finalize open traces immediately. When a sync `invoke()` runs
+inside an event loop, delivery goes to the worker pool, and `flush()` waits for
+it as OpenAI Agents' `force_flush()` does. On long-lived hosts,
 traces that stay idle (no child start/end) past `open_trace_ttl` (default
 2 hours) are finalized and sent, swept from every `on_*_start` at most
 every `eviction_interval` (default 5 minutes). A still-active long run is
