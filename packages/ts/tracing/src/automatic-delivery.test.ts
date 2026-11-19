@@ -159,6 +159,31 @@ describe("automatic trace delivery", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it("keeps a failing post-send check out of the caller and the drop warnings", async () => {
+    const warn = captureWarnings();
+    vi.spyOn(
+      Lemma.prototype as unknown as { afterTraceSent: () => Promise<void> },
+      "afterTraceSent",
+    ).mockRejectedValue(new Error("check broke"));
+    const lemma = lemmaWith(
+      vi.fn(async () => new Response("{}", { status: 201 })),
+    );
+
+    await expect(
+      lemma.trace({ id: "trace-1", name: "support-agent" }).end(),
+    ).resolves.toBeUndefined();
+    await expect(
+      lemma.ingest(new TraceContext({ id: "trace-2", name: "t" }), {
+        startedAt: new Date(),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(warn.mock.calls.map((call) => call[0])).toEqual([
+      "@uselemma/tracing: trace trace-1 was delivered, but its post-send check failed: check broke",
+      "@uselemma/tracing: trace trace-2 was delivered, but its post-send check failed: check broke",
+    ]);
+  });
+
   it("ingest() sends once and throws when the send times out", async () => {
     const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
     const lemma = lemmaWith(fetchMock);

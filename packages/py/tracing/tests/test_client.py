@@ -610,6 +610,33 @@ def test_a_failed_verify_poll_after_delivery_is_not_a_dropped_trace(
     assert "ingest-status check failed" in capsys.readouterr().out
 
 
+def test_a_failing_post_send_check_stays_out_of_the_caller_and_drop_warnings(
+    monkeypatch, caplog
+):
+    def broken_check(self, _payload, _sent):
+        raise RuntimeError("check broke")
+
+    monkeypatch.setattr(Lemma, "_after_trace_sent", broken_check)
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: (201, "{}"),
+    )
+
+    assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+    lemma.ingest(TraceContext(id="trace-2", name="t"), started_at=_now_utc())
+
+    warnings = _dropped_trace_warnings(caplog)
+    assert len(warnings) == 2
+    assert all(
+        "was delivered, but its post-send check failed: RuntimeError: check broke"
+        in warning
+        for warning in warnings
+    )
+    assert warnings[1].startswith("uselemma-tracing: trace trace-2 was delivered")
+    assert not any("dropped trace" in w for w in warnings)
+
+
 def test_before_send_drop_is_not_a_dropped_trace_warning(caplog):
     lemma = Lemma(
         api_key="key",

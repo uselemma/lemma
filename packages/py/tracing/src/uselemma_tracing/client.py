@@ -4,6 +4,7 @@ import asyncio
 import copy
 import inspect
 import json
+import logging
 import os
 import time
 import urllib.error
@@ -66,6 +67,8 @@ except PackageNotFoundError:
     _SDK_VERSION = "unknown"
 
 _SDK_USER_AGENT = f"uselemma-tracing/{_SDK_VERSION}"
+
+logger = logging.getLogger(__name__)
 
 
 def _merge_sdk_user_agent(headers: dict[str, str]) -> dict[str, str]:
@@ -1390,7 +1393,17 @@ class Lemma:
             max_attempts=max_attempts,
         )
         if isinstance(result, Delivered):
-            self._after_trace_sent(payload, result)
+            # Debug-only checks; the trace is already stored, so a failure here
+            # must neither fail the caller nor count as a dropped trace.
+            try:
+                self._after_trace_sent(payload, result)
+            except Exception as exc:
+                logger.warning(
+                    "uselemma-tracing: trace %s was delivered, but its post-send "
+                    "check failed: %s",
+                    ctx.id,
+                    _describe_error(exc),
+                )
         return result
 
     def _build_ingest_body(

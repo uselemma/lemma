@@ -1513,7 +1513,17 @@ export class Lemma {
       { traceId: context.id, projectId: this.projectId },
       maxAttempts,
     );
-    if (result.ok) await this.afterTraceSent(built.payload, result.response);
+    if (result.ok) {
+      // Debug-only checks; the trace is already stored, so a failure here
+      // must neither fail the caller nor count as a dropped trace.
+      try {
+        await this.afterTraceSent(built.payload, result.response);
+      } catch (error) {
+        console.warn(
+          `@uselemma/tracing: trace ${context.id} was delivered, but its post-send check failed: ${describeError(error)}`,
+        );
+      }
+    }
     return result;
   }
 
