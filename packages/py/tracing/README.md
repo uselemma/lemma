@@ -167,11 +167,13 @@ counted, the next warning says how many, and `LEMMA_DEBUG=1` logs each one.
 LangChain and OpenAI Agents flush through this path. `trace` and `async_trace`
 wait for delivery, retries included, before they return; `async_trace` waits on
 the SDK's own worker threads, so retries block neither the event loop nor its
-default executor. If your own timeout or cancellation ends the call while
-delivery runs, that call's result is lost, though the trace is still delivered.
-Use `ingest()` when you need a failed send to raise so you can retry: it sends
-once and does not retry. `TraceHandle.end()` delivers through `ingest()`, so a
-failed send raises there too.
+default executor. Up to `min(32, CPU count + 4)` of those deliveries run at
+once; during an outage, more queue, and each is still delivered or reported. If
+your own timeout or cancellation ends the call while delivery runs, that call's
+result is lost, though the trace is still delivered. Use `ingest()` when you
+need a failed send to raise so you can retry: it sends once and does not retry.
+`TraceHandle.end()` delivers through `ingest()`, so a failed send raises there
+too.
 
 ## Cross-process turns
 

@@ -30,10 +30,11 @@ OFF_LOOP_WORKERS = 4
 # for up to the full retry budget, so during a Lemma outage this bounds the
 # host's memory; it is far above a normal burst of finished traces.
 OFF_LOOP_MAX_BACKLOG = 1_000
-# Awaited-delivery worker threads, sized like asyncio's default executor so
-# concurrent callers don't queue behind each other. The pool is the SDK's own:
-# the default executor also serves the host's DNS lookups and to_thread work,
-# which a stalled delivery would otherwise hold up.
+# Awaited-delivery worker threads, sized like asyncio's default executor. The
+# pool is the SDK's own: the default executor also serves the host's DNS lookups
+# and to_thread work, which a stalled delivery would otherwise hold up. During
+# an outage, concurrent async_trace deliveries beyond this many queue; each is
+# still delivered or reported, and none is lost.
 AWAITED_WORKERS = min(32, (os.cpu_count() or 1) + 4)
 # One delivery's worst case: every attempt times out and every retry waits the
 # longest backoff. Flush and exit wait at most this long for queued deliveries,
