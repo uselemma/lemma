@@ -21,6 +21,7 @@ import {
   resolveDataDir,
   type StorageOptions,
 } from "./storage.js";
+import { withPluginUserAgent } from "./user-agent.js";
 
 const FLUSH_LOCK_STALE_MS = 30_000;
 const FLUSH_LOCK_OWNER_FILE = "owner.json";
@@ -173,7 +174,7 @@ export async function flushPendingTurns(
             projectId: credentials.projectId,
             baseUrl: credentials.apiUrl,
             fetch: createDeliveryFetch(
-              options.fetch,
+              withPluginUserAgent(options.fetch ?? fetch),
               Math.min(DELIVERY_TIMEOUT_MS, remainingMilliseconds),
             ),
           }).ingest(trace.context, {
