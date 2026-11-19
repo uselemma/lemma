@@ -10,6 +10,9 @@ from .debug_delivery import pick_response_headers
 from .debug_mode import _lemma_debug
 from .error_message import describe_error, failure_message
 
+# Sends per ingest() call. Queue and plugin producers keep their own retry
+# backlog, so ingest() sends once and raises.
+INGEST_STRICT_ATTEMPTS = 1
 # Sends per automatic delivery: one plus two retries. That rides out a dropped
 # connection or an ingest worker restart without holding the caller for long
 # while Lemma is down.
@@ -38,13 +41,13 @@ class Delivered:
 
 
 @dataclass(frozen=True)
-class NotDelivered:
+class DeliveryFailure:
     error: Exception
     # Completes "dropped trace <id> ...".
     cause: str
 
 
-DeliveryResult = Union[Delivered, NotDelivered]
+DeliveryResult = Union[Delivered, DeliveryFailure]
 
 
 @dataclass(frozen=True)
@@ -58,11 +61,23 @@ class _SendFailed:
 _SendAttempt = Union[Delivered, _SendFailed]
 
 
-def backlog_full() -> NotDelivered:
+def failed_before_sending(error: Exception) -> DeliveryFailure:
+    """A payload that could not be built or shaped; nothing was sent."""
+    return DeliveryFailure(error=error, cause=f"before sending: {describe_error(error)}")
+
+
+def backlog_full() -> DeliveryFailure:
     """A delivery refused because the off-loop backlog is full; nothing was sent."""
-    return NotDelivered(
+    return DeliveryFailure(
         error=RuntimeError("uselemma-tracing: delivery backlog full"),
         cause="before sending: delivery backlog full",
+    )
+
+
+def _failed_after(attempts: int, attempt: _SendFailed) -> DeliveryFailure:
+    return DeliveryFailure(
+        error=attempt.error,
+        cause=f"after {attempts} attempt{'' if attempts == 1 else 's'}: {attempt.reason}",
     )
 
 
@@ -158,13 +173,7 @@ def deliver(
         if isinstance(attempt, Delivered):
             return attempt
         if not attempt.retryable or attempts >= max_attempts:
-            return NotDelivered(
-                error=attempt.error,
-                cause=(
-                    f"after {attempts} attempt{'' if attempts == 1 else 's'}: "
-                    f"{attempt.reason}"
-                ),
-            )
+            return _failed_after(attempts, attempt)
         delay = ingest_retry_delay_seconds(attempts, attempt.retry_after_seconds)
         _lemma_debug(
             "client",

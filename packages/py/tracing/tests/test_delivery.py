@@ -7,8 +7,10 @@ from uselemma_tracing.delivery import (
     INGEST_RETRY_BASE_DELAY_SECONDS,
     INGEST_RETRY_MAX_DELAY_SECONDS,
     Delivered,
-    NotDelivered,
+    DeliveryFailure,
+    backlog_full,
     deliver,
+    failed_before_sending,
     ingest_failure_hint,
     ingest_retry_delay_seconds,
     is_retryable_ingest_status,
@@ -79,7 +81,7 @@ def test_deliver_retries_a_5xx_up_to_the_last_attempt(retry_sleeps):
 
     result = deliver(post, LOG, max_attempts=INGEST_MAX_ATTEMPTS)
 
-    assert isinstance(result, NotDelivered)
+    assert isinstance(result, DeliveryFailure)
     assert result.cause == f"after {INGEST_MAX_ATTEMPTS} attempts: ingest returned 503"
     assert str(result.error) == "uselemma-tracing: failed to ingest trace (503): busy"
     assert len(calls) == INGEST_MAX_ATTEMPTS
@@ -91,7 +93,7 @@ def test_deliver_does_not_retry_a_rejected_request(retry_sleeps):
 
     result = deliver(post, LOG, max_attempts=INGEST_MAX_ATTEMPTS)
 
-    assert isinstance(result, NotDelivered)
+    assert isinstance(result, DeliveryFailure)
     assert result.cause == "after 1 attempt: ingest returned 401 (check LEMMA_API_KEY)"
     assert len(calls) == 1
     assert retry_sleeps == []
@@ -102,7 +104,7 @@ def test_deliver_retries_a_transport_error(retry_sleeps):
 
     result = deliver(post, LOG, max_attempts=INGEST_MAX_ATTEMPTS)
 
-    assert isinstance(result, NotDelivered)
+    assert isinstance(result, DeliveryFailure)
     assert isinstance(result.error, TimeoutError)
     assert result.cause == f"after {INGEST_MAX_ATTEMPTS} attempts: TimeoutError: timed out"
     assert len(calls) == INGEST_MAX_ATTEMPTS
@@ -129,6 +131,18 @@ def test_deliver_sends_once_when_one_attempt_is_allowed(retry_sleeps):
 
     result = deliver(post, LOG, max_attempts=1)
 
-    assert isinstance(result, NotDelivered)
+    assert isinstance(result, DeliveryFailure)
     assert len(calls) == 1
     assert retry_sleeps == []
+
+
+def test_failed_before_sending_names_the_build_error():
+    error = ValueError("redaction failed")
+
+    assert failed_before_sending(error) == DeliveryFailure(
+        error=error, cause="before sending: ValueError: redaction failed"
+    )
+
+
+def test_backlog_full_names_the_backlog():
+    assert backlog_full().cause == "before sending: delivery backlog full"

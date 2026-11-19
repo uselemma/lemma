@@ -3,6 +3,11 @@ import { lemmaDebug } from "./debug-mode";
 import { describeError, failureMessage } from "./error-message";
 
 /**
+ * Sends per `ingest()` call. Queue and plugin producers keep their own retry
+ * backlog, so `ingest()` sends once and throws.
+ */
+export const INGEST_STRICT_ATTEMPTS = 1;
+/**
  * Sends per automatic delivery: one plus two retries. That rides out a dropped
  * connection or an ingest worker restart without holding the caller's request
  * for long while Lemma is down.
@@ -105,20 +110,37 @@ export type PostIngest = (signal: AbortSignal) => Promise<Response>;
 /** Identifiers on every delivery debug line. */
 export type DeliveryLogFields = { traceId: string; projectId: string };
 
-export type DeliveryResult =
-  | { ok: true; response: Response }
-  /** `cause` completes "dropped trace <id> …". */
-  | { ok: false; error: unknown; cause: string };
+export type DeliveryFailure = {
+  ok: false;
+  error: unknown;
+  /** Completes "dropped trace <id> …". */
+  cause: string;
+};
 
-type SendAttempt =
-  | { ok: true; response: Response }
-  | {
-      ok: false;
-      error: unknown;
-      reason: string;
-      retryable: boolean;
-      retryAfterMs: number | null;
-    };
+export type DeliveryResult = { ok: true; response: Response } | DeliveryFailure;
+
+/** A payload that could not be built; nothing was sent. */
+export function failedBeforeSending(error: unknown): DeliveryFailure {
+  return { ok: false, error, cause: `before sending: ${describeError(error)}` };
+}
+
+function failedAfter(attempts: number, attempt: SendFailed): DeliveryFailure {
+  return {
+    ok: false,
+    error: attempt.error,
+    cause: `after ${attempts} attempt${attempts === 1 ? "" : "s"}: ${attempt.reason}`,
+  };
+}
+
+type SendFailed = {
+  ok: false;
+  error: unknown;
+  reason: string;
+  retryable: boolean;
+  retryAfterMs: number | null;
+};
+
+type SendAttempt = { ok: true; response: Response } | SendFailed;
 
 /** Send once under the request timeout and classify the outcome. */
 async function sendOnce(
@@ -174,11 +196,7 @@ export async function deliver(
     const attempt = await sendOnce(post, log);
     if (attempt.ok) return { ok: true, response: attempt.response };
     if (!attempt.retryable || attempts >= maxAttempts) {
-      return {
-        ok: false,
-        error: attempt.error,
-        cause: `after ${attempts} attempt${attempts === 1 ? "" : "s"}: ${attempt.reason}`,
-      };
+      return failedAfter(attempts, attempt);
     }
     const delayMs = ingestRetryDelayMs(attempts, attempt.retryAfterMs);
     lemmaDebug("client", "retrying trace ingest", {

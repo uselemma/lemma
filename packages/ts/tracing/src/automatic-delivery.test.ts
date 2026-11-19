@@ -184,6 +184,28 @@ describe("automatic trace delivery", () => {
     ]);
   });
 
+  it("logs a payload that cannot be built in debug mode", async () => {
+    captureWarnings();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(TraceContext.prototype, "toPayload").mockImplementation(() => {
+      throw new Error("unserializable output");
+    });
+    enableDebugMode();
+    try {
+      await lemmaWith(vi.fn()).trace({ id: "trace-1", name: "agent" }).end();
+    } finally {
+      disableDebugMode();
+    }
+
+    const failed = log.mock.calls.find((call) =>
+      String(call[0]).includes("trace ingest failed"),
+    );
+    expect(failed?.[1]).toMatchObject({
+      traceId: "trace-1",
+      error: "unserializable output",
+    });
+  });
+
   it("ingest() sends once and throws when the send times out", async () => {
     const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
     const lemma = lemmaWith(fetchMock);

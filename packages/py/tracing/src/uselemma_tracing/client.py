@@ -38,11 +38,13 @@ from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_ena
 from .delivery import (
     INGEST_MAX_ATTEMPTS,
     INGEST_REQUEST_TIMEOUT_SECONDS,
+    INGEST_STRICT_ATTEMPTS,
     Delivered,
+    DeliveryFailure,
     DeliveryResult,
-    NotDelivered,
     backlog_full,
     deliver,
+    failed_before_sending,
     ingest_failure_hint,
 )
 from . import off_loop
@@ -1042,6 +1044,11 @@ def _delivery_log_fields(payload: dict[str, Any]) -> dict[str, Any]:
     return {"trace_id": payload["trace"]["id"], "project_id": payload["project_id"]}
 
 
+@dataclass(frozen=True)
+class _DroppedByBeforeSend:
+    """``before_send`` returned None: an intentional drop, neither sent nor failed."""
+
+
 class Lemma:
     def __init__(
         self,
@@ -1240,12 +1247,12 @@ class Lemma:
             )
         except BaseException as exc:
             ctx.fail(exc)
-            await self._deliver_automatic_off_loop(ctx, started_at, _now())
+            await self._deliver_automatic_in_thread(ctx, started_at, _now())
             raise
 
         if ctx.output_value is None:
             ctx.output(result)
-        await self._deliver_automatic_off_loop(ctx, started_at, _now())
+        await self._deliver_automatic_in_thread(ctx, started_at, _now())
         return result
 
     def ingest(
@@ -1273,7 +1280,14 @@ class Lemma:
         are skipped. Raises on a non-2xx response and never mutates the trace's
         status, so a failed send can be retried as-is.
         """
-        self._send(context, started_at, ended_at or _now())
+        result = self._send_trace(
+            context,
+            started_at,
+            ended_at or _now(),
+            max_attempts=INGEST_STRICT_ATTEMPTS,
+        )
+        if isinstance(result, DeliveryFailure):
+            raise result.error
 
     def start_turn(
         self,
@@ -1312,7 +1326,7 @@ class Lemma:
             payload["trace"]["release"] = self.release
         return payload
 
-    async def _deliver_automatic_off_loop(
+    async def _deliver_automatic_in_thread(
         self,
         ctx: TraceContext,
         started_at: datetime,
@@ -1366,7 +1380,7 @@ class Lemma:
         result = self._send_trace(
             ctx, started_at, ended_at, max_attempts=INGEST_MAX_ATTEMPTS
         )
-        if isinstance(result, NotDelivered):
+        if isinstance(result, DeliveryFailure):
             report_dropped_trace(ctx.id, result.cause)
 
     def _shape_payload(self, payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -1386,16 +1400,6 @@ class Lemma:
             payload = apply_before_send(payload, self.before_send)
         return payload
 
-    def _send(
-        self,
-        ctx: TraceContext,
-        started_at: datetime,
-        ended_at: datetime,
-    ) -> None:
-        result = self._send_trace(ctx, started_at, ended_at, max_attempts=1)
-        if isinstance(result, NotDelivered):
-            raise result.error
-
     def _send_trace(
         self,
         ctx: TraceContext,
@@ -1403,18 +1407,25 @@ class Lemma:
         ended_at: datetime,
         *,
         max_attempts: int,
-    ) -> DeliveryResult | None:
-        """Build, send, and check one trace; None when ``before_send`` dropped it.
+    ) -> DeliveryResult | _DroppedByBeforeSend:
+        """Build, send, and check one trace.
 
-        A payload that cannot be built comes back as ``NotDelivered``, so strict
-        and automatic delivery handle it once.
+        A payload that cannot be built or shaped comes back as a
+        ``DeliveryFailure``, so strict and automatic delivery handle it once.
         """
         try:
             built = self._build_ingest_body(ctx, started_at, ended_at)
         except Exception as exc:
-            return NotDelivered(error=exc, cause=f"before sending: {_describe_error(exc)}")
-        if built is None:
-            return None
+            _lemma_debug(
+                "client",
+                "trace ingest failed",
+                trace_id=ctx.id,
+                project_id=self.project_id,
+                error=_failure_message(exc),
+            )
+            return failed_before_sending(exc)
+        if isinstance(built, _DroppedByBeforeSend):
+            return built
         payload, body = built
         result = deliver(
             lambda: self._post_ingest(body),
@@ -1440,24 +1451,15 @@ class Lemma:
         ctx: TraceContext,
         started_at: datetime,
         ended_at: datetime,
-    ) -> tuple[dict[str, Any], bytes] | None:
-        """Shape and serialize the payload; None means ``before_send`` dropped it.
+    ) -> tuple[dict[str, Any], bytes] | _DroppedByBeforeSend:
+        """Shape and serialize the payload; raises when that fails.
 
         Serialized once, so every attempt resends the same span IDs and ingest
         dedupes an earlier attempt that landed unseen.
         """
-        payload = self._stamp_release(ctx.payload(self.project_id or "", started_at, ended_at))
-        try:
-            payload = self._shape_payload(payload)
-        except Exception as exc:
-            _lemma_debug(
-                "client",
-                "trace ingest failed",
-                trace_id=ctx.id,
-                project_id=self.project_id,
-                error=_failure_message(exc),
-            )
-            raise
+        payload = self._shape_payload(
+            self._stamp_release(ctx.payload(self.project_id or "", started_at, ended_at))
+        )
         if payload is None:
             _lemma_debug(
                 "client",
@@ -1465,7 +1467,7 @@ class Lemma:
                 trace_id=ctx.id,
                 project_id=self.project_id,
             )
-            return None
+            return _DroppedByBeforeSend()
         body = dumps_payload(payload).encode()
         _lemma_debug(
             "client",

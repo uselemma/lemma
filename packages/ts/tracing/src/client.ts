@@ -18,8 +18,11 @@ import {
 } from "./debug-mode";
 import {
   deliver,
+  type DeliveryFailure,
   type DeliveryResult,
+  failedBeforeSending,
   INGEST_MAX_ATTEMPTS,
+  INGEST_STRICT_ATTEMPTS,
   ingestFailureHint,
   sleep,
   withIngestTimeout,
@@ -1215,7 +1218,7 @@ export class Lemma {
       context,
       options.startedAt,
       options.endedAt ?? new Date(),
-      1,
+      INGEST_STRICT_ATTEMPTS,
     );
     if (!result.ok) throw result.error;
   }
@@ -1535,9 +1538,7 @@ export class Lemma {
     context: TraceContext,
     startedAt: Date,
     endedAt: Date,
-  ):
-    | { ok: true; payload: SdkTracePayload; body: string }
-    | Extract<DeliveryResult, { ok: false }> {
+  ): { ok: true; payload: SdkTracePayload; body: string } | DeliveryFailure {
     try {
       const payload = this.stampRelease(
         context.toPayload(this.projectId, startedAt, endedAt),
@@ -1554,11 +1555,12 @@ export class Lemma {
       });
       return { ok: true, payload, body };
     } catch (error) {
-      return {
-        ok: false,
-        error,
-        cause: `before sending: ${describeError(error)}`,
-      };
+      lemmaDebug("client", "trace ingest failed", {
+        traceId: context.id,
+        projectId: this.projectId,
+        error: failureMessage(error) ?? String(error),
+      });
+      return failedBeforeSending(error);
     }
   }
 
