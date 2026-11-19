@@ -1456,3 +1456,13 @@ async def test_langchain_delivers_off_a_running_loop():
 
     assert len(send_threads) == 1
     assert send_threads[0] != threading.get_ident()
+
+
+async def test_langchain_aflush_sends_open_traces_once_off_the_loop():
+    handler, send_threads = _thread_recording_handler()
+    handler.on_chain_start({"name": "support-agent"}, "hi", run_id="chain-1")
+    await handler.aflush()
+    await handler.aflush()
+
+    assert len(send_threads) == 1
+    assert send_threads[0] != threading.get_ident()

@@ -252,10 +252,11 @@ called them.
 
 Pass OpenAI Agents `group_id` for `thread_id` and metadata `user_id` / `userId`
 for `user_id`. Call `force_flush()` / `shutdown()` to finalize open traces
-once. In async code the processor hands each delivery to a worker pool, so call
-`force_flush()` before a short-lived process returns: it waits up to 34 seconds
-for queued deliveries, plus any delivery already sending, then drops the rest
-with one warning. Process exit waits the same way. At most 1,000 deliveries
+once. In async code the processor hands each delivery to a worker pool, so
+await `aforce_flush()` before a short-lived process returns; it waits without
+blocking the event loop. `aforce_flush()` and `force_flush()` wait up to 34
+seconds for queued deliveries, plus any delivery already sending, then drop the
+rest with one warning. Process exit waits the same way. At most 1,000 deliveries
 wait at once, which bounds memory while Lemma is unreachable; a trace that
 finishes past that is dropped with a warning.
 
@@ -279,13 +280,13 @@ final output or root error, promoted `thread_id` / `user_id`, typed nested
 generations/tools/spans, and real wall-clock bounds. Call `flush()` /
 `shutdown()` to finalize open traces immediately. In async code (`ainvoke()`,
 or a sync `invoke()` inside an event loop), delivery goes to the worker pool
-without waiting, so call `flush()` before a short-lived process returns; it
-waits for those deliveries as OpenAI Agents' `force_flush()` does. On
-long-lived hosts, traces that stay idle (no child start/end) past
-`open_trace_ttl` (default 2 hours) are finalized and sent, swept from every
-`on_*_start` at most every `eviction_interval` (default 5 minutes). A
-still-active long run is not evicted. Pass `open_trace_ttl=None` to disable.
-Stale traces are sent (same payload as `flush()`), not dropped.
+without waiting, so await `aflush()` before a short-lived process returns; it
+waits for those deliveries as OpenAI Agents' `aforce_flush()` does, without
+blocking the event loop. On long-lived hosts, traces that stay idle (no child
+start/end) past `open_trace_ttl` (default 2 hours) are finalized and sent,
+swept from every `on_*_start` at most every `eviction_interval` (default 5
+minutes). A still-active long run is not evicted. Pass `open_trace_ttl=None` to
+disable. Stale traces are sent (same payload as `flush()`), not dropped.
 
 ```bash
 pip install "uselemma-tracing[langchain]" langchain-openai

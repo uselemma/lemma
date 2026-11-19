@@ -302,9 +302,21 @@ class LemmaOpenAIAgentsProcessor:
         self.force_flush()
 
     def force_flush(self) -> None:
+        self._finalize_open_traces()
+        # Deliveries handed off an event loop must finish before a flush returns.
+        # The wait is process-wide, so it covers every client's deliveries.
+        off_loop.wait_pending()
+
+    async def aforce_flush(self) -> None:
+        """``force_flush()`` for async code: waits for the same deliveries
+        without blocking the event loop."""
+        self._finalize_open_traces()
+        await off_loop.await_pending()
+
+    def _finalize_open_traces(self) -> None:
         # Finalize any still-open traces exactly once (a one-time terminal send
         # for traces that never received on_trace_end), then drop them so a
-        # later on_trace_end or force_flush can't resend and duplicate spans.
+        # later on_trace_end or flush can't resend and duplicate spans.
         with self._lock:
             finalized = [
                 self._finalize(trace_id, stored)
@@ -313,9 +325,6 @@ class LemmaOpenAIAgentsProcessor:
         for delivery in finalized:
             if delivery is not None:
                 self.lemma._deliver_automatic_from_sync_hook(*delivery)
-        # Deliveries handed off an event loop must finish before a flush returns.
-        # The wait is process-wide, so it covers every client's deliveries.
-        off_loop.wait_pending()
 
     def _resolve_thread_id(
         self,

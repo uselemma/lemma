@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import json
 import threading
@@ -1083,6 +1084,50 @@ async def test_openai_agents_force_flush_waits_for_handed_off_deliveries():
     processor.force_flush()
 
     assert sent == [True]
+
+
+async def test_openai_agents_aforce_flush_waits_without_blocking_the_loop():
+    release = threading.Event()
+    sent = []
+
+    def transport(*_args):
+        release.wait(timeout=5)
+        sent.append(True)
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_aflush", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_aflush", name="agent"))
+
+    flush = asyncio.create_task(processor.aforce_flush())
+    # The loop keeps running while the delivery is held in the transport.
+    await asyncio.sleep(0.05)
+    assert not flush.done()
+    assert sent == []
+    release.set()
+    await asyncio.wait_for(flush, 5)
+
+    assert sent == [True]
+
+
+async def test_openai_agents_aforce_flush_sends_open_traces_once_off_the_loop():
+    loop_thread = threading.get_ident()
+    send_threads = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: send_threads.append(threading.get_ident())
+        or (201, "{}"),
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_open", name="agent"))
+    await processor.aforce_flush()
+    processor.on_trace_end(FakeTrace(trace_id="trace_open", name="agent"))
+    await processor.aforce_flush()
+
+    assert len(send_threads) == 1
+    assert send_threads[0] != loop_thread
 
 
 async def test_openai_agents_drops_a_trace_past_the_delivery_backlog(

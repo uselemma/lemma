@@ -2,7 +2,8 @@
 
 Automatic delivery blocks on the transport and on retry backoff. A sync hook
 that an async framework calls on its loop thread hands delivery to the
-fire-and-forget pool; ``async_trace`` awaits delivery on the awaited pool.
+fire-and-forget pool; ``async_trace`` awaits delivery, and an async flush its
+wait for that pool, on the awaited pool.
 """
 
 from __future__ import annotations
@@ -71,8 +72,13 @@ class _Pool:
         # in submission order.
         self.pending: dict[Future[None], str] = {}
 
-    def submit(self, fn: Callable[[], None], trace_id: str) -> Future[None]:
-        """Queue ``fn`` to run in the submitting thread's context."""
+    def submit(self, fn: Callable[[], None], trace_id: str | None) -> Future[None]:
+        """Queue ``fn`` to run in the submitting thread's context.
+
+        ``trace_id`` is None for work that delivers no trace, such as a flush's
+        wait: it is not tracked, so the drains neither wait for it nor report it
+        as a dropped trace.
+        """
         # Copied here, on the caller's thread, so before_send and a custom
         # transport see the caller's ContextVars on the worker.
         context = copy_context()
@@ -87,7 +93,8 @@ class _Pool:
             except RuntimeError:
                 future = None
             else:
-                self.pending[future] = trace_id
+                if trace_id is not None:
+                    self.pending[future] = trace_id
         if future is None:
             # Executors refuse new work once interpreter shutdown starts. A
             # thread that outlives the main thread still delivers, inline.
@@ -146,12 +153,12 @@ def _on_event_loop_thread() -> bool:
     return True
 
 
-async def run_awaited(fn: Callable[[], None], trace_id: str) -> None:
+async def run_awaited(fn: Callable[[], None], trace_id: str | None) -> None:
     """Run ``fn`` on the awaited pool and wait for it.
 
     Cancelling the caller, by its own timeout or by ``asyncio.run`` shutting
-    down, ends only the wait: nothing links the waiter back to the delivery,
-    which still runs or is reported by the exit drain.
+    down, ends only the wait: nothing links the waiter back to ``fn``, which
+    still runs, or, when it delivers a trace, is reported by the exit drain.
     """
     future = _awaited.submit(fn, trace_id)
     loop = asyncio.get_running_loop()
@@ -185,6 +192,16 @@ def wait_pending() -> None:
     delivery already sending finishes or times out on its own.
     """
     _drain([_fire_and_forget], "flush")
+
+
+async def await_pending() -> None:
+    """``wait_pending`` for async code: the wait runs on the awaited pool, so
+    the event loop keeps running while queued deliveries finish.
+
+    The wait takes an awaited worker, so while every worker is busy with an
+    ``async_trace`` delivery it starts only once one frees up.
+    """
+    await run_awaited(wait_pending, None)
 
 
 def _drain(pools: list[_Pool], moment: Literal["flush", "exit"]) -> None:

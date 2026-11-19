@@ -1463,10 +1463,19 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
     def flush(self) -> None:
         """Finalize all open owned traces (idempotent; does not resend), then wait
         for deliveries handed off an event loop."""
-        for trace_id, stored in list(self._traces.items()):
-            self._finalize(trace_id, stored)
+        self._finalize_open_traces()
         # The wait is process-wide, so it covers every client's deliveries.
         off_loop.wait_pending()
+
+    async def aflush(self) -> None:
+        """``flush()`` for async code: waits for the same deliveries without
+        blocking the event loop."""
+        self._finalize_open_traces()
+        await off_loop.await_pending()
+
+    def _finalize_open_traces(self) -> None:
+        for trace_id, stored in list(self._traces.items()):
+            self._finalize(trace_id, stored)
 
     def shutdown(self) -> None:
         """Finalize open traces and reset integration state."""

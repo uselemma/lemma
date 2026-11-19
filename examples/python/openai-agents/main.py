@@ -47,7 +47,7 @@ async def run_turn(turn: ChatTurn) -> str:
     metadata = {"user_id": turn.identity.user_id} if turn.identity.user_id else {}
     with trace(AGENT_NAME, group_id=turn.identity.thread_id, metadata=metadata):
         result = await Runner.run(agent, model_messages(turn))
-    processor.force_flush()
+    await processor.aforce_flush()
     return str(result.final_output or "")
 
 

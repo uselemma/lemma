@@ -153,6 +153,25 @@ def test_flush_waits_for_an_ainvoke_delivery():
     assert len(calls) == 1
 
 
+def test_aflush_waits_for_an_ainvoke_delivery_without_blocking_the_loop():
+    handler, calls, _send_threads, release = _gated_handler()
+    chain = RunnableLambda(lambda text: f"echo:{text}")
+
+    async def run():
+        await chain.ainvoke("hello", config={"callbacks": [handler]})
+        flush = asyncio.create_task(handler.aflush())
+        # The loop keeps running while the delivery is held in the transport.
+        await asyncio.sleep(0.05)
+        assert not flush.done()
+        assert calls == []
+        release.set()
+        await asyncio.wait_for(flush, 5)
+
+    asyncio.run(run())
+
+    assert len(calls) == 1
+
+
 def test_create_agent_ainvoke_is_one_root_with_tool_and_generation():
     calls = []
     handler = _handler(calls, agent_name="support-agent")

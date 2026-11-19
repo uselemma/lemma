@@ -87,7 +87,7 @@ async def run_turn(turn: ChatTurn) -> str:
             "metadata": lemma_example_metadata(turn.identity),
         },
     )
-    lemma_handler.flush()
+    await lemma_handler.aflush()
     return last_message_text(result["messages"])
 
 

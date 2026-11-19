@@ -84,7 +84,7 @@ def call_agent(user_message: str, conversation_id: str):
     return response.content
 ```
 
-In async code, `ainvoke()` hands delivery to the SDK’s worker pool and returns without waiting for it, so retries don’t block your event loop. Call `lemma_handler.flush()` before a short-lived process such as a serverless handler returns: it waits for those deliveries.
+In async code, `ainvoke()` hands delivery to the SDK’s worker pool and returns without waiting for it, so retries don’t block your event loop. Await `lemma_handler.aflush()` before a short-lived process such as a serverless handler returns: it waits for those deliveries without blocking the loop. In sync code, call `lemma_handler.flush()`.
 
 ## What Lemma records
 
