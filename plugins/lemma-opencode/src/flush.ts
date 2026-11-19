@@ -13,7 +13,7 @@ import { join } from "node:path";
 
 import { codingAgentTurnTrace, Lemma } from "@uselemma/tracing";
 
-import { createDeliveryFetch, DELIVERY_TIMEOUT_MS } from "./delivery.js";
+import { createDeliveryFetch } from "./delivery.js";
 import { isPendingOpenCodeTurn } from "./pending.js";
 import {
   LEMMA_OPENCODE_CREDENTIALS_HELP,
@@ -175,7 +175,7 @@ export async function flushPendingTurns(
             baseUrl: credentials.apiUrl,
             fetch: createDeliveryFetch(
               withPluginUserAgent(options.fetch ?? fetch),
-              Math.min(DELIVERY_TIMEOUT_MS, remainingMilliseconds),
+              remainingMilliseconds,
             ),
           }).ingest(trace.context, {
             startedAt: new Date(trace.startedAt),

@@ -1,8 +1,9 @@
-export const DELIVERY_TIMEOUT_MS = 10_000;
-
+// Bounds one delivery, including reading an error response's body, by the
+// time left before the flush deadline, which the SDK's per-attempt cap does
+// not know.
 export function createDeliveryFetch(
-  fetchImplementation: typeof fetch = fetch,
-  timeoutMilliseconds = DELIVERY_TIMEOUT_MS,
+  fetchImplementation: typeof fetch,
+  remainingMilliseconds: number,
 ): typeof fetch {
   return async (request, init) => {
     const controller = new AbortController();
@@ -14,7 +15,7 @@ export function createDeliveryFetch(
       timeout = setTimeout(() => {
         controller.abort();
         reject(new Error("Lemma OpenCode trace delivery timed out"));
-      }, timeoutMilliseconds);
+      }, remainingMilliseconds);
     });
     const requestAndBody = (async () => {
       const response = await fetchImplementation(request, { ...init, signal });
