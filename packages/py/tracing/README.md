@@ -164,10 +164,12 @@ backoff; when every attempt fails, or Lemma rejects the trace with another 4xx,
 the trace is dropped with a warning on the `uselemma_tracing` logger. The first
 drop names the trace ID and the reason; drops in the minute after a warning are
 counted, the next warning says how many, and `LEMMA_DEBUG=1` logs each one.
-LangChain and OpenAI Agents flush through this path. `async_trace` and the
-OpenAI Agents processor deliver on a worker thread, so retries don't block the
-event loop. Use `ingest()` when you need a failed send to raise so you can
-retry: it sends once and does not retry. `TraceHandle.end()` delivers through
+LangChain and OpenAI Agents flush through this path. `trace` and `async_trace`
+wait for delivery, retries included, before they return; `async_trace` waits on
+a worker thread, so retries don't block the event loop. If your own timeout or
+cancellation ends the call while delivery runs, that call's result is lost,
+though the trace is still delivered. Use `ingest()` when you need a failed send
+to raise so you can retry: it sends once and does not retry. `TraceHandle.end()` delivers through
 `ingest()`, so a failed send raises there too.
 
 ## Cross-process turns
@@ -247,9 +249,11 @@ called them.
 
 Pass OpenAI Agents `group_id` for `thread_id` and metadata `user_id` /
 `userId` for `user_id`. Call `force_flush()` / `shutdown()` to finalize open
-traces once. In async code the processor delivers on a worker thread, and
-`force_flush()` waits for those deliveries, so call it before a short-lived
-process returns.
+traces once. In async code the processor hands each delivery to a worker pool,
+and `force_flush()` waits for those deliveries, so call it before a short-lived
+process returns. At most 1,000 deliveries wait at once, which bounds memory
+while Lemma is unreachable; a trace that finishes past that is dropped with a
+warning.
 
 Enable debug mode to validate live span shape while developing:
 
