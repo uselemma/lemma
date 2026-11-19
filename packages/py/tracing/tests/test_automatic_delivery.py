@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from uselemma_tracing.client import Lemma, TraceContext
@@ -237,3 +238,34 @@ async def test_concurrent_async_traces_each_await_their_own_delivery():
 
     assert results == ["ok", "ok"]
     assert not barrier.broken
+
+
+async def test_a_stalled_awaited_delivery_does_not_hold_a_default_executor_thread():
+    loop = asyncio.get_running_loop()
+    loop.set_default_executor(ThreadPoolExecutor(max_workers=1))
+    sending = threading.Event()
+    release = threading.Event()
+
+    def transport(_url, _headers, _body):
+        sending.set()
+        release.wait(timeout=5)
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    async def run(_trace):
+        return "ok"
+
+    trace = asyncio.create_task(lemma.async_trace("support-agent", run))
+    for _ in range(200):
+        if sending.is_set():
+            break
+        await asyncio.sleep(0.01)
+    assert sending.is_set()
+
+    # The host's only default-executor thread is still free for its own work.
+    free = await asyncio.wait_for(loop.run_in_executor(None, lambda: "free"), 2)
+    release.set()
+
+    assert free == "free"
+    assert await trace == "ok"

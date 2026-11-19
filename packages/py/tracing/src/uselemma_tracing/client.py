@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import copy
 import inspect
 import json
@@ -1332,8 +1331,11 @@ class Lemma:
         started_at: datetime,
         ended_at: datetime,
     ) -> None:
-        # The transport and retry backoff block; keep both off the event loop.
-        await asyncio.to_thread(self._deliver_automatic, ctx, started_at, ended_at)
+        # The transport and retry backoff block, so delivery runs on the SDK's
+        # awaited pool rather than the loop or the host's default executor.
+        await off_loop.run_awaited(
+            lambda: self._deliver_automatic(ctx, started_at, ended_at), ctx.id
+        )
 
     def _deliver_automatic_from_sync_hook(
         self,

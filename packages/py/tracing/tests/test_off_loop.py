@@ -137,14 +137,56 @@ def test_exit_stops_at_the_deadline_and_reports_unstarted_deliveries():
     )
 
 
-def test_a_forked_child_starts_with_an_empty_pool():
+def test_a_forked_child_starts_with_empty_pools():
     job, release, _ran = _gated()
+    awaited_job, release_awaited, _awaited_ran = _gated()
     assert off_loop.submit(job, "trace-1")
+    off_loop._awaited.submit(awaited_job, "trace-2")
 
     off_loop._reset()
 
-    assert off_loop._executor is None
-    assert off_loop._pending == {}
+    for pool in (off_loop._fire_and_forget, off_loop._awaited):
+        assert pool.executor is None
+        assert pool.pending == {}
     release.set()
-    assert off_loop.submit(lambda: None, "trace-2")
+    release_awaited.set()
+    assert off_loop.submit(lambda: None, "trace-3")
     off_loop.wait_pending()
+
+
+def test_the_exit_drain_also_cuts_queued_awaited_deliveries(
+    fresh_pool, monkeypatch, caplog
+):
+    monkeypatch.setattr(off_loop, "AWAITED_WORKERS", 1)
+    monkeypatch.setattr(off_loop, "OFF_LOOP_DRAIN_DEADLINE_SECONDS", 0.2)
+    in_flight, release, _ran = _gated()
+    queued_ran = []
+
+    off_loop._awaited.submit(in_flight, "trace-a")
+    off_loop._awaited.submit(lambda: queued_ran.append("b"), "trace-b")
+    off_loop._drain_at_exit()
+    release.set()
+
+    assert queued_ran == []
+    [warning] = _lemma_warnings(caplog)
+    assert warning.startswith(
+        "uselemma-tracing: dropped trace trace-b before sending: 1 delivery still "
+        "queued at exit."
+    )
+
+
+async def test_run_awaited_runs_on_the_awaited_pool_in_the_callers_context():
+    import contextvars
+
+    request_id = contextvars.ContextVar("request_id")
+    request_id.set("req-1")
+    seen = []
+
+    await off_loop.run_awaited(
+        lambda: seen.append((threading.current_thread().name, request_id.get())),
+        "trace-1",
+    )
+
+    [(thread_name, value)] = seen
+    assert thread_name.startswith("uselemma-awaited-delivery")
+    assert value == "req-1"
