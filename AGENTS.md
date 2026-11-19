@@ -16,7 +16,7 @@ When a change should ship to callers, bump every affected package version in the
 
 Version fields:
 
-- `@uselemma/tracing` — `packages/ts/tracing/package.json`
+- `@uselemma/tracing` — `packages/ts/tracing/package.json` and `packages/ts/tracing/src/version.ts` (the User-Agent version; a test fails when the two differ)
 - `uselemma-tracing` — `packages/py/tracing/pyproject.toml` and `uv.lock`
 - Harness plugins (`@uselemma/opencode`, `@uselemma/pi`, `@uselemma/hermes`, `@uselemma/openclaw`) — `plugins/lemma-<name>/package.json`
 - Skills (`lemma-tracing`, `lemma-diagnostics`, `lemma-mcp`, `lemma-analytics`, `lemma-artifacts`) — `skills/<name>/SKILL.md` `metadata.version`

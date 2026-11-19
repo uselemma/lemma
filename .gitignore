@@ -4,7 +4,6 @@ node_modules/
 
 # Build output
 dist/
-packages/ts/tracing/src/version.ts
 coverage/
 .coverage
 

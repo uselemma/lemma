@@ -28,7 +28,7 @@ Changes to packages (`packages/`, `plugins/`) and skills (`skills/`) follow [Sem
 
 | Path | Version field |
 | --- | --- |
-| `packages/ts/tracing` | `package.json` |
+| `packages/ts/tracing` | `package.json` and `src/version.ts` |
 | `packages/py/tracing` | `pyproject.toml` and `uv.lock` |
 | `plugins/lemma-*` | `package.json` |
 | `skills/<name>` | `SKILL.md` `metadata.version` |

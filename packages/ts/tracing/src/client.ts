@@ -1016,6 +1016,8 @@ export class Lemma {
   private readonly projectId: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  /** Identity and credentials on every request; spread last so nothing overrides them. */
+  private readonly baseHeaders: Readonly<Record<string, string>>;
   private readonly release?: string;
   private readonly traces = new Map<string, TraceHandle>();
   private configLogged = false;
@@ -1034,6 +1036,10 @@ export class Lemma {
       "",
     );
     this.fetchImpl = options.fetch ?? fetch;
+    this.baseHeaders = {
+      "User-Agent": SDK_USER_AGENT,
+      Authorization: `Bearer ${this.apiKey}`,
+    };
     this.release = normalizeRelease(
       options.release ?? process.env.LEMMA_RELEASE,
     );
@@ -1417,17 +1423,6 @@ export class Lemma {
     });
   }
 
-  /** The headers every request sends: identity, then credentials, then `extra`. */
-  private requestHeaders(
-    extra: Record<string, string> = {},
-  ): Record<string, string> {
-    return {
-      "User-Agent": SDK_USER_AGENT,
-      Authorization: `Bearer ${this.apiKey}`,
-      ...extra,
-    };
-  }
-
   private async fetchIngestStatus(
     otelTraceId: string,
   ): Promise<IngestStatus | null> {
@@ -1438,7 +1433,7 @@ export class Lemma {
     try {
       return await withIngestTimeout(async (signal) => {
         const response = await this.fetchImpl(url, {
-          headers: this.requestHeaders(),
+          headers: { ...this.baseHeaders },
           signal,
         });
         if (!response.ok) return null;
@@ -1585,7 +1580,7 @@ export class Lemma {
   private postIngest(body: string, signal: AbortSignal): Promise<Response> {
     return this.fetchImpl(`${this.baseUrl}${INGEST_PATH}`, {
       method: "POST",
-      headers: this.requestHeaders({ "Content-Type": "application/json" }),
+      headers: { "Content-Type": "application/json", ...this.baseHeaders },
       body,
       signal,
     });
