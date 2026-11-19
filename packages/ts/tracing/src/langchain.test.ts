@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { jsonBody } from "../test-helpers";
+import { captureWarnings, jsonBody, withFakeTimers } from "../test-helpers";
+import { INGEST_MAX_ATTEMPTS } from "./debug-delivery";
 import { langChain, langGraph } from "./langchain";
 
 function handler(fetchMock: ReturnType<typeof vi.fn>, options: Record<string, unknown> = {}) {
@@ -881,10 +882,18 @@ describe("langChain", () => {
     const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
     const h = handler(fetchMock);
 
+    const warn = captureWarnings();
+
     h.handleChainStart({ name: "support-agent" }, "hi", "chain-1");
-    await h.handleChainEnd("done", "chain-1");
-    await expect(h.flush()).resolves.toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await expect(
+      withFakeTimers(async () => {
+        await h.handleChainEnd("done", "chain-1");
+        await h.flush();
+      }),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(INGEST_MAX_ATTEMPTS);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 
   it("forwards release onto the ingest payload", async () => {

@@ -2,13 +2,46 @@ import { describe, expect, it } from "vitest";
 import {
   apiKeySuffix,
   buildConfigWarnings,
+  INGEST_RETRY_BASE_DELAY_MS,
+  INGEST_RETRY_MAX_DELAY_MS,
   ingestFailureHint,
+  ingestRetryDelayMs,
+  isRetryableIngestStatus,
   isValidProjectId,
   pickResponseHeadersFromRecord,
   PRODUCTION_BASE_URL,
 } from "./debug-delivery";
 
 describe("debug-delivery", () => {
+  it("retries timeouts, rate limits and server errors only", () => {
+    for (const status of [408, 429, 500, 502, 503, 504]) {
+      expect(isRetryableIngestStatus(status)).toBe(true);
+    }
+    for (const status of [400, 401, 403, 404, 413, 422]) {
+      expect(isRetryableIngestStatus(status)).toBe(false);
+    }
+  });
+
+  it("doubles the jittered retry delay", () => {
+    const base = INGEST_RETRY_BASE_DELAY_MS;
+    expect(ingestRetryDelayMs(1, null, () => 0)).toBe(base / 2);
+    expect(ingestRetryDelayMs(1, null, () => 1)).toBe(base);
+    expect(ingestRetryDelayMs(2, null, () => 0)).toBe(base);
+    expect(ingestRetryDelayMs(2, null, () => 1)).toBe(base * 2);
+  });
+
+  it("honors a delta-seconds Retry-After up to the cap", () => {
+    expect(ingestRetryDelayMs(1, "1", () => 0)).toBe(1_000);
+    expect(ingestRetryDelayMs(1, "0", () => 1)).toBe(INGEST_RETRY_BASE_DELAY_MS);
+    expect(ingestRetryDelayMs(1, "60", () => 0)).toBe(INGEST_RETRY_MAX_DELAY_MS);
+    expect(
+      ingestRetryDelayMs(1, "Wed, 21 Oct 2026 07:28:00 GMT", () => 0),
+    ).toBe(INGEST_RETRY_BASE_DELAY_MS / 2);
+    expect(ingestRetryDelayMs(1, " ", () => 0)).toBe(
+      INGEST_RETRY_BASE_DELAY_MS / 2,
+    );
+  });
+
   it("validates project ids as UUIDs", () => {
     expect(isValidProjectId("10000000-0000-0000-0000-000000000001")).toBe(true);
     expect(isValidProjectId("not-a-uuid")).toBe(false);

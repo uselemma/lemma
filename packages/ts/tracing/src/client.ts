@@ -4,10 +4,14 @@ import {
   EXPECTED_INGEST_SUCCESS_STATUS,
   type IngestStatus,
   ingestFailureHint,
+  INGEST_MAX_ATTEMPTS,
   INGEST_PATH,
+  INGEST_REQUEST_TIMEOUT_MS,
   INGEST_STATUS_PATH,
   INGEST_STATUS_POLL_INTERVAL_MS,
   INGEST_STATUS_POLL_TIMEOUT_MS,
+  ingestRetryDelayMs,
+  isRetryableIngestStatus,
   isSuccessfulIngestStatus,
   parseIngestStatus,
   pickResponseHeaders,
@@ -18,7 +22,8 @@ import {
   isDebugVerifyEnabled,
   lemmaDebug,
 } from "./debug-mode";
-import { failureMessage } from "./error-message";
+import { reportDroppedTrace } from "./dropped-traces";
+import { describeError, failureMessage } from "./error-message";
 import { normalizeRelease } from "./release";
 import {
   attachResultUsage,
@@ -486,6 +491,51 @@ function normalizeSpan(
 
 function warnNoop(message: string) {
   console.warn(`@uselemma/tracing: ${message}`);
+}
+
+/** Outcome of the last send when a trace was not delivered. */
+type DeliveryFailure = {
+  error: unknown;
+  attempts: number;
+  status?: number;
+};
+
+type SendAttempt =
+  | { ok: true; response: Response }
+  | { ok: false; error: unknown; status?: number; retryAfter: string | null };
+
+/**
+ * Bound one ingest request, body read included. The race also covers a custom
+ * `fetch` that ignores the abort signal.
+ */
+async function withIngestTimeout<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(
+        `ingest request timed out after ${INGEST_REQUEST_TIMEOUT_MS}ms`,
+      );
+      error.name = "TimeoutError";
+      controller.abort(error);
+      reject(error);
+    }, INGEST_REQUEST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([run(controller.signal), timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function deliveryFailureReason(failure: DeliveryFailure): string {
+  if (failure.status === undefined) {
+    return describeError(failure.error);
+  }
+  const hint = ingestFailureHint(failure.status);
+  return `ingest returned ${failure.status}${hint ? ` (${hint})` : ""}`;
 }
 
 function isTraceEndOptions(value: unknown): value is TraceEndOptions {
@@ -1055,14 +1105,17 @@ export class Lemma {
 
     let response: Response;
     try {
-      response = await this.fetchImpl(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body,
-      });
+      response = await withIngestTimeout((signal) =>
+        this.fetchImpl(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body,
+          signal,
+        }),
+      );
     } catch {
       hints.push("ingest request failed (network error)");
       return {
@@ -1470,19 +1523,34 @@ export class Lemma {
   }
 
   /**
-   * Automatic SDK delivery. Catches transport / non-2xx so Lemma being down
-   * cannot fail the caller's app. {@link Lemma.ingest} uses {@link flushTrace}
-   * (strict) so queue/plugin producers can retry.
+   * Automatic SDK delivery. Retries transient failures, then fails open with
+   * a rate-limited warning so Lemma being down cannot fail the caller's app.
+   * {@link Lemma.ingest} sends once and throws, because queue/plugin producers
+   * keep their own retry backlog.
    */
   private async flushTraceAutomatic(
     context: TraceContext,
     startedAt: Date,
     endedAt: Date,
   ) {
+    let failure: DeliveryFailure | null;
     try {
-      await this.flushTrace(context, startedAt, endedAt);
-    } catch {
-      // flushTrace already lemmaDebug'd "trace ingest failed".
+      failure = await this.deliverTrace(
+        context,
+        startedAt,
+        endedAt,
+        INGEST_MAX_ATTEMPTS,
+      );
+    } catch (error) {
+      // The payload could not be built or serialized; nothing was sent.
+      failure = { error, attempts: 0 };
+    }
+    if (failure) {
+      reportDroppedTrace({
+        traceId: context.id,
+        attempts: failure.attempts,
+        reason: deliveryFailureReason(failure),
+      });
     }
   }
 
@@ -1491,9 +1559,22 @@ export class Lemma {
     startedAt: Date,
     endedAt: Date,
   ) {
+    const failure = await this.deliverTrace(context, startedAt, endedAt, 1);
+    if (failure) throw failure.error;
+  }
+
+  /** Send one payload up to `maxAttempts` times; null means delivered. */
+  private async deliverTrace(
+    context: TraceContext,
+    startedAt: Date,
+    endedAt: Date,
+    maxAttempts: number,
+  ): Promise<DeliveryFailure | null> {
     const payload = this.stampRelease(
       context.toPayload(this.projectId, startedAt, endedAt),
     );
+    // Serialized once: every attempt resends the same span IDs, which ingest
+    // dedupes when an earlier attempt landed unseen.
     const body = JSON.stringify(payload);
     const url = `${this.baseUrl}${INGEST_PATH}`;
     lemmaDebug("client", "sending trace", {
@@ -1505,15 +1586,68 @@ export class Lemma {
       requestedAt: new Date().toISOString(),
       url,
     });
-    let response: Response;
+
+    let attempts = 0;
+    for (;;) {
+      attempts += 1;
+      const attempt = await this.sendTraceOnce(payload, url, body);
+      if (attempt.ok) {
+        await this.afterTraceSent(payload, attempt.response);
+        return null;
+      }
+      const retryable =
+        attempt.status === undefined || isRetryableIngestStatus(attempt.status);
+      if (attempts >= maxAttempts || !retryable) {
+        return { error: attempt.error, attempts, status: attempt.status };
+      }
+      const delayMs = ingestRetryDelayMs(attempts, attempt.retryAfter);
+      lemmaDebug("client", "retrying trace ingest", {
+        traceId: payload.trace.id,
+        projectId: payload.project_id,
+        attempt: attempts,
+        maxAttempts,
+        delayMs,
+      });
+      await sleep(delayMs);
+    }
+  }
+
+  private async sendTraceOnce(
+    payload: SdkTracePayload,
+    url: string,
+    body: string,
+  ): Promise<SendAttempt> {
     try {
-      response = await this.fetchImpl(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body,
+      return await withIngestTimeout<SendAttempt>(async (signal) => {
+        const response = await this.fetchImpl(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body,
+          signal,
+        });
+        if (response.ok) return { ok: true, response };
+
+        const responseBody = await response.text().catch(() => "");
+        const hint = ingestFailureHint(response.status);
+        lemmaDebug("client", "trace ingest failed", {
+          traceId: payload.trace.id,
+          projectId: payload.project_id,
+          status: response.status,
+          body: responseBody,
+          ...pickResponseHeaders(response.headers),
+          ...(hint ? { hint } : {}),
+        });
+        return {
+          ok: false,
+          status: response.status,
+          retryAfter: response.headers.get("retry-after"),
+          error: new Error(
+            `@uselemma/tracing: failed to ingest trace (${response.status})${responseBody ? `: ${responseBody}` : ""}`,
+          ),
+        };
       });
     } catch (error) {
       lemmaDebug("client", "trace ingest failed", {
@@ -1521,27 +1655,12 @@ export class Lemma {
         projectId: payload.project_id,
         error: failureMessage(error) ?? String(error),
       });
-      throw error;
+      return { ok: false, error, retryAfter: null };
     }
+  }
 
+  private async afterTraceSent(payload: SdkTracePayload, response: Response) {
     const responseHeaders = pickResponseHeaders(response.headers);
-
-    if (!response.ok) {
-      const responseBody = await response.text().catch(() => "");
-      const hint = ingestFailureHint(response.status);
-      lemmaDebug("client", "trace ingest failed", {
-        traceId: payload.trace.id,
-        projectId: payload.project_id,
-        status: response.status,
-        body: responseBody,
-        ...responseHeaders,
-        ...(hint ? { hint } : {}),
-      });
-      throw new Error(
-        `@uselemma/tracing: failed to ingest trace (${response.status})${responseBody ? `: ${responseBody}` : ""}`,
-      );
-    }
-
     const sentWarnings: string[] = [];
     if (response.status !== EXPECTED_INGEST_SUCCESS_STATUS) {
       sentWarnings.push(

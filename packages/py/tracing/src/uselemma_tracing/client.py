@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import atexit
 import copy
 import inspect
 import json
+import logging
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -21,19 +24,25 @@ from .payload import (
     dumps_payload,
 )
 from .debug_delivery import (
+    DROPPED_TRACE_WARNING_WINDOW_SECONDS,
     EXPECTED_INGEST_SUCCESS_STATUS,
+    INGEST_MAX_ATTEMPTS,
     INGEST_PATH,
+    INGEST_REQUEST_TIMEOUT_SECONDS,
     INGEST_STATUS_PATH,
     INGEST_STATUS_POLL_INTERVAL_SECONDS,
     INGEST_STATUS_POLL_TIMEOUT_SECONDS,
     api_key_suffix,
     build_config_warnings,
     ingest_failure_hint,
+    ingest_retry_delay_seconds,
+    is_retryable_ingest_status,
     is_successful_ingest_status,
     parse_ingest_status,
     pick_response_headers,
 )
 from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_enabled
+from .error_message import describe_error as _describe_error
 from .error_message import failure_message as _failure_message
 from .release import normalize_release
 from .usage import normalize_token_usage, token_usage_attributes
@@ -55,6 +64,135 @@ except PackageNotFoundError:
     _SDK_VERSION = "unknown"
 
 _SDK_USER_AGENT = f"uselemma-tracing/{_SDK_VERSION}"
+
+logger = logging.getLogger(__name__)
+
+# Retry backoff only, so it can be stubbed without stubbing the LEMMA_DEBUG_VERIFY
+# poll's ``time.sleep``.
+_retry_sleep = time.sleep
+
+
+@dataclass
+class _DeliveryFailure:
+    """Outcome of the last send when a trace was not delivered."""
+
+    error: Exception
+    attempts: int
+    status: int | None = None
+
+
+def _delivery_failure_reason(failure: _DeliveryFailure) -> str:
+    if failure.status is None:
+        return _describe_error(failure.error)
+    hint = ingest_failure_hint(failure.status)
+    return f"ingest returned {failure.status}" + (f" ({hint})" if hint else "")
+
+
+def _dropped_trace_line(trace_id: str, attempts: int, reason: str) -> str:
+    after = f" after {attempts} attempt{'' if attempts == 1 else 's'}" if attempts > 0 else ""
+    return f"uselemma-tracing: dropped trace {trace_id}{after}: {reason}."
+
+
+def _daemon_timer(delay: float, fn: Callable[[], None]) -> threading.Timer:
+    timer = threading.Timer(delay, fn)
+    # Must not keep a finished script alive for the rest of the window.
+    timer.daemon = True
+    timer.start()
+    return timer
+
+
+class _DroppedTraceWarnings:
+    """Process-wide throttle for dropped-trace warnings.
+
+    The first drop after a quiet window warns with its trace ID; later drops
+    in the window are counted into one line at the window's end. Debug mode
+    logs every drop.
+    """
+
+    def __init__(
+        self,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        schedule: Callable[[float, Callable[[], None]], Any] = _daemon_timer,
+        register_exit: Callable[[Callable[[], None]], Any] = atexit.register,
+    ) -> None:
+        self._clock = clock
+        self._schedule = schedule
+        self._register_exit = register_exit
+        self._lock = threading.Lock()
+        self._last_warned_at: float | None = None
+        self._pending = 0
+        self._latest_reason = ""
+        self._timer: Any = None
+        self._exit_flush_installed = False
+
+    def report(self, trace_id: str, attempts: int, reason: str) -> None:
+        if is_debug_mode_enabled():
+            logger.warning(_dropped_trace_line(trace_id, attempts, reason))
+            return
+        with self._lock:
+            now = self._clock()
+            remaining = (
+                None
+                if self._last_warned_at is None
+                else self._last_warned_at + DROPPED_TRACE_WARNING_WINDOW_SECONDS - now
+            )
+            window_open = remaining is not None and remaining > 0
+            if not window_open and self._pending == 0:
+                self._last_warned_at = now
+                message: str | None = (
+                    f"{_dropped_trace_line(trace_id, attempts, reason)} Further drops "
+                    "are counted and reported every "
+                    f"{int(DROPPED_TRACE_WARNING_WINDOW_SECONDS)}s; set LEMMA_DEBUG=1 "
+                    "to log each one."
+                )
+            else:
+                self._pending += 1
+                self._latest_reason = reason
+                self._install_exit_flush()
+                if remaining is not None and remaining > 0:
+                    if self._timer is None:
+                        self._timer = self._schedule(remaining, self.flush)
+                    return
+                # The window can expire with drops pending before its timer
+                # runs, for example after a fork; report them now.
+                message = self._take_summary(now)
+        if message:
+            logger.warning(message)
+
+    def flush(self) -> None:
+        """Log the count of drops not reported yet, and start a new window."""
+        with self._lock:
+            message = self._take_summary(self._clock())
+        if message:
+            logger.warning(message)
+
+    def _install_exit_flush(self) -> None:
+        # Integration flush()/shutdown() can run per request, so flushing there
+        # would log one line per request during an outage.
+        if not self._exit_flush_installed:
+            self._exit_flush_installed = True
+            self._register_exit(self.flush)
+
+    def _take_summary(self, now: float) -> str | None:
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+        if self._pending == 0:
+            return None
+        elapsed = now - (self._last_warned_at if self._last_warned_at is not None else now)
+        seconds = max(1, round(elapsed))
+        count = self._pending
+        self._pending = 0
+        self._last_warned_at = now
+        return (
+            f"uselemma-tracing: dropped {count} more trace{'' if count == 1 else 's'} "
+            f"in the last {seconds}s; latest: {self._latest_reason}. "
+            "Set LEMMA_DEBUG=1 to log each one."
+        )
+
+
+_dropped_traces = _DroppedTraceWarnings()
 
 
 def _merge_sdk_user_agent(headers: dict[str, str]) -> dict[str, str]:
@@ -1306,19 +1444,26 @@ class Lemma:
         started_at: datetime,
         ended_at: datetime,
     ) -> None:
-        """Automatic SDK delivery. Catches transport / non-2xx so Lemma being
-        down cannot fail the caller's app. ``ingest()`` uses ``_send`` (strict)
-        so queue/plugin producers can retry.
+        """Automatic SDK delivery. Retries transient failures, then fails open
+        with a rate-limited warning so Lemma being down cannot fail the caller's app.
+        ``ingest()`` sends once and raises, because queue/plugin producers keep
+        their own retry backlog.
 
         Only :class:`Exception` is caught. A ``BaseException`` from the
         transport -- ``KeyboardInterrupt``, ``SystemExit``, ``CancelledError``
         -- is left to propagate.
         """
         try:
-            self._send(ctx, started_at, ended_at)
-        except Exception:
-            # ``_send`` already debug-logs "trace ingest failed".
-            return
+            failure = self._deliver(
+                ctx, started_at, ended_at, max_attempts=INGEST_MAX_ATTEMPTS
+            )
+        except Exception as exc:
+            # The payload could not be shaped or serialized; nothing was sent.
+            failure = _DeliveryFailure(error=exc, attempts=0)
+        if failure is not None:
+            _dropped_traces.report(
+                ctx.id, failure.attempts, _delivery_failure_reason(failure)
+            )
 
     def _shape_payload(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Copy, optionally shrink, then let ``before_send`` redact or drop."""
@@ -1343,6 +1488,20 @@ class Lemma:
         started_at: datetime,
         ended_at: datetime,
     ) -> None:
+        failure = self._deliver(ctx, started_at, ended_at, max_attempts=1)
+        if failure is not None:
+            raise failure.error
+
+    def _deliver(
+        self,
+        ctx: TraceContext,
+        started_at: datetime,
+        ended_at: datetime,
+        *,
+        max_attempts: int,
+    ) -> _DeliveryFailure | None:
+        """Send one payload up to ``max_attempts`` times; None means delivered
+        or dropped by ``before_send``."""
         payload = self._stamp_release(ctx.payload(self.project_id or "", started_at, ended_at))
         try:
             payload = self._shape_payload(payload)
@@ -1362,7 +1521,9 @@ class Lemma:
                 trace_id=ctx.id,
                 project_id=self.project_id,
             )
-            return
+            return None
+        # Serialized once: every attempt resends the same span IDs, which
+        # ingest dedupes when an earlier attempt landed unseen.
         body = dumps_payload(payload).encode()
         url = f"{self.base_url}{INGEST_PATH}"
         _lemma_debug(
@@ -1376,6 +1537,38 @@ class Lemma:
             requested_at=_iso(_now()),
             url=url,
         )
+        attempts = 0
+        while True:
+            attempts += 1
+            failure, retry_after = self._send_once(payload, url, body, attempts)
+            if failure is None:
+                return None
+            retryable = failure.status is None or is_retryable_ingest_status(
+                failure.status
+            )
+            if attempts >= max_attempts or not retryable:
+                return failure
+            delay = ingest_retry_delay_seconds(attempts, retry_after)
+            _lemma_debug(
+                "client",
+                "retrying trace ingest",
+                trace_id=payload["trace"]["id"],
+                project_id=payload["project_id"],
+                attempt=attempts,
+                max_attempts=max_attempts,
+                delay_seconds=delay,
+            )
+            _retry_sleep(delay)
+
+    def _send_once(
+        self,
+        payload: dict[str, Any],
+        url: str,
+        body: bytes,
+        attempt: int,
+    ) -> tuple[_DeliveryFailure | None, str | None]:
+        """One send. Returns the failure (None when delivered) and the
+        response's Retry-After value."""
         try:
             status, text = self.transport(
                 url,
@@ -1393,7 +1586,7 @@ class Lemma:
                 project_id=payload["project_id"],
                 error=_failure_message(exc),
             )
-            raise
+            return _DeliveryFailure(error=exc, attempts=attempt), None
         response_headers = pick_response_headers(self._last_response_headers)
         if status < 200 or status >= 300:
             hint = ingest_failure_hint(status)
@@ -1407,9 +1600,13 @@ class Lemma:
                 **response_headers,
                 **({"hint": hint} if hint else {}),
             )
-            raise RuntimeError(
+            retry_after = {
+                key.lower(): value for key, value in self._last_response_headers.items()
+            }.get("retry-after")
+            error = RuntimeError(
                 f"uselemma-tracing: failed to ingest trace ({status}): {text}"
             )
+            return _DeliveryFailure(error=error, attempts=attempt, status=status), retry_after
 
         sent_warnings: list[str] = []
         if status != EXPECTED_INGEST_SUCCESS_STATUS:
@@ -1429,6 +1626,7 @@ class Lemma:
             otel_trace_id = payload["trace"].get("id")
             if isinstance(otel_trace_id, str) and otel_trace_id:
                 self._verify_ingest_delivery(otel_trace_id)
+        return None, None
 
     def _log_init_config_once(self) -> None:
         if not is_debug_mode_enabled() or self._config_logged:
@@ -1529,7 +1727,9 @@ class Lemma:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request) as response:
+            with urllib.request.urlopen(
+                request, timeout=INGEST_REQUEST_TIMEOUT_SECONDS
+            ) as response:
                 return (
                     response.status,
                     response.read().decode(),
@@ -1548,7 +1748,9 @@ class Lemma:
             method="GET",
         )
         try:
-            with urllib.request.urlopen(request) as response:
+            with urllib.request.urlopen(
+                request, timeout=INGEST_REQUEST_TIMEOUT_SECONDS
+            ) as response:
                 return (
                     response.status,
                     response.read().decode(),

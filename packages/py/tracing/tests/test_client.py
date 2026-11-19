@@ -7,6 +7,10 @@ from datetime import datetime, timezone
 import pytest
 
 from uselemma_tracing.client import Lemma, SpanHandle, TraceContext
+from uselemma_tracing.debug_delivery import (
+    INGEST_MAX_ATTEMPTS,
+    INGEST_REQUEST_TIMEOUT_SECONDS,
+)
 from uselemma_tracing.debug_mode import disable_debug_mode, enable_debug_mode
 
 PROJECT_ID = "10000000-0000-0000-0000-000000000001"
@@ -14,6 +18,7 @@ PROJECT_ID = "10000000-0000-0000-0000-000000000001"
 
 def test_default_urllib_transport_identifies_the_sdk(monkeypatch):
     requests = []
+    timeouts = []
 
     class Response:
         status = 201
@@ -28,8 +33,9 @@ def test_default_urllib_transport_identifies_the_sdk(monkeypatch):
         def __exit__(self, *_args):
             return False
 
-    def urlopen(request):
+    def urlopen(request, timeout=None):
         requests.append(request)
+        timeouts.append(timeout)
         return Response()
 
     monkeypatch.setattr("uselemma_tracing.client.urllib.request.urlopen", urlopen)
@@ -50,6 +56,7 @@ def test_default_urllib_transport_identifies_the_sdk(monkeypatch):
         request.get_header("User-agent").startswith("uselemma-tracing/")
         for request in requests
     )
+    assert timeouts == [INGEST_REQUEST_TIMEOUT_SECONDS] * 2
 
 
 def test_custom_transport_receives_sdk_user_agent():
@@ -478,6 +485,121 @@ async def test_lemma_async_trace_fails_open_on_ingest_failures():
     assert await lemma.async_trace("support-agent", run) == "ok"
 
 
+def _dropped_trace_warnings(caplog) -> list[str]:
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "uselemma_tracing.client"
+        and record.levelname == "WARNING"
+    ]
+
+
+def test_automatic_delivery_retries_transient_failures_with_the_same_payload(
+    caplog, retry_sleeps
+):
+    bodies = []
+    responses = iter([(503, "busy"), ConnectionResetError("reset"), (201, "{}")])
+
+    def transport(_url, _headers, body):
+        bodies.append(body)
+        outcome = next(responses)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+    assert len(bodies) == 3
+    assert len(set(bodies)) == 1
+    assert len(retry_sleeps) == 2
+    assert _dropped_trace_warnings(caplog) == []
+
+
+def test_automatic_delivery_warns_once_when_every_attempt_fails(caplog):
+    calls = []
+    trace_ids = []
+
+    def transport(_url, _headers, body):
+        calls.append(body)
+        return 503, "nope"
+
+    def run(trace):
+        trace_ids.append(trace.id)
+        return "ok"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    assert lemma.trace("support-agent", run) == "ok"
+    assert len(calls) == INGEST_MAX_ATTEMPTS
+    assert _dropped_trace_warnings(caplog) == [
+        f"uselemma-tracing: dropped trace {trace_ids[0]} after "
+        f"{INGEST_MAX_ATTEMPTS} attempts: ingest returned 503. Further drops are "
+        "counted and reported every 60s; set LEMMA_DEBUG=1 to log each one."
+    ]
+
+
+def test_automatic_delivery_does_not_retry_a_rejected_request(caplog, retry_sleeps):
+    calls = []
+
+    def transport(_url, _headers, body):
+        calls.append(body)
+        return 401, "bad key"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+    assert len(calls) == 1
+    assert retry_sleeps == []
+    [warning] = _dropped_trace_warnings(caplog)
+    assert "after 1 attempt: ingest returned 401 (check LEMMA_API_KEY)" in warning
+
+
+def test_automatic_delivery_waits_out_a_429_retry_after(caplog, retry_sleeps):
+    responses = iter([(429, "slow down", {"Retry-After": "1"}), (201, "{}", {})])
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda _url, _headers, _body: next(responses),
+    )
+
+    assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+    assert retry_sleeps == [1.0]
+    assert _dropped_trace_warnings(caplog) == []
+
+
+def test_automatic_delivery_warns_when_the_payload_cannot_be_built(caplog):
+    calls = []
+
+    def before_send(_payload):
+        raise ValueError("redaction failed")
+
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *args: calls.append(args) or (201, "{}"),
+        before_send=before_send,
+    )
+
+    assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+    assert calls == []
+    [warning] = _dropped_trace_warnings(caplog)
+    assert ": ValueError: redaction failed. Further drops" in warning
+    assert "attempt" not in warning
+
+
+def test_before_send_drop_is_not_a_dropped_trace_warning(caplog):
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: (201, "{}"),
+        before_send=lambda _payload: None,
+    )
+
+    assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+    assert _dropped_trace_warnings(caplog) == []
+
+
 def test_ingest_sends_a_self_built_trace_once_merging_by_default():
     calls = []
 
@@ -560,6 +682,8 @@ def test_ingest_surfaces_failures_without_fabricating_status():
     with pytest.raises(RuntimeError, match="failed to ingest trace"):
         lemma.ingest(context, started_at=_now_utc())
 
+    # Producers keep their own retry backlog, so ingest() sends once.
+    assert len(calls) == 1
     assert calls[0]["trace"]["status"] is None
 
 
@@ -1005,7 +1129,7 @@ def test_trace_reraises_the_agent_error_when_delivery_fails():
         lemma.trace("support-agent", agent)
 
     # The failed trace was still attempted, and recorded the agent's error.
-    assert len(bodies) == 1
+    assert len(bodies) == INGEST_MAX_ATTEMPTS
     assert bodies[0]["trace"]["status"] == "ERROR"
     assert bodies[0]["trace"]["error"] == "_AgentError: tool timed out"
 
@@ -1022,7 +1146,7 @@ async def test_async_trace_reraises_the_agent_error_when_delivery_fails():
     with pytest.raises(_AgentError, match="premature termination"):
         await lemma.async_trace("support-agent", agent)
 
-    assert len(bodies) == 1
+    assert len(bodies) == INGEST_MAX_ATTEMPTS
     assert bodies[0]["trace"]["error"] == "_AgentError: premature termination"
 
 
@@ -1035,10 +1159,11 @@ def test_trace_does_not_resend_a_successful_run_as_a_failed_one():
 
     assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
 
-    assert len(bodies) == 1
-    assert bodies[0]["trace"].get("status") is None
-    assert bodies[0]["trace"].get("error") is None
-    assert bodies[0]["trace"]["output"] == "ok"
+    assert len(bodies) == INGEST_MAX_ATTEMPTS
+    for body in bodies:
+        assert body["trace"].get("status") is None
+        assert body["trace"].get("error") is None
+        assert body["trace"]["output"] == "ok"
 
 
 def test_before_send_can_scrub_without_a_custom_transport():
@@ -1093,6 +1218,7 @@ def test_before_send_none_drops_without_calling_transport():
 
 def test_before_send_unchanged_uses_default_transport_user_agent(monkeypatch):
     requests = []
+    timeouts = []
 
     class Response:
         status = 201
@@ -1107,8 +1233,9 @@ def test_before_send_unchanged_uses_default_transport_user_agent(monkeypatch):
         def __exit__(self, *_args):
             return False
 
-    def urlopen(request):
+    def urlopen(request, timeout=None):
         requests.append(request)
+        timeouts.append(timeout)
         return Response()
 
     monkeypatch.setattr("uselemma_tracing.client.urllib.request.urlopen", urlopen)
