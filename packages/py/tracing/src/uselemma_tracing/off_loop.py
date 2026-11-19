@@ -111,28 +111,46 @@ def submit(fn: Callable[[], None], trace_id: str) -> bool:
     return _fire_and_forget.submit(fn, trace_id) is not None
 
 
-async def run_awaited(fn: Callable[[], None], trace_id: str) -> bool:
-    """Run ``fn`` on the awaited pool and wait for it; False when the pool's
-    backlog is full and it is not queued.
+async def run_awaited(fn: Callable[[], None], trace_id: str) -> None:
+    """Run ``fn`` on the awaited pool and wait for it.
 
-    Shielded: cancelling the caller, by its own timeout or by ``asyncio.run``
-    shutting down, ends only the wait. The delivery still runs, or the exit
-    drain reports it.
+    Cancelling the caller, by its own timeout or by ``asyncio.run`` shutting
+    down, ends only the wait: nothing links the waiter back to the delivery,
+    which still runs or is reported by the exit drain.
     """
     future = _awaited.submit(fn, trace_id)
-    if future is None:
-        return False
-    await asyncio.shield(asyncio.wrap_future(future))
-    return True
+    assert future is not None, "the awaited pool has no backlog cap"
+    loop = asyncio.get_running_loop()
+    waiter: asyncio.Future[None] = loop.create_future()
+
+    def wake(done: Future[None]) -> None:
+        try:
+            loop.call_soon_threadsafe(_settle, waiter, done)
+        except RuntimeError:
+            # The loop closed while the delivery ran, so nobody is waiting.
+            pass
+
+    future.add_done_callback(wake)
+    await waiter
 
 
-def wait_pending(moment: Literal["flush", "exit"] = "flush") -> None:
+def _settle(waiter: asyncio.Future[None], done: Future[None]) -> None:
+    if waiter.done():
+        return  # The caller stopped waiting.
+    error = None if done.cancelled() else done.exception()
+    if error is None:
+        waiter.set_result(None)
+    else:
+        waiter.set_exception(error)
+
+
+def wait_pending() -> None:
     """Wait up to the drain deadline for fire-and-forget deliveries to finish.
 
     Deliveries that have not started by then are dropped and reported once; a
     delivery already sending finishes or times out on its own.
     """
-    _drain([_fire_and_forget], moment)
+    _drain([_fire_and_forget], "flush")
 
 
 def _drain(pools: list[_Pool], moment: Literal["flush", "exit"]) -> None:

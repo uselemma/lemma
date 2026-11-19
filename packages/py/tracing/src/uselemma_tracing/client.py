@@ -1323,10 +1323,9 @@ class Lemma:
     ) -> None:
         # The transport and retry backoff block, so delivery runs on the SDK's
         # awaited pool rather than the loop or the host's default executor.
-        if not await off_loop.run_awaited(
+        await off_loop.run_awaited(
             lambda: self._deliver_automatic(ctx, started_at, ended_at), ctx.id
-        ):
-            report_dropped_trace(ctx.id, BACKLOG_FULL)
+        )
 
     def _deliver_automatic_from_sync_hook(
         self,
