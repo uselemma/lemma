@@ -222,12 +222,17 @@ async def await_pending() -> None:
     """``wait_pending`` for async code: the wait runs on the event loop, so the
     loop keeps running while queued deliveries finish."""
     pending = _fire_and_forget.snapshot()
-    if pending:
-        loop = asyncio.get_running_loop()
-        await asyncio.wait(
-            [_waiter_on(loop, future) for future in pending],
-            timeout=OFF_LOOP_DRAIN_DEADLINE_SECONDS,
-        )
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + OFF_LOOP_DRAIN_DEADLINE_SECONDS
+    # Waits on one delivery at a time, so a flush leaves at most one waiter
+    # behind: a delivery's future can't drop a done callback, and every waiter
+    # left on a queued delivery would run when the backlog is cut.
+    for future in pending:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            break
+        if not future.done():
+            await asyncio.wait([_waiter_on(loop, future)], timeout=remaining)
     _cut_unstarted([_fire_and_forget], pending, "flush")
 
 

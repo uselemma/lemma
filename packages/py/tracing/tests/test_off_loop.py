@@ -230,6 +230,35 @@ async def test_overlapping_async_flushes_report_each_dropped_delivery_once(monke
     ]
 
 
+async def test_concurrent_async_flushes_each_hold_one_waiter(monkeypatch):
+    monkeypatch.setattr(off_loop, "OFF_LOOP_DRAIN_DEADLINE_SECONDS", 0.2)
+    reports = _recorded_drops(monkeypatch)
+    release, queued_ran = _queue_behind_one_in_flight(monkeypatch, 50)
+    in_flight = next(iter(off_loop._fire_and_forget.snapshot()))
+    waited_on = []
+    real_waiter_on = off_loop._waiter_on
+
+    def recording_waiter_on(loop, future):
+        waited_on.append(future)
+        return real_waiter_on(loop, future)
+
+    monkeypatch.setattr(off_loop, "_waiter_on", recording_waiter_on)
+    flushes = [asyncio.create_task(off_loop.await_pending()) for _ in range(20)]
+    # One turn of the loop runs each flush up to its first wait.
+    await asyncio.sleep(0)
+    # A delivery's future can't drop a done callback, so a waiter on each queued
+    # delivery would stay attached for every flush until that delivery ran or
+    # was cut.
+    assert waited_on == [in_flight] * len(flushes)
+    await asyncio.wait_for(asyncio.gather(*flushes), 5)
+    release.set()
+
+    assert queued_ran == []
+    assert reports == [
+        ("trace-q0", "before sending: 50 deliveries still queued at flush", 50)
+    ]
+
+
 def test_exit_stops_at_the_deadline_and_reports_unstarted_deliveries():
     script = textwrap.dedent(
         """
