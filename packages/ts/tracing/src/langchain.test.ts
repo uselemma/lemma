@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { captureWarnings, jsonBody, withFakeTimers } from "../test-helpers";
-import { INGEST_MAX_ATTEMPTS } from "./debug-delivery";
+import { INGEST_MAX_ATTEMPTS } from "./delivery";
 import { langChain, langGraph } from "./langchain";
 
 function handler(fetchMock: ReturnType<typeof vi.fn>, options: Record<string, unknown> = {}) {

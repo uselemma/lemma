@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import pytest
 
 from uselemma_tracing.client import Lemma, SpanHandle, TraceContext
-from uselemma_tracing.debug_delivery import (
+from uselemma_tracing.delivery import (
     INGEST_MAX_ATTEMPTS,
     INGEST_REQUEST_TIMEOUT_SECONDS,
 )
@@ -585,6 +585,28 @@ def test_automatic_delivery_warns_when_the_payload_cannot_be_built(caplog):
     assert calls == []
     [warning] = _dropped_trace_warnings(caplog)
     assert " before sending: ValueError: redaction failed. Drops" in warning
+
+
+def test_a_failed_verify_poll_after_delivery_is_not_a_dropped_trace(
+    monkeypatch, caplog, capsys
+):
+    monkeypatch.setenv("LEMMA_DEBUG_VERIFY", "1")
+    monkeypatch.setattr(
+        Lemma, "_urllib_get", staticmethod(lambda _url, _headers: (200, "[]", {}))
+    )
+    enable_debug_mode()
+    try:
+        lemma = Lemma(
+            api_key="key",
+            project_id=PROJECT_ID,
+            transport=lambda *_args: (201, "{}"),
+        )
+        assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+    finally:
+        disable_debug_mode()
+
+    assert _dropped_trace_warnings(caplog) == []
+    assert "ingest-status check failed" in capsys.readouterr().out
 
 
 def test_before_send_drop_is_not_a_dropped_trace_warning(caplog):

@@ -9,7 +9,7 @@ from uselemma_tracing.dropped_traces import reset_dropped_trace_warnings
 def retry_sleeps(monkeypatch):
     """Record automatic-delivery retry backoff instead of waiting it out."""
     sleeps: list[float] = []
-    monkeypatch.setattr("uselemma_tracing.client._retry_sleep", sleeps.append)
+    monkeypatch.setattr("uselemma_tracing.delivery.sleep", sleeps.append)
     return sleeps
 
 

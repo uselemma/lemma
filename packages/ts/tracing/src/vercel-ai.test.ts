@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { captureWarnings, jsonBody, withFakeTimers } from "../test-helpers";
 import { Lemma } from "./client";
-import { INGEST_MAX_ATTEMPTS } from "./debug-delivery";
+import { INGEST_MAX_ATTEMPTS } from "./delivery";
 import { vercelAI } from "./vercel-ai";
 
 describe("vercelAI", () => {

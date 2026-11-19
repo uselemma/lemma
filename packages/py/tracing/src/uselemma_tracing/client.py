@@ -22,22 +22,25 @@ from .payload import (
 )
 from .debug_delivery import (
     EXPECTED_INGEST_SUCCESS_STATUS,
-    INGEST_MAX_ATTEMPTS,
     INGEST_PATH,
-    INGEST_REQUEST_TIMEOUT_SECONDS,
     INGEST_STATUS_PATH,
     INGEST_STATUS_POLL_INTERVAL_SECONDS,
     INGEST_STATUS_POLL_TIMEOUT_SECONDS,
     api_key_suffix,
     build_config_warnings,
     ingest_failure_hint,
-    ingest_retry_delay_seconds,
-    is_retryable_ingest_status,
     is_successful_ingest_status,
     parse_ingest_status,
     pick_response_headers,
 )
 from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_enabled
+from .delivery import (
+    INGEST_MAX_ATTEMPTS,
+    INGEST_REQUEST_TIMEOUT_SECONDS,
+    SendFailed,
+    Sent,
+    send_with_retries,
+)
 from .dropped_traces import report_dropped_trace
 from .error_message import describe_error as _describe_error
 from .error_message import failure_message as _failure_message
@@ -62,27 +65,8 @@ except PackageNotFoundError:
 
 _SDK_USER_AGENT = f"uselemma-tracing/{_SDK_VERSION}"
 
-# Retry backoff only, so it can be stubbed without stubbing the LEMMA_DEBUG_VERIFY
-# poll's ``time.sleep``.
-_retry_sleep = time.sleep
-
-
-@dataclass
-class _DeliveryFailure:
-    """Outcome of the last send when a trace was not delivered."""
-
-    error: Exception
-    attempts: int
-    status: int | None = None
-
-
-def _delivery_failure_reason(failure: _DeliveryFailure) -> str:
-    if failure.status is None:
-        return _describe_error(failure.error)
-    hint = ingest_failure_hint(failure.status)
-    return f"ingest returned {failure.status}" + (f" ({hint})" if hint else "")
-
-
+def _delivery_log_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    return {"trace_id": payload["trace"]["id"], "project_id": payload["project_id"]}
 
 
 def _merge_sdk_user_agent(headers: dict[str, str]) -> dict[str, str]:
@@ -1084,7 +1068,6 @@ class Lemma:
         self.before_send = before_send
         self.max_payload_bytes = max_payload_bytes
         self.deduplicate_span_content = deduplicate_span_content
-        self._last_response_headers: dict[str, str] = {}
         self._config_logged = False
         self.transport = self._wrap_transport(transport or self._urllib_transport)
         self._log_init_config_once()
@@ -1119,14 +1102,7 @@ class Lemma:
         url = f"{self.base_url}{INGEST_PATH}"
 
         try:
-            status, _text = self.transport(
-                url,
-                {
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                body,
-            )
+            status, _text, headers = self._post_ingest(body)
         except OSError:
             hints.append("ingest request failed (network error)")
             return {
@@ -1135,7 +1111,7 @@ class Lemma:
                 "hints": hints,
             }
 
-        response_headers = pick_response_headers(self._last_response_headers)
+        response_headers = pick_response_headers(headers)
         ingest_warnings: list[str] = []
         if status != EXPECTED_INGEST_SUCCESS_STATUS:
             ingest_warnings.append(
@@ -1344,20 +1320,25 @@ class Lemma:
         -- is left to propagate.
         """
         try:
-            failure = self._deliver(
-                ctx, started_at, ended_at, max_attempts=INGEST_MAX_ATTEMPTS
-            )
+            built = self._build_ingest_body(ctx, started_at, ended_at)
         except Exception as exc:
-            # The payload could not be shaped or serialized; nothing was sent.
-            failure = _DeliveryFailure(error=exc, attempts=0)
-        if failure is not None:
-            reason = _delivery_failure_reason(failure)
+            report_dropped_trace(ctx.id, f"before sending: {_describe_error(exc)}")
+            return
+        if built is None:
+            return
+        payload, body = built
+        attempt, attempts = send_with_retries(
+            lambda: self._post_ingest(body),
+            _delivery_log_fields(payload),
+            max_attempts=INGEST_MAX_ATTEMPTS,
+        )
+        if isinstance(attempt, SendFailed):
             report_dropped_trace(
                 ctx.id,
-                f"after {failure.attempts} attempt{'' if failure.attempts == 1 else 's'}: {reason}"
-                if failure.attempts > 0
-                else f"before sending: {reason}",
+                f"after {attempts} attempt{'' if attempts == 1 else 's'}: {attempt.reason}",
             )
+            return
+        self._after_trace_sent(payload, attempt)
 
     def _shape_payload(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Copy, optionally shrink, then let ``before_send`` redact or drop."""
@@ -1382,20 +1363,30 @@ class Lemma:
         started_at: datetime,
         ended_at: datetime,
     ) -> None:
-        failure = self._deliver(ctx, started_at, ended_at, max_attempts=1)
-        if failure is not None:
-            raise failure.error
+        built = self._build_ingest_body(ctx, started_at, ended_at)
+        if built is None:
+            return
+        payload, body = built
+        attempt, _attempts = send_with_retries(
+            lambda: self._post_ingest(body),
+            _delivery_log_fields(payload),
+            max_attempts=1,
+        )
+        if isinstance(attempt, SendFailed):
+            raise attempt.error
+        self._after_trace_sent(payload, attempt)
 
-    def _deliver(
+    def _build_ingest_body(
         self,
         ctx: TraceContext,
         started_at: datetime,
         ended_at: datetime,
-        *,
-        max_attempts: int,
-    ) -> _DeliveryFailure | None:
-        """Send one payload up to ``max_attempts`` times; None means delivered
-        or dropped by ``before_send``."""
+    ) -> tuple[dict[str, Any], bytes] | None:
+        """Shape and serialize the payload; None means ``before_send`` dropped it.
+
+        Serialized once, so every attempt resends the same span IDs and ingest
+        dedupes an earlier attempt that landed unseen.
+        """
         payload = self._stamp_release(ctx.payload(self.project_id or "", started_at, ended_at))
         try:
             payload = self._shape_payload(payload)
@@ -1416,10 +1407,7 @@ class Lemma:
                 project_id=self.project_id,
             )
             return None
-        # Serialized once: every attempt resends the same span IDs, which
-        # ingest dedupes when an earlier attempt landed unseen.
         body = dumps_payload(payload).encode()
-        url = f"{self.base_url}{INGEST_PATH}"
         _lemma_debug(
             "client",
             "sending trace",
@@ -1429,98 +1417,39 @@ class Lemma:
             project_id=payload["project_id"],
             body_bytes=len(body),
             requested_at=_iso(_now()),
-            url=url,
+            url=f"{self.base_url}{INGEST_PATH}",
         )
-        attempts = 0
-        while True:
-            attempts += 1
-            failure, retry_after = self._send_once(payload, url, body, attempts)
-            if failure is None:
-                return None
-            retryable = failure.status is None or is_retryable_ingest_status(
-                failure.status
-            )
-            if attempts >= max_attempts or not retryable:
-                return failure
-            delay = ingest_retry_delay_seconds(attempts, retry_after)
-            _lemma_debug(
-                "client",
-                "retrying trace ingest",
-                trace_id=payload["trace"]["id"],
-                project_id=payload["project_id"],
-                attempt=attempts,
-                max_attempts=max_attempts,
-                delay_seconds=delay,
-            )
-            _retry_sleep(delay)
+        return payload, body
 
-    def _send_once(
-        self,
-        payload: dict[str, Any],
-        url: str,
-        body: bytes,
-        attempt: int,
-    ) -> tuple[_DeliveryFailure | None, str | None]:
-        """One send. Returns the failure (None when delivered) and the
-        response's Retry-After value."""
-        try:
-            status, text = self.transport(
-                url,
-                {
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                body,
-            )
-        except Exception as exc:
-            _lemma_debug(
-                "client",
-                "trace ingest failed",
-                trace_id=payload["trace"]["id"],
-                project_id=payload["project_id"],
-                error=_failure_message(exc),
-            )
-            return _DeliveryFailure(error=exc, attempts=attempt), None
-        response_headers = pick_response_headers(self._last_response_headers)
-        if status < 200 or status >= 300:
-            hint = ingest_failure_hint(status)
-            _lemma_debug(
-                "client",
-                "trace ingest failed",
-                trace_id=payload["trace"]["id"],
-                project_id=payload["project_id"],
-                status=status,
-                body=text,
-                **response_headers,
-                **({"hint": hint} if hint else {}),
-            )
-            retry_after = {
-                key.lower(): value for key, value in self._last_response_headers.items()
-            }.get("retry-after")
-            error = RuntimeError(
-                f"uselemma-tracing: failed to ingest trace ({status}): {text}"
-            )
-            return _DeliveryFailure(error=error, attempts=attempt, status=status), retry_after
+    def _post_ingest(self, body: bytes) -> tuple[int, str, dict[str, str]]:
+        return self.transport(
+            f"{self.base_url}{INGEST_PATH}",
+            {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            body,
+        )
 
+    def _after_trace_sent(self, payload: dict[str, Any], sent: Sent) -> None:
         sent_warnings: list[str] = []
-        if status != EXPECTED_INGEST_SUCCESS_STATUS:
+        if sent.status != EXPECTED_INGEST_SUCCESS_STATUS:
             sent_warnings.append(
-                f"expected status {EXPECTED_INGEST_SUCCESS_STATUS}, got {status} (wrong endpoint?)"
+                f"expected status {EXPECTED_INGEST_SUCCESS_STATUS}, got {sent.status} (wrong endpoint?)"
             )
         _lemma_debug(
             "client",
             "trace sent",
             trace_id=payload["trace"]["id"],
             project_id=payload["project_id"],
-            status=status,
-            **response_headers,
+            status=sent.status,
+            **pick_response_headers(sent.headers),
             **({"warnings": sent_warnings} if sent_warnings else {}),
         )
         if is_debug_mode_enabled() and is_debug_verify_enabled():
             otel_trace_id = payload["trace"].get("id")
             if isinstance(otel_trace_id, str) and otel_trace_id:
                 self._verify_ingest_delivery(otel_trace_id)
-        return None, None
 
     def _log_init_config_once(self) -> None:
         if not is_debug_mode_enabled() or self._config_logged:
@@ -1544,16 +1473,13 @@ class Lemma:
             [str, dict[str, str], bytes],
             tuple[int, str] | tuple[int, str, dict[str, str]],
         ],
-    ) -> Callable[[str, dict[str, str], bytes], tuple[int, str]]:
+    ) -> Callable[[str, dict[str, str], bytes], tuple[int, str, dict[str, str]]]:
         def wrapped(
             url: str, headers: dict[str, str], body: bytes
-        ) -> tuple[int, str]:
+        ) -> tuple[int, str, dict[str, str]]:
             result = transport(url, _merge_sdk_user_agent(headers), body)
-            if len(result) >= 3:
-                self._last_response_headers = dict(result[2])
-                return result[0], result[1]
-            self._last_response_headers = {}
-            return result
+            response_headers = dict(result[2]) if len(result) >= 3 else {}
+            return result[0], result[1], response_headers
 
         return wrapped
 
@@ -1571,6 +1497,8 @@ class Lemma:
             if status < 200 or status >= 300:
                 return None
             data = json.loads(text)
+            if not isinstance(data, dict):
+                return None
             return parse_ingest_status(data.get("status"))
         except (OSError, json.JSONDecodeError, ValueError):
             return None

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import math
-import random as _random
 import re
-from typing import Callable
+from typing import Iterable, Mapping
 
 PRODUCTION_BASE_URL = "https://api.uselemma.ai"
 INGEST_PATH = "/traces/ingest"
@@ -13,22 +11,6 @@ EXPECTED_INGEST_SUCCESS_STATUS = 201
 # Poll interval / budget for LEMMA_DEBUG_VERIFY ingest-status checks.
 INGEST_STATUS_POLL_INTERVAL_SECONDS = 1.0
 INGEST_STATUS_POLL_TIMEOUT_SECONDS = 15.0
-
-# Sends per automatic delivery: one plus two retries. That rides out a dropped
-# connection or an ingest worker restart without holding the caller for long
-# while Lemma is down.
-INGEST_MAX_ATTEMPTS = 3
-# Per-send socket timeout for the default transport, the OTLP exporter default.
-# Ingest answers once the payload is stored and enqueued, so a healthy send
-# finishes well inside it; without one, a stalled connection blocks the caller
-# indefinitely.
-INGEST_REQUEST_TIMEOUT_SECONDS = 10.0
-# Delay before the first retry; each later retry doubles it. Jitter keeps
-# clients that failed together from retrying in lockstep.
-INGEST_RETRY_BASE_DELAY_SECONDS = 0.5
-# Ceiling for one retry delay, a server Retry-After included, so a rate-limited
-# send cannot hold the caller for long.
-INGEST_RETRY_MAX_DELAY_SECONDS = 2.0
 
 IngestStatus = str  # "enqueued" | "ingested" | "ready" | "not_found"
 _SUCCESS_INGEST_STATUSES = frozenset({"enqueued", "ingested", "ready"})
@@ -78,42 +60,16 @@ def ingest_failure_hint(status: int) -> str | None:
     return hints.get(status)
 
 
-def is_retryable_ingest_status(status: int) -> bool:
-    """Statuses where resending the same payload can succeed.
-
-    A resend after a success the client never saw is harmless: ingest skips
-    stored span IDs.
-    """
-    return status == 408 or status == 429 or status >= 500
+_DIAGNOSTIC_HEADERS = ("cf-ray", "server", "date")
 
 
-def ingest_retry_delay_seconds(
-    retry: int,
-    retry_after: str | None,
-    random: Callable[[], float] = _random.random,
-) -> float:
-    """Delay before retry number ``retry`` (1-based)."""
-    backoff = INGEST_RETRY_BASE_DELAY_SECONDS * 2 ** (retry - 1)
-    jittered = backoff / 2 + random() * (backoff / 2)
-    server_delay = _retry_after_seconds(retry_after)
-    return min(INGEST_RETRY_MAX_DELAY_SECONDS, max(jittered, server_delay or 0.0))
-
-
-def _retry_after_seconds(value: str | None) -> float | None:
-    """Only the delta-seconds form; an HTTP-date falls back to backoff."""
-    if value is None or not value.strip():
-        return None
-    try:
-        seconds = float(value)
-    except ValueError:
-        return None
-    return seconds if math.isfinite(seconds) and seconds >= 0 else None
-
-
-def pick_response_headers(headers: dict[str, str]) -> dict[str, str]:
+def pick_response_headers(
+    headers: Mapping[str, str], names: Iterable[str] = _DIAGNOSTIC_HEADERS
+) -> dict[str, str]:
+    """Pick ``names`` (lowercase) from ``headers``, matching case-insensitively."""
     picked: dict[str, str] = {}
     lowered = {key.lower(): value for key, value in headers.items()}
-    for name in ("cf-ray", "server", "date"):
+    for name in names:
         value = lowered.get(name)
         if value:
             picked[name] = value

@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { captureWarnings, withFakeTimers } from "../test-helpers";
 import { Lemma, TraceContext } from "./client";
-import {
-  INGEST_MAX_ATTEMPTS,
-  INGEST_REQUEST_TIMEOUT_MS,
-} from "./debug-delivery";
+import { INGEST_MAX_ATTEMPTS, INGEST_REQUEST_TIMEOUT_MS } from "./delivery";
 import { disableDebugMode, enableDebugMode } from "./debug-mode";
 
 function jsonBody(call: unknown[]) {
@@ -1615,6 +1612,30 @@ describe("automatic trace delivery", () => {
     expect(warn.mock.calls[0]?.[0]).toBe(
       "@uselemma/tracing: dropped trace trace-1 before sending: unserializable output. Drops in the next 60s are counted, not logged; set LEMMA_DEBUG=1 to log each one.",
     );
+  });
+
+  it("does not report a delivered trace as dropped when the verify poll fails", async () => {
+    const warn = captureWarnings();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    enableDebugMode();
+    process.env["LEMMA_DEBUG_VERIFY"] = "1";
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).includes("/traces/ingest-status")) {
+        throw new TypeError("fetch failed");
+      }
+      return new Response("{}", { status: 201 });
+    });
+
+    try {
+      await expect(
+        lemmaWith(fetchMock).trace("support-agent", async () => "ok"),
+      ).resolves.toBe("ok");
+    } finally {
+      delete process.env["LEMMA_DEBUG_VERIFY"];
+      disableDebugMode();
+    }
+
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("ingest() sends once and throws when the send times out", async () => {
