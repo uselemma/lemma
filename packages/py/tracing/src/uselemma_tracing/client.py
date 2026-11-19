@@ -1356,9 +1356,12 @@ class Lemma:
         ``ingest()`` sends once and raises, because queue/plugin producers keep
         their own retry backlog.
 
-        Only :class:`Exception` is caught. A ``BaseException`` from the
-        transport -- ``KeyboardInterrupt``, ``SystemExit``, ``CancelledError``
-        -- is left to propagate.
+        The fail-open guarantee lives in two places: ``_send_trace`` turns a
+        build failure and a failed post-send check into results, and
+        ``delivery._send_once`` turns anything the transport returns or raises
+        into a failed attempt. Only :class:`Exception` is caught there; a
+        ``BaseException`` from the transport -- ``KeyboardInterrupt``,
+        ``SystemExit``, ``CancelledError`` -- is left to propagate.
         """
         result = self._send_trace(
             ctx, started_at, ended_at, max_attempts=INGEST_MAX_ATTEMPTS

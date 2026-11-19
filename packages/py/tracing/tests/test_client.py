@@ -541,6 +541,22 @@ def test_automatic_delivery_warns_once_when_every_attempt_fails(caplog):
     ]
 
 
+def test_automatic_delivery_fails_open_on_a_misbehaving_transport(caplog):
+    # A string status breaks the 2xx comparison; it must not escape trace().
+    calls = []
+
+    def transport(_url, _headers, _body):
+        calls.append(1)
+        return "201", "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
+    assert len(calls) == INGEST_MAX_ATTEMPTS
+    [warning] = _dropped_trace_warnings(caplog)
+    assert f"after {INGEST_MAX_ATTEMPTS} attempts: TypeError:" in warning
+
+
 def test_automatic_delivery_does_not_retry_a_rejected_request(caplog, retry_sleeps):
     calls = []
 

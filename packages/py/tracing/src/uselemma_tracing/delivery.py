@@ -108,9 +108,33 @@ def ingest_retry_delay_seconds(
 
 
 def _send_once(post: PostIngest, log_fields: Mapping[str, Any]) -> _SendAttempt:
-    """Send once and classify the outcome."""
+    """Send once and classify the outcome.
+
+    Classification sits inside the ``try``, so whatever a custom transport
+    returns or raises becomes a failed attempt instead of an exception.
+    """
     try:
         status, text, headers = post()
+        if 200 <= status < 300:
+            return Delivered(status=status, headers=headers)
+        hint = ingest_failure_hint(status)
+        _lemma_debug(
+            "client",
+            "trace ingest failed",
+            **log_fields,
+            status=status,
+            body=text,
+            **pick_response_headers(headers),
+            **({"hint": hint} if hint else {}),
+        )
+        return _SendFailed(
+            error=RuntimeError(
+                f"uselemma-tracing: failed to ingest trace ({status}): {text}"
+            ),
+            reason=f"ingest returned {status}" + (f" ({hint})" if hint else ""),
+            retryable=is_retryable_ingest_status(status),
+            retry_after_seconds=parse_retry_after_seconds(headers.get("retry-after")),
+        )
     except Exception as exc:
         _lemma_debug(
             "client", "trace ingest failed", **log_fields, error=failure_message(exc)
@@ -121,24 +145,6 @@ def _send_once(post: PostIngest, log_fields: Mapping[str, Any]) -> _SendAttempt:
             retryable=True,
             retry_after_seconds=None,
         )
-    if 200 <= status < 300:
-        return Delivered(status=status, headers=headers)
-    hint = ingest_failure_hint(status)
-    _lemma_debug(
-        "client",
-        "trace ingest failed",
-        **log_fields,
-        status=status,
-        body=text,
-        **pick_response_headers(headers),
-        **({"hint": hint} if hint else {}),
-    )
-    return _SendFailed(
-        error=RuntimeError(f"uselemma-tracing: failed to ingest trace ({status}): {text}"),
-        reason=f"ingest returned {status}" + (f" ({hint})" if hint else ""),
-        retryable=is_retryable_ingest_status(status),
-        retry_after_seconds=parse_retry_after_seconds(headers.get("retry-after")),
-    )
 
 
 def deliver(
