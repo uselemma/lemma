@@ -390,3 +390,56 @@ async def test_async_trace_delivery_sees_the_callers_context_vars():
 
     assert await lemma.async_trace("support-agent", run) == "ok"
     assert seen == ["req-1"]
+
+
+def test_a_thread_outliving_main_still_delivers_at_interpreter_shutdown():
+    # Executors refuse new work once interpreter shutdown starts; delivery must
+    # fall back to inline instead of raising out of async_trace or a sync hook.
+    script = textwrap.dedent(
+        """
+        import asyncio
+        import json
+        import threading
+        import time
+        from datetime import datetime, timezone
+
+        from uselemma_tracing.client import Lemma, TraceContext
+
+
+        def transport(_url, _headers, body):
+            print("sent", json.loads(body)["trace"]["name"], flush=True)
+            return 201, "{}"
+
+
+        lemma = Lemma(
+            api_key="key",
+            project_id="10000000-0000-0000-0000-000000000001",
+            transport=transport,
+        )
+
+
+        async def run(_trace):
+            return "ok"
+
+
+        async def sync_hook():
+            now = datetime.now(timezone.utc)
+            lemma._deliver_automatic_from_sync_hook(TraceContext(name="hook"), now, now)
+
+
+        def outlive_main():
+            time.sleep(0.5)
+            print("result", asyncio.run(lemma.async_trace("awaited", run)), flush=True)
+            asyncio.run(sync_hook())
+
+
+        threading.Thread(target=outlive_main).start()
+        """
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, timeout=30
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.splitlines() == ["sent awaited", "result ok", "sent hook"]
+    assert "Traceback" not in completed.stderr

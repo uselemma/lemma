@@ -11,7 +11,7 @@ import asyncio
 import os
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from contextvars import copy_context
+from contextvars import Context, copy_context
 from typing import Callable, Literal
 
 from .delivery import (
@@ -73,16 +73,25 @@ class _Pool:
 
     def submit(self, fn: Callable[[], None], trace_id: str) -> Future[None]:
         """Queue ``fn`` to run in the submitting thread's context."""
+        # Copied here, on the caller's thread, so before_send and a custom
+        # transport see the caller's ContextVars on the worker.
+        context = copy_context()
         with self.lock:
             if self.executor is None:
                 self.executor = ThreadPoolExecutor(
                     max_workers=self._workers,
                     thread_name_prefix=self._thread_name_prefix,
                 )
-            # Copied here, on the caller's thread, so before_send and a custom
-            # transport see the caller's ContextVars on the worker.
-            future = self.executor.submit(copy_context().run, fn)
-            self.pending[future] = trace_id
+            try:
+                future: Future[None] | None = self.executor.submit(context.run, fn)
+            except RuntimeError:
+                future = None
+            else:
+                self.pending[future] = trace_id
+        if future is None:
+            # Executors refuse new work once interpreter shutdown starts. A
+            # thread that outlives the main thread still delivers, inline.
+            return _run_inline(context, fn)
         future.add_done_callback(self._forget)
         return future
 
@@ -93,6 +102,17 @@ class _Pool:
     def _forget(self, future: Future[None]) -> None:
         with self.lock:
             self.pending.pop(future, None)
+
+
+def _run_inline(context: Context, fn: Callable[[], None]) -> Future[None]:
+    future: Future[None] = Future()
+    try:
+        context.run(fn)
+    except Exception as exc:
+        future.set_exception(exc)
+    else:
+        future.set_result(None)
+    return future
 
 
 _fire_and_forget = _Pool(OFF_LOOP_WORKERS, "uselemma-delivery")
