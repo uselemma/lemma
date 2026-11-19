@@ -280,7 +280,7 @@ async def test_a_stalled_awaited_delivery_does_not_hold_a_default_executor_threa
 
 async def test_cancelling_a_queued_async_trace_still_delivers_it(monkeypatch):
     monkeypatch.setattr(
-        off_loop, "_awaited", off_loop._Pool(lambda: 1, "uselemma-awaited-delivery")
+        off_loop, "_awaited", off_loop._Pool(1, "uselemma-awaited-delivery")
     )
     release = threading.Event()
     sent = []
@@ -323,7 +323,7 @@ def test_asyncio_run_exiting_with_queued_awaited_deliveries_reports_them():
         from uselemma_tracing import off_loop
         from uselemma_tracing.client import Lemma
 
-        off_loop._awaited = off_loop._Pool(lambda: 1, "uselemma-awaited-delivery")
+        off_loop._awaited = off_loop._Pool(1, "uselemma-awaited-delivery")
         off_loop.OFF_LOOP_DRAIN_DEADLINE_SECONDS = 0.3
 
 

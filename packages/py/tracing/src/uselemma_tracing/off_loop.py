@@ -49,32 +49,36 @@ OFF_LOOP_DRAIN_DEADLINE_SECONDS = (
 class _Pool:
     """A lazily started executor that tracks each queued or running delivery."""
 
-    def __init__(self, workers: Callable[[], int], thread_name_prefix: str) -> None:
+    def __init__(
+        self, workers: int, thread_name_prefix: str, *, max_backlog: int | None = None
+    ) -> None:
         self._workers = workers
         self._thread_name_prefix = thread_name_prefix
+        self._max_backlog = max_backlog
         self.reset()
 
     def reset(self) -> None:
-        # Reentrant: a done callback runs at once on the submitting thread when
-        # the future already finished, and a caller may hold the lock around
-        # a backlog check and the submit.
-        self.lock = threading.RLock()
+        self.lock = threading.Lock()
         self.executor: ThreadPoolExecutor | None = None
         # Each queued or running delivery, with the Lemma trace ID it sends,
         # in submission order.
         self.pending: dict[Future[None], str] = {}
 
-    def submit(self, fn: Callable[[], None], trace_id: str) -> Future[None]:
+    def submit(self, fn: Callable[[], None], trace_id: str) -> Future[None] | None:
+        """Queue ``fn``; None when the backlog is full and it is not queued."""
         with self.lock:
+            if self._max_backlog is not None and len(self.pending) >= self._max_backlog:
+                return None
             if self.executor is None:
                 self.executor = ThreadPoolExecutor(
-                    max_workers=self._workers(),
+                    max_workers=self._workers,
                     thread_name_prefix=self._thread_name_prefix,
                 )
             future = self.executor.submit(fn)
             self.pending[future] = trace_id
-            future.add_done_callback(self._forget)
-            return future
+        # Outside the lock: a future that already finished runs this at once.
+        future.add_done_callback(self._forget)
+        return future
 
     def snapshot(self) -> dict[Future[None], str]:
         with self.lock:
@@ -85,8 +89,10 @@ class _Pool:
             self.pending.pop(future, None)
 
 
-_fire_and_forget = _Pool(lambda: OFF_LOOP_WORKERS, "uselemma-delivery")
-_awaited = _Pool(lambda: AWAITED_WORKERS, "uselemma-awaited-delivery")
+_fire_and_forget = _Pool(
+    OFF_LOOP_WORKERS, "uselemma-delivery", max_backlog=OFF_LOOP_MAX_BACKLOG
+)
+_awaited = _Pool(AWAITED_WORKERS, "uselemma-awaited-delivery")
 
 
 def on_event_loop_thread() -> bool:
@@ -99,22 +105,22 @@ def on_event_loop_thread() -> bool:
 
 def submit(fn: Callable[[], None], trace_id: str) -> bool:
     """Queue ``fn`` without waiting; False when the backlog is full and it is not queued."""
-    with _fire_and_forget.lock:
-        if len(_fire_and_forget.pending) >= OFF_LOOP_MAX_BACKLOG:
-            return False
-        _fire_and_forget.submit(fn, trace_id)
-    return True
+    return _fire_and_forget.submit(fn, trace_id) is not None
 
 
-async def run_awaited(fn: Callable[[], None], trace_id: str) -> None:
-    """Run ``fn`` on the awaited pool, in the caller's context, and wait for it.
+async def run_awaited(fn: Callable[[], None], trace_id: str) -> bool:
+    """Run ``fn`` on the awaited pool, in the caller's context, and wait for it;
+    False when the pool's backlog is full and it is not queued.
 
     Shielded: cancelling the caller, by its own timeout or by ``asyncio.run``
     shutting down, ends only the wait. The delivery still runs, or the exit
     drain reports it.
     """
     future = _awaited.submit(partial(copy_context().run, fn), trace_id)
+    if future is None:
+        return False
     await asyncio.shield(asyncio.wrap_future(future))
+    return True
 
 
 def wait_pending(moment: Literal["flush", "exit"] = "flush") -> None:

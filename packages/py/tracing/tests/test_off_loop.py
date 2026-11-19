@@ -12,11 +12,10 @@ from uselemma_tracing import off_loop
 
 
 @pytest.fixture
-def fresh_pool():
-    """An empty pool, so worker-count and deadline overrides take effect."""
-    off_loop._reset()
-    yield
-    off_loop._reset()
+def one_worker_pools(monkeypatch):
+    """Single-worker pools, so a gated job keeps the rest queued."""
+    monkeypatch.setattr(off_loop, "_fire_and_forget", off_loop._Pool(1, "uselemma-delivery"))
+    monkeypatch.setattr(off_loop, "_awaited", off_loop._Pool(1, "uselemma-awaited-delivery"))
 
 
 def _gated():
@@ -59,7 +58,9 @@ def test_wait_pending_returns_once_queued_jobs_finish():
 
 
 def test_submit_refuses_a_job_past_the_backlog_cap(monkeypatch):
-    monkeypatch.setattr(off_loop, "OFF_LOOP_MAX_BACKLOG", 2)
+    monkeypatch.setattr(
+        off_loop, "_fire_and_forget", off_loop._Pool(4, "uselemma-delivery", max_backlog=2)
+    )
     first, release_first, ran_first = _gated()
     second, release_second, ran_second = _gated()
     refused = []
@@ -77,15 +78,23 @@ def test_submit_refuses_a_job_past_the_backlog_cap(monkeypatch):
     assert off_loop.submit(lambda: None, "trace-4")
 
 
+def test_the_awaited_pool_has_no_backlog_cap(one_worker_pools):
+    _first, release, _ran = _gated()
+    for index in range(off_loop.OFF_LOOP_MAX_BACKLOG + 1):
+        job = _first if index == 0 else (lambda: None)
+        assert off_loop._awaited.submit(job, f"trace-{index}") is not None
+    release.set()
+    off_loop._drain([off_loop._awaited], "flush")
+
+
 def test_the_drain_deadline_is_one_delivery_worst_case():
     # 3 attempts x 10 s timeout + 2 retries x 2 s longest backoff.
     assert off_loop.OFF_LOOP_DRAIN_DEADLINE_SECONDS == 34.0
 
 
 def test_flush_stops_at_the_deadline_and_reports_unstarted_deliveries(
-    fresh_pool, monkeypatch, caplog
+    one_worker_pools, monkeypatch, caplog
 ):
-    monkeypatch.setattr(off_loop, "OFF_LOOP_WORKERS", 1)
     monkeypatch.setattr(off_loop, "OFF_LOOP_DRAIN_DEADLINE_SECONDS", 0.2)
     in_flight, release, ran_in_flight = _gated()
     queued_ran = []
@@ -116,7 +125,7 @@ def test_exit_stops_at_the_deadline_and_reports_unstarted_deliveries():
         import time
         from uselemma_tracing import off_loop
 
-        off_loop.OFF_LOOP_WORKERS = 1
+        off_loop._fire_and_forget = off_loop._Pool(1, "uselemma-delivery")
         off_loop.OFF_LOOP_DRAIN_DEADLINE_SECONDS = 0.2
         for index in range(4):
             off_loop.submit(lambda: time.sleep(1), f"trace-{index}")
@@ -155,9 +164,8 @@ def test_a_forked_child_starts_with_empty_pools():
 
 
 def test_the_exit_drain_also_cuts_queued_awaited_deliveries(
-    fresh_pool, monkeypatch, caplog
+    one_worker_pools, monkeypatch, caplog
 ):
-    monkeypatch.setattr(off_loop, "AWAITED_WORKERS", 1)
     monkeypatch.setattr(off_loop, "OFF_LOOP_DRAIN_DEADLINE_SECONDS", 0.2)
     in_flight, release, _ran = _gated()
     queued_ran = []

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from uselemma_tracing import disable_debug_mode, enable_debug_mode, openai_agents
+from uselemma_tracing import disable_debug_mode, enable_debug_mode, off_loop, openai_agents
 from uselemma_tracing.client import Lemma
 
 PROJECT_ID = "10000000-0000-0000-0000-000000000001"
@@ -1087,7 +1087,9 @@ async def test_openai_agents_force_flush_waits_for_handed_off_deliveries():
 async def test_openai_agents_drops_a_trace_past_the_delivery_backlog(
     monkeypatch, caplog
 ):
-    monkeypatch.setattr("uselemma_tracing.off_loop.OFF_LOOP_MAX_BACKLOG", 0)
+    monkeypatch.setattr(
+        off_loop, "_fire_and_forget", off_loop._Pool(1, "uselemma-delivery", max_backlog=0)
+    )
     sent = []
     lemma = Lemma(
         api_key="key",
