@@ -895,13 +895,10 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
 
         if stored.root_error:
             stored.context.fail(stored.root_error)
-            self.lemma._deliver_automatic(stored.context, started_at, ended_at)
-            return
-
-        if stored.root_output is not None:
+        elif stored.root_output is not None:
             stored.context.output(stored.root_output)
-
-        self.lemma._deliver_automatic(stored.context, started_at, ended_at)
+        # A sync invoke() inside a running loop calls this on the loop's thread.
+        self.lemma._deliver_automatic_from_sync_hook(stored.context, started_at, ended_at)
 
     def _maybe_finalize_owner(self, run: StoredRun, ended_at: datetime) -> None:
         if not run.owns_trace:
@@ -1457,9 +1454,11 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         self._maybe_finalize_owner(run, ended_at)
 
     def flush(self) -> None:
-        """Finalize all open owned traces (idempotent; does not resend)."""
+        """Finalize all open owned traces (idempotent; does not resend), then wait
+        for deliveries handed off an event loop."""
         for trace_id, stored in list(self._traces.items()):
             self._finalize(trace_id, stored)
+        self.lemma._wait_for_process_sync_hook_deliveries()
 
     def shutdown(self) -> None:
         """Finalize open traces and reset integration state."""
