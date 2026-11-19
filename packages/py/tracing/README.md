@@ -177,6 +177,13 @@ need a failed send to raise so you can retry: it sends once and does not retry.
 `TraceHandle.end()` delivers through `ingest()`, so a failed send raises there
 too.
 
+A serverless runtime that freezes the process once your handler returns can
+lose the background upload of a cancelled `async_trace`. Put the timeout inside
+the callback instead, with `asyncio.wait_for()` (or `asyncio.timeout()` on
+3.11+): `async_trace` then sees a `TimeoutError`, not a cancellation, and
+uploads the failed run before it returns. That adds the upload to your
+handler's run time, up to 34 seconds while Lemma is unreachable.
+
 ## Cross-process turns
 
 When a user turn spans a host and a sandbox such as E2B, record one

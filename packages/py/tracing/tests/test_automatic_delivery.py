@@ -7,6 +7,7 @@ import subprocess
 import sys
 import textwrap
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, wait
 
 import pytest
@@ -396,6 +397,54 @@ async def test_an_async_trace_that_raises_still_awaits_its_delivery():
     # Delivered before the error reached the caller, with no pool to drain.
     assert len(sent) == 1
     assert sent[0]["error"] == "ValueError: tool failed"
+
+
+async def _outlast_wait_for():
+    await asyncio.wait_for(asyncio.sleep(30), timeout=0.01)
+
+
+async def _outlast_timeout_block():
+    async with asyncio.timeout(0.01):
+        await asyncio.sleep(30)
+
+
+@pytest.mark.parametrize(
+    "timed_out_work",
+    [
+        _outlast_wait_for,
+        pytest.param(
+            _outlast_timeout_block,
+            marks=pytest.mark.skipif(
+                sys.version_info < (3, 11), reason="asyncio.timeout() is 3.11+"
+            ),
+        ),
+    ],
+)
+async def test_a_timeout_inside_the_callback_awaits_delivery_and_reraises(
+    timed_out_work,
+):
+    sent = []
+
+    def transport(_url, _headers, body):
+        # Slow enough that a delivery handed to the background would still be
+        # sending when async_trace re-raised.
+        time.sleep(0.2)
+        sent.append(json.loads(body)["trace"])
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    async def run(_trace):
+        await timed_out_work()
+
+    with pytest.raises(asyncio.TimeoutError):
+        await lemma.async_trace("support-agent", run)
+
+    # The callback raised TimeoutError, not CancelledError, so delivery was
+    # awaited before the error reached the caller.
+    assert len(sent) == 1
+    assert sent[0]["status"] == "ERROR"
+    assert "TimeoutError" in sent[0]["error"]
 
 
 def test_asyncio_run_exiting_with_queued_awaited_deliveries_reports_them():

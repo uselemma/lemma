@@ -7,7 +7,7 @@ description: >-
   Agents SDK, LangChain, LangGraph, Langfuse side-by-side installs, or
   debugging Lemma trace delivery and trace shape.
 metadata:
-  version: 1.1.0
+  version: 1.1.1
 ---
 
 # Lemma Tracing
@@ -112,6 +112,7 @@ Ask one focused clarification question only when the agent boundary or finalizat
 - Use callback traces when one function owns the whole run.
 - In TypeScript, use trace handles when the run is coordinated across callbacks, streaming, or helpers; do not set final duration until `trace.end(...)`.
 - In Python, use callback traces as the root boundary and use `start_span`, `start_tool`, and `start_generation` on the active trace context for work in progress.
+- In Python async code on a serverless runtime that freezes the process once the handler returns, such as AWS Lambda, put any timeout inside the `async_trace` callback (`await asyncio.wait_for(run_agent(...), timeout=...)`), never around the `lemma.async_trace(...)` call. A cancelled `async_trace` uploads its trace in the background, which the frozen process can lose; a timeout inside the callback raises `TimeoutError`, which `async_trace` records and uploads before it re-raises. That upload can add up to 34 seconds while Lemma is unreachable, so leave that headroom under the runtime's own timeout.
 - For Vercel AI SDK and OpenAI Agents SDK, do not wrap normal runs in `lemma.trace(...)`; use the integration so it creates and closes the trace from framework lifecycle events.
 - Record completed work with `recordSpan`, `recordTool`, and `recordGeneration`.
 - Use `startSpan`, `startTool`, and `startGeneration` when you need a handle before the work finishes.
