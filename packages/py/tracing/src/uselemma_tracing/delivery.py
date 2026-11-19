@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import math
-import os
 import random as _random
-import threading
-from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from time import sleep
 from typing import Any, Callable, Mapping, Union
@@ -29,12 +25,6 @@ INGEST_RETRY_BASE_DELAY_SECONDS = 0.5
 # Ceiling for one retry delay, a server Retry-After included, so a rate-limited
 # send cannot hold the caller for long.
 INGEST_RETRY_MAX_DELAY_SECONDS = 2.0
-
-# Worker threads for automatic delivery handed off an event loop. A few keep
-# deliveries from queueing behind one stalled send while staying negligible in
-# the host process. The workers are joined at interpreter exit, so queued
-# deliveries still go out.
-OFF_LOOP_DELIVERY_WORKERS = 4
 
 # One POST of a serialized payload; the client owns the URL and credentials.
 # Response header keys are lowercase.
@@ -171,45 +161,3 @@ def deliver(
             delay_seconds=delay,
         )
         sleep(delay)
-
-
-_executor: ThreadPoolExecutor | None = None
-_executor_lock = threading.Lock()
-
-
-def run_off_event_loop(fn: Callable[[], None]) -> Future[None] | None:
-    """Run ``fn`` now, or on a worker thread when this thread runs an event loop.
-
-    Automatic delivery blocks on the transport and on retry backoff, so a sync
-    hook that an async framework calls on its loop thread must not run it
-    there. Returns the worker's future, or None when ``fn`` already ran.
-    """
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        fn()
-        return None
-    return _delivery_executor().submit(fn)
-
-
-def _delivery_executor() -> ThreadPoolExecutor:
-    global _executor
-    with _executor_lock:
-        if _executor is None:
-            _executor = ThreadPoolExecutor(
-                max_workers=OFF_LOOP_DELIVERY_WORKERS,
-                thread_name_prefix="uselemma-delivery",
-            )
-        return _executor
-
-
-def _forget_executor_in_child() -> None:
-    # A forked child has none of the parent's workers; submitting to the
-    # inherited pool would queue work that never runs.
-    global _executor, _executor_lock
-    _executor = None
-    _executor_lock = threading.Lock()
-
-
-if hasattr(os, "register_at_fork"):
-    os.register_at_fork(after_in_child=_forget_executor_in_child)

@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 import threading
-from concurrent.futures import Future, wait
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
 
 from .client import Lemma, SpanHandle, TraceContext, _datetime_or_now, _duration_ms, _now
 from .debug_mode import _lemma_debug
-from .delivery import run_off_event_loop
+from . import off_loop
+from .dropped_traces import report_dropped_trace
 from .error_message import describe_error
 from .model import pick_model_identity
 from .openai_agents_containers import (
@@ -254,8 +254,6 @@ class LemmaOpenAIAgentsProcessor:
         self._span_trace_ids: dict[str, str] = {}
         self._ended_spans: dict[str, SpanRecord] = {}
         self._lock = threading.RLock()
-        self._deliveries: set[Future[None]] = set()
-        self._deliveries_lock = threading.Lock()
 
     def on_trace_start(self, trace: Any) -> None:
         with self._lock:
@@ -277,7 +275,7 @@ class LemmaOpenAIAgentsProcessor:
             )
             delivery = self._finalize(trace_id, stored)
         if delivery is not None:
-            self._deliver(delivery)
+            self._deliver(trace_id, delivery)
 
     def on_span_start(self, span: Any) -> None:
         with self._lock:
@@ -310,16 +308,14 @@ class LemmaOpenAIAgentsProcessor:
         # later on_trace_end or force_flush can't resend and duplicate spans.
         with self._lock:
             deliveries = [
-                self._finalize(trace_id, stored)
+                (trace_id, self._finalize(trace_id, stored))
                 for trace_id, stored in list(self._traces.items())
             ]
-        for delivery in deliveries:
+        for trace_id, delivery in deliveries:
             if delivery is not None:
-                self._deliver(delivery)
+                self._deliver(trace_id, delivery)
         # Deliveries handed off an event loop must finish before a flush returns.
-        with self._deliveries_lock:
-            pending = list(self._deliveries)
-        wait(pending)
+        off_loop.wait_pending()
 
     def _resolve_thread_id(
         self,
@@ -422,18 +418,16 @@ class LemmaOpenAIAgentsProcessor:
         context = stored.context
         return lambda: self.lemma._deliver_automatic(context, started_at, ended_at)
 
-    def _deliver(self, delivery: Callable[[], None]) -> None:
+    def _deliver(self, trace_id: str, delivery: Callable[[], None]) -> None:
         # The SDK calls trace hooks on the event loop's thread during async runs.
-        future = run_off_event_loop(delivery)
-        if future is None:
-            return
-        with self._deliveries_lock:
-            self._deliveries.add(future)
-        future.add_done_callback(self._forget_delivery)
-
-    def _forget_delivery(self, future: Future[None]) -> None:
-        with self._deliveries_lock:
-            self._deliveries.discard(future)
+        if not off_loop.on_event_loop_thread():
+            delivery()
+        elif not off_loop.submit(delivery):
+            report_dropped_trace(
+                trace_id,
+                f"before sending: delivery backlog full "
+                f"({off_loop.OFF_LOOP_MAX_BACKLOG} queued)",
+            )
 
     def _ensure_trace(self, trace: Any) -> _StoredTrace:
         trace_id = _get(trace, "trace_id")

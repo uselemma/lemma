@@ -1063,3 +1063,50 @@ def test_openai_agents_force_flush_delivers_after_releasing_the_lock():
     processor.force_flush()
 
     assert held == [False, False]
+
+
+async def test_openai_agents_force_flush_waits_for_handed_off_deliveries():
+    release = threading.Event()
+    sent = []
+
+    def transport(*_args):
+        release.wait(timeout=5)
+        sent.append(True)
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_flush", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_flush", name="agent"))
+    threading.Timer(0.05, release.set).start()
+    processor.force_flush()
+
+    assert sent == [True]
+
+
+async def test_openai_agents_drops_a_trace_past_the_delivery_backlog(
+    monkeypatch, caplog
+):
+    monkeypatch.setattr("uselemma_tracing.off_loop.OFF_LOOP_MAX_BACKLOG", 0)
+    sent = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: sent.append(True) or (201, "{}"),
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_full", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_full", name="agent"))
+    processor.force_flush()
+
+    assert sent == []
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name.startswith("uselemma_tracing")
+    ]
+    assert len(warnings) == 1
+    assert warnings[0].startswith(
+        "uselemma-tracing: dropped trace trace_full before sending: delivery "
+        "backlog full (0 queued)."
+    )

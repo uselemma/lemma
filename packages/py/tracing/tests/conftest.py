@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from uselemma_tracing import off_loop
 from uselemma_tracing.dropped_traces import reset_dropped_trace_warnings
 
 
@@ -19,3 +20,10 @@ def _fresh_dropped_trace_warnings():
     reset_dropped_trace_warnings()
     yield
     reset_dropped_trace_warnings()
+
+
+@pytest.fixture(autouse=True)
+def _drain_off_loop_deliveries():
+    """No test leaves a handed-off delivery running into the next one."""
+    yield
+    off_loop.wait_pending()

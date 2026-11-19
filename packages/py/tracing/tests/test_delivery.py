@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import threading
-
 import pytest
 
 from uselemma_tracing.delivery import (
@@ -15,7 +13,6 @@ from uselemma_tracing.delivery import (
     ingest_retry_delay_seconds,
     is_retryable_ingest_status,
     parse_retry_after_seconds,
-    run_off_event_loop,
 )
 
 LOG = {"trace_id": "trace-1", "project_id": "project-1"}
@@ -135,20 +132,3 @@ def test_deliver_sends_once_when_one_attempt_is_allowed(retry_sleeps):
     assert isinstance(result, NotDelivered)
     assert len(calls) == 1
     assert retry_sleeps == []
-
-
-def test_run_off_event_loop_runs_inline_without_a_loop():
-    threads = []
-
-    assert run_off_event_loop(lambda: threads.append(threading.get_ident())) is None
-    assert threads == [threading.get_ident()]
-
-
-async def test_run_off_event_loop_uses_a_worker_thread_on_a_loop():
-    threads = []
-
-    future = run_off_event_loop(lambda: threads.append(threading.get_ident()))
-
-    assert future is not None
-    future.result(timeout=5)
-    assert threads and threads[0] != threading.get_ident()
