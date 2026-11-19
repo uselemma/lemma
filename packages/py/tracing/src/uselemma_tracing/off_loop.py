@@ -65,7 +65,8 @@ class _Pool:
     def reset(self) -> None:
         # Reentrant: hand_off holds it around its backlog check and the submit,
         # and a done callback runs at once on the submitting thread when the
-        # future already finished.
+        # future already finished; claim_unstarted holds it while cancel() runs
+        # _forget on the same thread.
         self.lock = threading.RLock()
         self.executor: ThreadPoolExecutor | None = None
         # Each queued or running delivery, with the Lemma trace ID it sends,
@@ -105,6 +106,21 @@ class _Pool:
     def snapshot(self) -> dict[Future[None], str]:
         with self.lock:
             return dict(self.pending)
+
+    def claim_unstarted(self, snapshot: dict[Future[None], str]) -> list[str]:
+        """Cancel each of this pool's deliveries in ``snapshot`` that has not
+        started, and return their trace IDs in submission order.
+
+        Only a future still pending is claimed, under the lock, so drains that
+        overlap claim each delivery once: ``cancel()`` also returns True for a
+        future another drain already cancelled.
+        """
+        with self.lock:
+            return [
+                trace_id
+                for future, trace_id in snapshot.items()
+                if future in self.pending and future.cancel()
+            ]
 
     def _forget(self, future: Future[None]) -> None:
         with self.lock:
@@ -208,12 +224,10 @@ def _drain(pools: list[_Pool], moment: Literal["flush", "exit"]) -> None:
     pending: dict[Future[None], str] = {}
     for pool in pools:
         pending.update(pool.snapshot())
-    _done, not_done = wait(pending, timeout=OFF_LOOP_DRAIN_DEADLINE_SECONDS)
+    wait(pending, timeout=OFF_LOOP_DRAIN_DEADLINE_SECONDS)
     # Submission order, so the report names the oldest dropped delivery.
     dropped = [
-        trace_id
-        for future, trace_id in pending.items()
-        if future in not_done and future.cancel()
+        trace_id for pool in pools for trace_id in pool.claim_unstarted(pending)
     ]
     if dropped:
         report_dropped_trace(

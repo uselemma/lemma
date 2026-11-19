@@ -134,6 +134,68 @@ def test_flush_stops_at_the_deadline_and_reports_unstarted_deliveries(
     )
 
 
+def _recorded_drops(monkeypatch) -> list[tuple[str, str, int]]:
+    reports = []
+    monkeypatch.setattr(
+        off_loop,
+        "report_dropped_trace",
+        lambda trace_id, cause, count=1: reports.append((trace_id, cause, count)),
+    )
+    return reports
+
+
+def _queue_behind_one_in_flight(monkeypatch, queued: int):
+    """A single-worker fire-and-forget pool: one delivery held in flight and
+    ``queued`` waiting behind it."""
+    monkeypatch.setattr(off_loop, "_fire_and_forget", off_loop._Pool(1, "uselemma-delivery"))
+    in_flight, release, _ran = _gated()
+    queued_ran = []
+    off_loop._fire_and_forget.submit(in_flight, "trace-a")
+    for index in range(queued):
+        off_loop._fire_and_forget.submit(
+            lambda index=index: queued_ran.append(index), f"trace-q{index}"
+        )
+    return release, queued_ran
+
+
+def test_overlapping_flushes_report_each_dropped_delivery_once(monkeypatch):
+    monkeypatch.setattr(off_loop, "OFF_LOOP_DRAIN_DEADLINE_SECONDS", 0.3)
+    reports = _recorded_drops(monkeypatch)
+    release, queued_ran = _queue_behind_one_in_flight(monkeypatch, 5)
+
+    first = threading.Thread(target=off_loop.wait_pending)
+    second = threading.Thread(target=off_loop.wait_pending)
+    first.start()
+    # The second flush snapshots the queued deliveries before the first cuts them.
+    time.sleep(0.1)
+    second.start()
+    first.join()
+    second.join()
+    release.set()
+
+    assert queued_ran == []
+    assert reports == [
+        ("trace-q0", "before sending: 5 deliveries still queued at flush", 5)
+    ]
+
+
+async def test_overlapping_async_flushes_report_each_dropped_delivery_once(monkeypatch):
+    monkeypatch.setattr(off_loop, "OFF_LOOP_DRAIN_DEADLINE_SECONDS", 0.3)
+    reports = _recorded_drops(monkeypatch)
+    release, queued_ran = _queue_behind_one_in_flight(monkeypatch, 5)
+
+    first = asyncio.create_task(off_loop.await_pending())
+    await asyncio.sleep(0.1)
+    second = asyncio.create_task(off_loop.await_pending())
+    await asyncio.wait_for(asyncio.gather(first, second), 5)
+    release.set()
+
+    assert queued_ran == []
+    assert reports == [
+        ("trace-q0", "before sending: 5 deliveries still queued at flush", 5)
+    ]
+
+
 def test_exit_stops_at_the_deadline_and_reports_unstarted_deliveries():
     script = textwrap.dedent(
         """
