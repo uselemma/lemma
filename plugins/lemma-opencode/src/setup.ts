@@ -21,6 +21,7 @@ import {
   type LemmaOpenCodeCredentials,
   type StorageOptions,
 } from "./storage.js";
+import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 const DEFAULT_API_URL = "https://api.uselemma.ai";
 const MANAGED_PLUGIN_MARKER = "// @uselemma/opencode managed plugin";
@@ -107,7 +108,10 @@ async function startDeviceAuthorization(
       `${apiUrl}/coding-harness/device-authorizations`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "user-agent": PLUGIN_USER_AGENT,
+        },
         body: JSON.stringify({ harness: "opencode" }),
       },
     ),
@@ -143,7 +147,10 @@ async function pollDeviceAuthorization(
     `${apiUrl}/coding-harness/device-authorizations/token`,
     {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "user-agent": PLUGIN_USER_AGENT,
+      },
       body: JSON.stringify({ device_code: deviceCode }),
     },
   );

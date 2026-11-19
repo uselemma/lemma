@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { credentialsPath } from "./credentials.js";
 import { runSetup } from "./setup.js";
+import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 const directories: string[] = [];
 
@@ -63,6 +64,11 @@ describe("Pi setup", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
       harness: "pi",
     });
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(new Headers(init?.headers).get("user-agent")).toBe(
+        PLUGIN_USER_AGENT,
+      );
+    }
     expect(open).toHaveBeenCalledOnce();
     expect(credentials.accessToken).toBe("lemma_ci_scoped-secret");
     expect(output.join("\n")).not.toContain(credentials.accessToken);

@@ -24,6 +24,7 @@ import {
   writeTurn,
   type StagedClaudePrompt,
 } from "./storage.js";
+import { withPluginUserAgent } from "./user-agent.js";
 
 type ClaudeEventName =
   | "UserPromptSubmit"
@@ -164,7 +165,7 @@ async function defaultSendTrace(input: {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   const fetchWithTimeout: typeof fetch = async (request, init) =>
-    fetch(request, { ...init, signal: controller.signal });
+    fetch(request, withPluginUserAgent({ ...init, signal: controller.signal }));
   const lemma = new Lemma({
     apiKey: input.accessToken,
     projectId: input.projectId,

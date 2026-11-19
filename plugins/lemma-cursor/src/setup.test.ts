@@ -17,6 +17,7 @@ import {
   credentialsPath,
   readCredentials,
 } from "./storage.js";
+import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -105,6 +106,11 @@ describe("Cursor setup", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
       harness: "cursor",
     });
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(new Headers(init?.headers).get("user-agent")).toBe(
+        PLUGIN_USER_AGENT,
+      );
+    }
     expect(credentials).toEqual({
       version: 1,
       apiUrl: "https://dev.api.uselemma.ai",
