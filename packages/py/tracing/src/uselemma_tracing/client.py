@@ -41,9 +41,11 @@ from .delivery import (
     Delivered,
     DeliveryResult,
     NotDelivered,
+    backlog_full,
     deliver,
     ingest_failure_hint,
 )
+from . import off_loop
 from .dropped_traces import report_dropped_trace
 from .error_message import describe_error as _describe_error
 from .error_message import failure_message as _failure_message
@@ -1318,6 +1320,30 @@ class Lemma:
     ) -> None:
         # The transport and retry backoff block; keep both off the event loop.
         await asyncio.to_thread(self._deliver_automatic, ctx, started_at, ended_at)
+
+    def _deliver_automatic_from_sync_hook(
+        self,
+        ctx: TraceContext,
+        started_at: datetime,
+        ended_at: datetime,
+    ) -> None:
+        """Automatic delivery for a sync hook that an async framework may call on
+        its event loop's thread.
+
+        Inline when the thread runs no loop; otherwise handed to the off-loop
+        pool, because the transport and retry backoff block.
+        """
+        if not off_loop.on_event_loop_thread():
+            self._deliver_automatic(ctx, started_at, ended_at)
+        elif not off_loop.submit(
+            lambda: self._deliver_automatic(ctx, started_at, ended_at)
+        ):
+            report_dropped_trace(ctx.id, backlog_full().cause)
+
+    @staticmethod
+    def _wait_for_sync_hook_deliveries() -> None:
+        """Block until deliveries handed to the off-loop pool have finished."""
+        off_loop.wait_pending()
 
     def _deliver_automatic(
         self,

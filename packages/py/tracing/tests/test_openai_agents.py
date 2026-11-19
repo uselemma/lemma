@@ -1096,6 +1096,7 @@ async def test_openai_agents_drops_a_trace_past_the_delivery_backlog(
     )
     processor = openai_agents(lemma)
     processor.on_trace_start(FakeTrace(trace_id="trace_full", name="agent"))
+    lemma_trace_id = processor._traces["trace_full"].context.id
     processor.on_trace_end(FakeTrace(trace_id="trace_full", name="agent"))
     processor.force_flush()
 
@@ -1107,6 +1108,6 @@ async def test_openai_agents_drops_a_trace_past_the_delivery_backlog(
     ]
     assert len(warnings) == 1
     assert warnings[0].startswith(
-        "uselemma-tracing: dropped trace trace_full before sending: delivery "
-        "backlog full (0 queued)."
+        f"uselemma-tracing: dropped trace {lemma_trace_id} before sending: "
+        "delivery backlog full."
     )

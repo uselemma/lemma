@@ -4,12 +4,10 @@ import json
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 from .client import Lemma, SpanHandle, TraceContext, _datetime_or_now, _duration_ms, _now
 from .debug_mode import _lemma_debug
-from . import off_loop
-from .dropped_traces import report_dropped_trace
 from .error_message import describe_error
 from .model import pick_model_identity
 from .openai_agents_containers import (
@@ -273,9 +271,9 @@ class LemmaOpenAIAgentsProcessor:
                 _get(trace, "group_id"),
                 _get(trace, "metadata"),
             )
-            delivery = self._finalize(trace_id, stored)
-        if delivery is not None:
-            self._deliver(trace_id, delivery)
+            finalized = self._finalize(trace_id, stored)
+        if finalized is not None:
+            self.lemma._deliver_automatic_from_sync_hook(*finalized)
 
     def on_span_start(self, span: Any) -> None:
         with self._lock:
@@ -307,15 +305,15 @@ class LemmaOpenAIAgentsProcessor:
         # for traces that never received on_trace_end), then drop them so a
         # later on_trace_end or force_flush can't resend and duplicate spans.
         with self._lock:
-            deliveries = [
-                (trace_id, self._finalize(trace_id, stored))
+            finalized = [
+                self._finalize(trace_id, stored)
                 for trace_id, stored in list(self._traces.items())
             ]
-        for trace_id, delivery in deliveries:
+        for delivery in finalized:
             if delivery is not None:
-                self._deliver(trace_id, delivery)
+                self.lemma._deliver_automatic_from_sync_hook(*delivery)
         # Deliveries handed off an event loop must finish before a flush returns.
-        off_loop.wait_pending()
+        self.lemma._wait_for_sync_hook_deliveries()
 
     def _resolve_thread_id(
         self,
@@ -393,11 +391,11 @@ class LemmaOpenAIAgentsProcessor:
 
     def _finalize(
         self, trace_id: str, stored: _StoredTrace
-    ) -> Callable[[], None] | None:
-        """Close ``stored`` and return its delivery, or None if it already ended.
+    ) -> tuple[TraceContext, datetime, datetime] | None:
+        """Close ``stored`` and return what to deliver, or None if it already ended.
 
-        Callers run the delivery after releasing ``self._lock``, so no send or
-        retry backoff holds up the other trace hooks.
+        Callers deliver after releasing ``self._lock``, so no send or retry
+        backoff holds up the other trace hooks.
         """
         self._traces.pop(trace_id, None)
         self._forget_trace_spans(trace_id)
@@ -415,19 +413,7 @@ class LemmaOpenAIAgentsProcessor:
             stored.context.fail(stored.root_error)
         elif stored.root_output is not None:
             stored.context.output(stored.root_output)
-        context = stored.context
-        return lambda: self.lemma._deliver_automatic(context, started_at, ended_at)
-
-    def _deliver(self, trace_id: str, delivery: Callable[[], None]) -> None:
-        # The SDK calls trace hooks on the event loop's thread during async runs.
-        if not off_loop.on_event_loop_thread():
-            delivery()
-        elif not off_loop.submit(delivery):
-            report_dropped_trace(
-                trace_id,
-                f"before sending: delivery backlog full "
-                f"({off_loop.OFF_LOOP_MAX_BACKLOG} queued)",
-            )
+        return stored.context, started_at, ended_at
 
     def _ensure_trace(self, trace: Any) -> _StoredTrace:
         trace_id = _get(trace, "trace_id")

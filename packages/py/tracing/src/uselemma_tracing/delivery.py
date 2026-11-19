@@ -58,6 +58,14 @@ class _SendFailed:
 _SendAttempt = Union[Delivered, _SendFailed]
 
 
+def backlog_full() -> NotDelivered:
+    """A delivery refused because the off-loop backlog is full; nothing was sent."""
+    return NotDelivered(
+        error=RuntimeError("uselemma-tracing: delivery backlog full"),
+        cause="before sending: delivery backlog full",
+    )
+
+
 def ingest_failure_hint(status: int) -> str | None:
     hints = {
         401: "check LEMMA_API_KEY",
