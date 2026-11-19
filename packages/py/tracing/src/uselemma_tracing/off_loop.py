@@ -1,9 +1,11 @@
 """SDK-owned worker pools that keep automatic delivery off the event loop.
 
-Automatic delivery blocks on the transport and on retry backoff. A sync hook
-that an async framework calls on its loop thread hands delivery to the
-fire-and-forget pool; ``async_trace`` awaits delivery on the awaited pool. An
-async flush waits for the fire-and-forget pool on the event loop.
+Automatic delivery blocks on the transport and on retry backoff. Delivery its
+caller does not wait for goes to the fire-and-forget pool: from a sync hook that
+an async framework calls on its loop thread, and from an ``async_trace``
+cancelled while its callback runs. Otherwise ``async_trace`` awaits delivery on
+the awaited pool. An async flush waits for the fire-and-forget pool on the
+event loop.
 """
 
 from __future__ import annotations
@@ -135,7 +137,9 @@ _awaited = _Pool(AWAITED_WORKERS, "uselemma-awaited-delivery")
 
 
 def hand_off(fn: Callable[[], None], trace_id: str) -> None:
-    """Deliver from a sync hook that an async framework may call on its loop thread.
+    """Deliver without blocking a running event loop: from a sync hook that an
+    async framework may call on its loop thread, or from an ``async_trace``
+    cancelled while its callback runs.
 
     Inline when the thread runs no event loop; otherwise queued on the
     fire-and-forget pool without waiting, or reported as dropped when that

@@ -507,7 +507,9 @@ def test_a_thread_outliving_main_still_delivers_at_interpreter_shutdown():
 
         async def sync_hook():
             now = datetime.now(timezone.utc)
-            lemma._deliver_automatic_without_waiting(TraceContext(name="hook"), now, now)
+            lemma._deliver_automatic_without_blocking_loop(
+                TraceContext(name="hook"), now, now
+            )
 
 
         def outlive_main():

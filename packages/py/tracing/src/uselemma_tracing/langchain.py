@@ -905,7 +905,9 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
             stored.context.output(stored.root_output)
         # Called on the event loop's thread for every ainvoke(), and for a sync
         # invoke() inside a running loop; delivery is handed off in both cases.
-        self.lemma._deliver_automatic_without_waiting(stored.context, started_at, ended_at)
+        self.lemma._deliver_automatic_without_blocking_loop(
+            stored.context, started_at, ended_at
+        )
 
     def _maybe_finalize_owner(self, run: StoredRun, ended_at: datetime) -> None:
         if not run.owns_trace:
@@ -1462,7 +1464,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
 
     def flush(self) -> None:
         """Finalize all open owned traces (idempotent; does not resend), then wait
-        for deliveries handed off an event loop."""
+        for deliveries handed to the worker pool from a running event loop."""
         self._finalize_open_traces()
         # The wait is process-wide, so it covers every client's deliveries.
         off_loop.wait_pending()

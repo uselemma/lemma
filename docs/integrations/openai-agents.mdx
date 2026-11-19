@@ -132,8 +132,6 @@ Soft tool failures (`isError` / `is_error` / Mastra `error: true`) mark the tool
 
 Call `forceFlush()` / `force_flush()` (or `shutdown()`) to send any still-open traces exactly once. A later `onTraceEnd` / `on_trace_end` for a flushed trace is a no-op, so spans are never duplicated in the append-only ingest store.
 
-In async Python code, the processor hands each finished trace to a worker pool, so retries don’t block your event loop. Await `aforce_flush()` before a short-lived process such as a serverless handler returns: it waits without blocking the loop. `aforce_flush()` and `force_flush()` wait up to 34 seconds for queued deliveries, plus any delivery already sending, then drop the rest with one warning. Process exit waits the same way. The pool holds at most 1,000 deliveries, which bounds memory while Lemma is unreachable, and drops a trace past that with a warning.
-
 ```typescript
 const processor = openAIAgents();
 addTraceProcessor(processor);
@@ -148,6 +146,8 @@ processor = openai_agents()
 # register processor, run agents...
 processor.force_flush()
 ```
+
+In async Python code, the processor hands each finished trace to a worker pool, so retries don’t block your event loop. Await `aforce_flush()` before a short-lived process such as a serverless handler returns: it waits without blocking the loop. `aforce_flush()` and `force_flush()` wait up to 34 seconds, then drop any trace still queued with one warning. Once 1,000 traces are waiting, the pool drops each new one with a warning.
 
 ## What Lemma records
 

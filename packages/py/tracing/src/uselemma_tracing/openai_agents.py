@@ -274,7 +274,7 @@ class LemmaOpenAIAgentsProcessor:
             )
             finalized = self._finalize(trace_id, stored)
         if finalized is not None:
-            self.lemma._deliver_automatic_without_waiting(*finalized)
+            self.lemma._deliver_automatic_without_blocking_loop(*finalized)
 
     def on_span_start(self, span: Any) -> None:
         with self._lock:
@@ -303,7 +303,8 @@ class LemmaOpenAIAgentsProcessor:
 
     def force_flush(self) -> None:
         self._finalize_open_traces()
-        # Deliveries handed off an event loop must finish before a flush returns.
+        # Deliveries handed to the worker pool from a running event loop must
+        # finish before a flush returns.
         # The wait is process-wide, so it covers every client's deliveries.
         off_loop.wait_pending()
 
@@ -324,7 +325,7 @@ class LemmaOpenAIAgentsProcessor:
             ]
         for delivery in finalized:
             if delivery is not None:
-                self.lemma._deliver_automatic_without_waiting(*delivery)
+                self.lemma._deliver_automatic_without_blocking_loop(*delivery)
 
     def _resolve_thread_id(
         self,

@@ -1238,7 +1238,7 @@ class Lemma:
             ctx.fail(exc)
             # Awaiting delivery here would hold the caller's timeout or
             # disconnect for up to the retry budget while Lemma is unreachable.
-            self._deliver_automatic_without_waiting(ctx, started_at, _now())
+            self._deliver_automatic_without_blocking_loop(ctx, started_at, _now())
             raise
         except BaseException as exc:
             ctx.fail(exc)
@@ -1333,18 +1333,18 @@ class Lemma:
             lambda: self._deliver_automatic(ctx, started_at, ended_at), ctx.id
         )
 
-    def _deliver_automatic_without_waiting(
+    def _deliver_automatic_without_blocking_loop(
         self,
         ctx: TraceContext,
         started_at: datetime,
         ended_at: datetime,
     ) -> None:
-        """Automatic delivery the caller doesn't wait for: a sync hook that an
-        async framework may call on its event loop's thread, or a cancelled
-        ``async_trace``.
+        """Automatic delivery that never blocks a running event loop, for a sync
+        hook that an async framework may call on its loop thread and for a
+        cancelled ``async_trace``.
 
-        Inline when the thread runs no loop; otherwise handed to the off-loop
-        pool, because the transport and retry backoff block.
+        Handed to the off-loop pool when the thread runs a loop, because the
+        transport and retry backoff block; inline when it runs none.
         """
         off_loop.hand_off(
             lambda: self._deliver_automatic(ctx, started_at, ended_at), ctx.id
