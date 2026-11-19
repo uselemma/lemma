@@ -9,6 +9,38 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="November 13, 2026" tags={["New releases", "Improvements", "Bug fixes", "[Accounts]", "[Billing]", "[Slack]", "[Traces]", "[Support access]"]} rss={{ title: "Account and billing emails, and one-trace conversations open" }}>
+
+  ## Accounts
+
+  - **Welcome:** After you create an account, Lemma emails you that it’s ready.
+  - **Organization:** After you create an organization, Lemma emails you that it’s ready. You choose a plan when you want to start.
+  - **Removed:** When you are removed from an organization, Lemma emails you that you no longer have access.
+  - **Account deleted:** After your account is deleted, Lemma emails you. If you didn’t delete it, contact support.
+  - **Organization deleted:** When an organization is deleted, each member gets an email that its projects and data are being removed.
+
+  ## Billing
+
+  - **Canceled:** When the subscription is canceled, Lemma emails the billing address. You can subscribe again from the dashboard.
+  - **Plan:** When the plan changes, Lemma emails the billing address. The message names the old plan and the new plan, which is already active.
+  - **Last charge:** When a failed payment has one charge left, Lemma emails the billing address. If that charge fails, the subscription is canceled.
+  - **Receipts:** Checkout sets the Stripe customer email to the current owner. Stripe receipts then use that address.
+
+  ## Slack
+
+  - **Severity:** A [Slack](/connections/slack) alert counts an occurrence with no severity as low. Those occurrences are part of the issue’s severity.
+  - **Unrated:** The alert’s count line includes how many occurrences have no severity.
+
+  ## Traces
+
+  - **One trace:** Opening a conversation with one trace, including from [See conversation](/platform/issues#open-an-occurrence), doesn’t crash the page.
+
+  ## Support access
+
+  - **Enterprise:** A new Enterprise organization starts with Lemma support access on. An owner can turn it off. Access that is already off stays off.
+
+</Update>
+
 <Update label="November 9, 2026" tags={["Improvements", "Bug fixes", "[Issues]", "[Slack]", "[Dashboard]", "[API keys]", "[Artifacts]"]} rss={{ title: "Issues open on Open, and Slack pages yellow once and red once" }}>
 
   ## Issues
