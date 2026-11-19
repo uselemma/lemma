@@ -26,8 +26,8 @@ import {
   readCredentialsSync,
   type LemmaPiCredentials,
 } from "./credentials.js";
-import { createDeliveryFetch } from "./delivery.js";
 import { sanitizeValue } from "./sanitize.js";
+import { withPluginUserAgent } from "./user-agent.js";
 
 type ExtensionDependencies = {
   now?: () => Date;
@@ -74,7 +74,7 @@ async function defaultSendTrace(
     apiKey: credentials.accessToken,
     projectId: credentials.projectId,
     baseUrl: credentials.apiUrl,
-    fetch: createDeliveryFetch(),
+    fetch: withPluginUserAgent(fetch),
   }).ingest(trace.context, {
     startedAt: new Date(trace.startedAt),
     endedAt: new Date(trace.endedAt),
