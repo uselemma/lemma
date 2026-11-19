@@ -7,6 +7,7 @@ import {
   completeCodingAgentTurn,
   startCodingAgentTurn,
 } from "../../../packages/ts/tracing/src/index.js";
+import { SDK_USER_AGENT } from "../../../packages/ts/tracing/src/client.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { flushPendingTurns } from "./hook-handler.js";
@@ -20,7 +21,7 @@ const packageJson = JSON.parse(
 // The tracing SDK's own User-Agent, which this plugin's requests replace.
 const SDK_INIT: RequestInit = {
   headers: {
-    "User-Agent": "@uselemma/tracing/7.13.1",
+    "User-Agent": SDK_USER_AGENT,
     Authorization: "Bearer lemma_ci_secret",
   },
 };

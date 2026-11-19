@@ -41,4 +41,12 @@ describe("Cursor plugin layout", () => {
     await expect(access(resolve(pluginRoot, "skills"))).rejects.toThrow();
     await expect(access(resolve(pluginRoot, "rules"))).rejects.toThrow();
   });
+
+  it("pins the plugin manifest version to package.json", async () => {
+    const [manifest, packageJson] = await Promise.all([
+      json(resolve(pluginRoot, ".cursor-plugin", "plugin.json")),
+      json(resolve(pluginRoot, "package.json")),
+    ]);
+    expect(manifest.version).toBe(packageJson.version);
+  });
 });
