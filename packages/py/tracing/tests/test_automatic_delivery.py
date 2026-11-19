@@ -315,6 +315,89 @@ async def test_cancelling_a_queued_async_trace_still_delivers_it(monkeypatch):
     assert sent == ["first", "second"]
 
 
+async def test_cancelling_an_async_trace_mid_run_does_not_wait_for_its_delivery():
+    sending = threading.Event()
+    release = threading.Event()
+    sent = []
+
+    def transport(_url, _headers, body):
+        sending.set()
+        release.wait(timeout=5)
+        sent.append(json.loads(body)["trace"])
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    running = asyncio.Event()
+
+    async def run(_trace):
+        running.set()
+        await asyncio.sleep(30)
+
+    trace = asyncio.create_task(lemma.async_trace("support-agent", run))
+    await running.wait()
+    trace.cancel()
+
+    # The cancellation reaches the caller while the delivery is still stalled;
+    # awaiting delivery would make wait_for time out instead.
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(trace, timeout=2)
+    assert sending.wait(timeout=2)
+    assert sent == []
+
+    release.set()
+    wait(list(off_loop._fire_and_forget.snapshot()), timeout=5)
+    assert len(sent) == 1
+    assert sent[0]["status"] == "ERROR"
+    assert "CancelledError" in sent[0]["error"]
+
+
+async def test_a_cancelled_async_trace_is_reported_dropped_when_the_backlog_is_full(
+    monkeypatch, caplog
+):
+    monkeypatch.setattr(off_loop, "OFF_LOOP_MAX_BACKLOG", 0)
+    sent = []
+
+    def transport(_url, _headers, body):
+        sent.append(body)
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    running = asyncio.Event()
+
+    async def run(_trace):
+        running.set()
+        await asyncio.sleep(30)
+
+    trace = asyncio.create_task(lemma.async_trace("support-agent", run))
+    await running.wait()
+    trace.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await trace
+
+    assert sent == []
+    assert any("backlog full" in warning for warning in _lemma_warnings(caplog))
+
+
+async def test_an_async_trace_that_raises_still_awaits_its_delivery():
+    sent = []
+
+    def transport(_url, _headers, body):
+        sent.append(json.loads(body)["trace"])
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    async def run(_trace):
+        raise ValueError("tool failed")
+
+    with pytest.raises(ValueError, match="tool failed"):
+        await lemma.async_trace("support-agent", run)
+
+    # Delivered before the error reached the caller, with no pool to drain.
+    assert len(sent) == 1
+    assert sent[0]["error"] == "ValueError: tool failed"
+
+
 def test_asyncio_run_exiting_with_queued_awaited_deliveries_reports_them():
     script = textwrap.dedent(
         """
@@ -424,7 +507,7 @@ def test_a_thread_outliving_main_still_delivers_at_interpreter_shutdown():
 
         async def sync_hook():
             now = datetime.now(timezone.utc)
-            lemma._deliver_automatic_from_sync_hook(TraceContext(name="hook"), now, now)
+            lemma._deliver_automatic_without_waiting(TraceContext(name="hook"), now, now)
 
 
         def outlive_main():

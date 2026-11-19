@@ -274,7 +274,7 @@ class LemmaOpenAIAgentsProcessor:
             )
             finalized = self._finalize(trace_id, stored)
         if finalized is not None:
-            self.lemma._deliver_automatic_from_sync_hook(*finalized)
+            self.lemma._deliver_automatic_without_waiting(*finalized)
 
     def on_span_start(self, span: Any) -> None:
         with self._lock:
@@ -324,7 +324,7 @@ class LemmaOpenAIAgentsProcessor:
             ]
         for delivery in finalized:
             if delivery is not None:
-                self.lemma._deliver_automatic_from_sync_hook(*delivery)
+                self.lemma._deliver_automatic_without_waiting(*delivery)
 
     def _resolve_thread_id(
         self,

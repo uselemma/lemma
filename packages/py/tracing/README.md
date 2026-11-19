@@ -170,7 +170,9 @@ the SDK's own worker threads, so retries block neither the event loop nor its
 default executor. Up to `min(32, CPU count + 4)` of those deliveries run at
 once; during an outage, more queue, and each is still delivered or reported. If
 your own timeout or cancellation ends the call while delivery runs, that call's
-result is lost, though the trace is still delivered. Use `ingest()` when you
+result is lost, though the trace is still delivered. An `async_trace` cancelled
+while its callback runs doesn't wait for delivery: the cancellation reaches you
+at once and the trace is delivered in the background. Use `ingest()` when you
 need a failed send to raise so you can retry: it sends once and does not retry.
 `TraceHandle.end()` delivers through `ingest()`, so a failed send raises there
 too.

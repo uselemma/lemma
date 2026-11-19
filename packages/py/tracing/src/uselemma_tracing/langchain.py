@@ -905,7 +905,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
             stored.context.output(stored.root_output)
         # Called on the event loop's thread for every ainvoke(), and for a sync
         # invoke() inside a running loop; delivery is handed off in both cases.
-        self.lemma._deliver_automatic_from_sync_hook(stored.context, started_at, ended_at)
+        self.lemma._deliver_automatic_without_waiting(stored.context, started_at, ended_at)
 
     def _maybe_finalize_owner(self, run: StoredRun, ended_at: datetime) -> None:
         if not run.owns_trace:
