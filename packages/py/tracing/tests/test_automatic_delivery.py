@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import subprocess
+import sys
+import textwrap
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
+
+import pytest
 from datetime import datetime, timezone
 
+from uselemma_tracing import off_loop
 from uselemma_tracing.client import Lemma, TraceContext
 from uselemma_tracing.debug_mode import disable_debug_mode, enable_debug_mode
 from uselemma_tracing.delivery import INGEST_MAX_ATTEMPTS
@@ -269,3 +276,91 @@ async def test_a_stalled_awaited_delivery_does_not_hold_a_default_executor_threa
 
     assert free == "free"
     assert await trace == "ok"
+
+
+async def test_cancelling_a_queued_async_trace_still_delivers_it(monkeypatch):
+    monkeypatch.setattr(
+        off_loop, "_awaited", off_loop._Pool(lambda: 1, "uselemma-awaited-delivery")
+    )
+    release = threading.Event()
+    sent = []
+
+    def transport(_url, _headers, body):
+        name = json.loads(body)["trace"]["name"]
+        if name == "first":
+            release.wait(timeout=5)
+        sent.append(name)
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    async def run(_trace):
+        return "ok"
+
+    first = asyncio.create_task(lemma.async_trace("first", run))
+    second = asyncio.create_task(lemma.async_trace("second", run))
+    for _ in range(200):
+        if len(off_loop._awaited.snapshot()) == 2:
+            break
+        await asyncio.sleep(0.01)
+    # The second delivery is queued behind the first when its caller cancels.
+    second.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await second
+    release.set()
+
+    assert await first == "ok"
+    wait(list(off_loop._awaited.snapshot()), timeout=5)
+    assert sent == ["first", "second"]
+
+
+def test_asyncio_run_exiting_with_queued_awaited_deliveries_reports_them():
+    script = textwrap.dedent(
+        """
+        import asyncio
+        import time
+
+        from uselemma_tracing import off_loop
+        from uselemma_tracing.client import Lemma
+
+        off_loop._awaited = off_loop._Pool(lambda: 1, "uselemma-awaited-delivery")
+        off_loop.OFF_LOOP_DRAIN_DEADLINE_SECONDS = 0.3
+
+
+        def transport(_url, _headers, _body):
+            time.sleep(1)
+            print("sent", flush=True)
+            return 201, "{}"
+
+
+        lemma = Lemma(
+            api_key="key",
+            project_id="10000000-0000-0000-0000-000000000001",
+            transport=transport,
+        )
+
+
+        async def run(_trace):
+            return "ok"
+
+
+        async def main():
+            loop = asyncio.get_running_loop()
+            for name in ("first", "second", "third"):
+                loop.create_task(lemma.async_trace(name, run))
+            await asyncio.sleep(0.1)
+
+
+        asyncio.run(main())
+        """
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, timeout=30
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    # asyncio.run cancelled all three callers; the in-flight delivery still
+    # went out, and the exit drain reported the two still queued.
+    assert completed.stdout.split() == ["sent"]
+    assert "2 deliveries still queued at exit." in completed.stderr
+    assert "Traceback" not in completed.stderr

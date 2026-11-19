@@ -107,8 +107,14 @@ def submit(fn: Callable[[], None], trace_id: str) -> bool:
 
 
 async def run_awaited(fn: Callable[[], None], trace_id: str) -> None:
-    """Run ``fn`` on the awaited pool, in the caller's context, and wait for it."""
-    await asyncio.wrap_future(_awaited.submit(partial(copy_context().run, fn), trace_id))
+    """Run ``fn`` on the awaited pool, in the caller's context, and wait for it.
+
+    Shielded: cancelling the caller, by its own timeout or by ``asyncio.run``
+    shutting down, ends only the wait. The delivery still runs, or the exit
+    drain reports it.
+    """
+    future = _awaited.submit(partial(copy_context().run, fn), trace_id)
+    await asyncio.shield(asyncio.wrap_future(future))
 
 
 def wait_pending(moment: Literal["flush", "exit"] = "flush") -> None:
