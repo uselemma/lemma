@@ -63,10 +63,8 @@ class _Pool:
         self.reset()
 
     def reset(self) -> None:
-        # Reentrant: hand_off holds it around its backlog check and the submit,
-        # and a done callback runs at once on the submitting thread when the
-        # future already finished; claim_unstarted holds it while cancel() runs
-        # _forget on the same thread.
+        # Reentrant: claim_unstarted holds it while cancel() runs _forget on
+        # the same thread.
         self.lock = threading.RLock()
         self.executor: ThreadPoolExecutor | None = None
         # Each queued or running delivery, with the Lemma trace ID it sends,
@@ -149,10 +147,15 @@ def hand_off(fn: Callable[[], None], trace_id: str) -> None:
     pool = _fire_and_forget
     with pool.lock:
         full = len(pool.pending) >= OFF_LOOP_MAX_BACKLOG
-        if not full:
-            pool.submit(fn, trace_id)
     if full:
         report_dropped_trace(trace_id, _BACKLOG_FULL)
+        return
+    # Outside the lock, because during interpreter shutdown submit delivers
+    # inline and must not hold up other threads' hand-offs. Concurrent
+    # hand-offs can each pass the check before any submits, overshooting the
+    # cap by at most their number; the cap only bounds memory, so that is
+    # harmless.
+    pool.submit(fn, trace_id)
 
 
 def _on_event_loop_thread() -> bool:

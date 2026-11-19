@@ -91,6 +91,40 @@ async def test_hand_off_reports_a_delivery_past_the_backlog_cap(monkeypatch, cap
     )
 
 
+def test_a_shutdown_fallback_delivery_does_not_hold_up_another_threads(monkeypatch):
+    class RefusingExecutor:
+        """Refuses work the way every executor does once interpreter shutdown starts."""
+
+        def submit(self, *_args, **_kwargs):
+            raise RuntimeError("cannot schedule new futures after interpreter shutdown")
+
+    pool = off_loop._Pool(1, "uselemma-delivery")
+    pool.executor = RefusingExecutor()
+    monkeypatch.setattr(off_loop, "_fire_and_forget", pool)
+    first_running = threading.Event()
+    second_delivered = threading.Event()
+    first_saw_second = []
+
+    def first_delivery():
+        first_running.set()
+        first_saw_second.append(second_delivered.wait(timeout=2))
+
+    async def on_loop(fn, trace_id):
+        off_loop.hand_off(fn, trace_id)
+
+    def other_thread():
+        first_running.wait(timeout=2)
+        asyncio.run(on_loop(second_delivered.set, "trace-2"))
+
+    other = threading.Thread(target=other_thread)
+    other.start()
+    asyncio.run(on_loop(first_delivery, "trace-1"))
+    other.join()
+
+    # Both deliver inline; the second ran while the first was still delivering.
+    assert first_saw_second == [True]
+
+
 def test_still_queued_counts_the_deliveries_and_the_moment():
     assert (
         off_loop._still_queued(1, "flush")
