@@ -161,12 +161,14 @@ Automatic delivery (`trace` / `async_trace`) fails open so it cannot fail the
 caller's application. The default transport times out a stalled socket after
 10 seconds. A network error, timeout, 408, 429, or 5xx is retried twice with
 backoff; when every attempt fails, or Lemma rejects the trace with another 4xx,
-the trace is dropped with a warning on the `uselemma_tracing.client` logger.
-The first drop names the trace ID and the reason; later drops are counted into
-one line per minute, and `LEMMA_DEBUG=1` logs each one. LangChain and OpenAI
-Agents flush through this path. Use `ingest()` when you need a failed send to
-raise so you can retry: it sends once and does not retry. `TraceHandle.end()`
-delivers through `ingest()`, so a failed send raises there too.
+the trace is dropped with a warning on the `uselemma_tracing` logger. The first
+drop names the trace ID and the reason; drops in the minute after a warning are
+counted, the next warning says how many, and `LEMMA_DEBUG=1` logs each one.
+LangChain and OpenAI Agents flush through this path. `async_trace` and the
+OpenAI Agents processor deliver on a worker thread, so retries don't block the
+event loop. Use `ingest()` when you need a failed send to raise so you can
+retry: it sends once and does not retry. `TraceHandle.end()` delivers through
+`ingest()`, so a failed send raises there too.
 
 ## Cross-process turns
 
@@ -245,7 +247,9 @@ called them.
 
 Pass OpenAI Agents `group_id` for `thread_id` and metadata `user_id` /
 `userId` for `user_id`. Call `force_flush()` / `shutdown()` to finalize open
-traces once.
+traces once. In async code the processor delivers on a worker thread, and
+`force_flush()` waits for those deliveries, so call it before a short-lived
+process returns.
 
 Enable debug mode to validate live span shape while developing:
 

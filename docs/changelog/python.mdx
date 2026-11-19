@@ -15,7 +15,8 @@ meta:
 
   - **Retries:** `trace()`, `async_trace()`, and the LangChain and OpenAI Agents integrations retry a network error, a timeout, a 408, a 429, or a 5xx twice with backoff before giving up. [ingest()](/tracing/instrumentation/traces) still sends once and raises.
   - **Timeout:** The default transport times out a stalled socket after 10 seconds instead of waiting forever.
-  - **Dropped traces:** The first trace that can’t be delivered logs a warning on the `uselemma_tracing.client` logger with its ID and the reason, without debug mode. Later drops are counted into one line per minute. With `LEMMA_DEBUG=1`, every drop is logged.
+  - **Dropped traces:** The first trace that can’t be delivered logs a warning on the `uselemma_tracing` logger with its ID and the reason, without debug mode. Drops in the minute after a warning are counted, and the next warning says how many. With `LEMMA_DEBUG=1`, every drop is logged.
+  - **Event loop:** `async_trace()` and the OpenAI Agents processor deliver on a worker thread, so retries don’t block your event loop. In async OpenAI Agents code, `force_flush()` waits for those deliveries.
 
 </Update>
 

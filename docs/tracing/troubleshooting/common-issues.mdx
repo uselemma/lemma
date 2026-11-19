@@ -64,7 +64,7 @@ If no traces are arriving, start with [Quickstart](/tracing/instrumentation/setu
   </Tab>
 </Tabs>
 
-- Look for a `dropped trace <id>` warning in your app’s logs. It names the status Lemma returned or the network error, such as `ingest returned 401 (check LEMMA_API_KEY)`. Later drops show up as one `dropped N more traces` line per minute.
+- Look for a `dropped trace <id>` warning in your app’s logs. It names the status Lemma returned or the network error, such as `ingest returned 401 (check LEMMA_API_KEY)`. After a warning, drops in the next minute are counted, and the next warning says how many were dropped since the last one.
 - Confirm `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` come from the same project.
 - Confirm your runtime can reach `https://api.uselemma.ai`.
 - Pass `baseUrl` / `base_url` only when using a self-hosted or staging endpoint.

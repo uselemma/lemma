@@ -132,6 +132,8 @@ Soft tool failures (`isError` / `is_error` / Mastra `error: true`) mark the tool
 
 Call `forceFlush()` / `force_flush()` (or `shutdown()`) to send any still-open traces exactly once. A later `onTraceEnd` / `on_trace_end` for a flushed trace is a no-op, so spans are never duplicated in the append-only ingest store.
 
+In async Python code, the processor delivers each finished trace on a worker thread, so retries don’t block your event loop. `force_flush()` waits for those deliveries, so call it before a short-lived process such as a serverless handler returns.
+
 ```typescript
 const processor = openAIAgents();
 addTraceProcessor(processor);
