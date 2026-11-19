@@ -264,10 +264,12 @@ for `user_id`. Call `force_flush()` / `shutdown()` to finalize open traces
 once. In async code the processor hands each delivery to a worker pool, so
 await `aforce_flush()` before a short-lived process returns; it waits without
 blocking the event loop. `aforce_flush()` and `force_flush()` wait up to 34
-seconds for queued deliveries, plus any delivery already sending, then drop the
-rest with one warning. Process exit waits the same way. At most 1,000 deliveries
-wait at once, which bounds memory while Lemma is unreachable; a trace that
-finishes past that is dropped with a warning.
+seconds in total, then drop any delivery still queued with one warning; a
+delivery already sending continues after they return. Process exit drops queued
+deliveries at the same deadline, then lets a delivery already sending finish,
+which can take up to 34 seconds more. At most 1,000 deliveries wait at once,
+which bounds memory while Lemma is unreachable; a trace that finishes past that
+is dropped with a warning.
 
 Enable debug mode to validate live span shape while developing:
 

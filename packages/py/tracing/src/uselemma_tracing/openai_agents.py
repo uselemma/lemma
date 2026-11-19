@@ -303,9 +303,7 @@ class LemmaOpenAIAgentsProcessor:
 
     def force_flush(self) -> None:
         self._finalize_open_traces()
-        # Deliveries handed to the worker pool from a running event loop must
-        # finish before a flush returns.
-        # The wait is process-wide, so it covers every client's deliveries.
+        # Process-wide: every client's deliveries finish or are dropped at the deadline.
         off_loop.wait_pending()
 
     async def aforce_flush(self) -> None:

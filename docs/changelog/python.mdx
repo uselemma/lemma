@@ -18,7 +18,8 @@ meta:
   - **Timeout:** The default transport gives up on a stalled connection after 10 seconds instead of waiting forever.
   - **Waiting for uploads:** `trace()` and `async_trace()` return after the upload finishes, retries included. `async_trace()` waits on the SDK’s own threads, so its upload doesn’t block your event loop.
   - **Cancellation:** Cancelling an `async_trace()` call while it runs, for example with a timeout, no longer waits for the trace upload. The cancellation reaches you at once, and the trace still uploads in the background. On a serverless runtime, [put the timeout inside your callback](/tracing/instrumentation/traces#python-timeouts-on-serverless-runtimes) so the trace uploads before your handler returns.
-  - **Flush limit:** `flush()`, `force_flush()`, and process exit wait up to 34 seconds for traces still waiting to upload, plus any upload already in progress, then drop the rest with one warning. When 1,000 traces are already waiting, a new one is dropped with a warning.
+  - **Flush limit:** `flush()` and `force_flush()` wait up to 34 seconds in total, then drop any trace still waiting to upload with one warning. An upload already in progress continues after they return. When 1,000 traces are already waiting, a new one is dropped with a warning.
+  - **Exit limit:** Process exit drops waiting traces at the same 34-second limit. It then lets an upload already in progress finish, which can take up to 34 seconds more.
   - **Repeated drops:** Drops in the minute after a warning are counted, and the next warning says how many. With `LEMMA_DEBUG=1`, every drop is logged.
 
   ## LangChain

@@ -178,10 +178,9 @@ def _recorded_drops(monkeypatch) -> list[tuple[str, str, int]]:
     return reports
 
 
-def _queue_behind_one_in_flight(monkeypatch, queued: int):
-    """A single-worker fire-and-forget pool: one delivery held in flight and
-    ``queued`` waiting behind it."""
-    monkeypatch.setattr(off_loop, "_fire_and_forget", off_loop._Pool(1, "uselemma-delivery"))
+def _queue_behind_one_in_flight(queued: int):
+    """With ``one_worker_pools``: one delivery held in flight and ``queued``
+    waiting behind it."""
     in_flight, release, _ran = _gated()
     queued_ran = []
     off_loop._fire_and_forget.submit(in_flight, "trace-a")
@@ -192,10 +191,12 @@ def _queue_behind_one_in_flight(monkeypatch, queued: int):
     return release, queued_ran
 
 
-def test_overlapping_flushes_report_each_dropped_delivery_once(monkeypatch):
+def test_overlapping_flushes_report_each_dropped_delivery_once(
+    one_worker_pools, monkeypatch
+):
     monkeypatch.setattr(off_loop, "OFF_LOOP_DRAIN_DEADLINE_SECONDS", 0.3)
     reports = _recorded_drops(monkeypatch)
-    release, queued_ran = _queue_behind_one_in_flight(monkeypatch, 5)
+    release, queued_ran = _queue_behind_one_in_flight(5)
 
     first = threading.Thread(target=off_loop.wait_pending)
     second = threading.Thread(target=off_loop.wait_pending)
@@ -213,10 +214,12 @@ def test_overlapping_flushes_report_each_dropped_delivery_once(monkeypatch):
     ]
 
 
-async def test_overlapping_async_flushes_report_each_dropped_delivery_once(monkeypatch):
+async def test_overlapping_async_flushes_report_each_dropped_delivery_once(
+    one_worker_pools, monkeypatch
+):
     monkeypatch.setattr(off_loop, "OFF_LOOP_DRAIN_DEADLINE_SECONDS", 0.3)
     reports = _recorded_drops(monkeypatch)
-    release, queued_ran = _queue_behind_one_in_flight(monkeypatch, 5)
+    release, queued_ran = _queue_behind_one_in_flight(5)
 
     first = asyncio.create_task(off_loop.await_pending())
     await asyncio.sleep(0.1)
@@ -230,10 +233,12 @@ async def test_overlapping_async_flushes_report_each_dropped_delivery_once(monke
     ]
 
 
-async def test_concurrent_async_flushes_each_hold_one_waiter(monkeypatch):
+async def test_concurrent_async_flushes_each_hold_one_waiter(
+    one_worker_pools, monkeypatch
+):
     monkeypatch.setattr(off_loop, "OFF_LOOP_DRAIN_DEADLINE_SECONDS", 0.2)
     reports = _recorded_drops(monkeypatch)
-    release, queued_ran = _queue_behind_one_in_flight(monkeypatch, 50)
+    release, queued_ran = _queue_behind_one_in_flight(50)
     in_flight = next(iter(off_loop._fire_and_forget.snapshot()))
     waited_on = []
     real_waiter_on = off_loop._waiter_on
@@ -257,6 +262,42 @@ async def test_concurrent_async_flushes_each_hold_one_waiter(monkeypatch):
     assert reports == [
         ("trace-q0", "before sending: 50 deliveries still queued at flush", 50)
     ]
+
+
+async def test_concurrent_async_flushes_each_return_within_one_drain_deadline(
+    monkeypatch,
+):
+    deadline = 0.5
+    monkeypatch.setattr(off_loop, "OFF_LOOP_DRAIN_DEADLINE_SECONDS", deadline)
+    stalled, release, _ran = _gated()
+    # More flushes than the awaited pool has workers, so a flush that waited on
+    # a worker would queue behind another flush's whole deadline.
+    flushes = 3 * off_loop.AWAITED_WORKERS
+    loop_gaps = []
+
+    async def heartbeat():
+        last = time.monotonic()
+        while True:
+            await asyncio.sleep(0.01)
+            now = time.monotonic()
+            loop_gaps.append(now - last)
+            last = now
+
+    async def request(index):
+        off_loop.hand_off(stalled, f"trace-{index}")
+        started = time.monotonic()
+        await off_loop.await_pending()
+        return time.monotonic() - started
+
+    ticker = asyncio.create_task(heartbeat())
+    try:
+        latencies = await asyncio.gather(*(request(index) for index in range(flushes)))
+    finally:
+        ticker.cancel()
+        release.set()
+
+    assert max(latencies) < 2 * deadline
+    assert max(loop_gaps) < deadline / 2
 
 
 def test_exit_stops_at_the_deadline_and_reports_unstarted_deliveries():
