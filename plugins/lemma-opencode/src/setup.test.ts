@@ -18,7 +18,6 @@ import {
   runSetup,
 } from "./setup.js";
 import { credentialsPath, resolveDataDir } from "./storage.js";
-import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 const directories: string[] = [];
 
@@ -109,8 +108,8 @@ describe("OpenCode setup", () => {
       harness: "opencode",
     });
     for (const [, init] of fetchMock.mock.calls) {
-      expect(new Headers(init?.headers).get("user-agent")).toBe(
-        PLUGIN_USER_AGENT,
+      expect(new Headers(init?.headers).get("user-agent")).toMatch(
+        /^@uselemma\/opencode\/\d+\.\d+\.\d+$/,
       );
     }
     expect(installPlugin).toHaveBeenCalledWith("/package/runtime", configDir);

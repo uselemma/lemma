@@ -17,7 +17,6 @@ import {
   writeDataDirLocation,
 } from "./credentials.js";
 import { installHermesPlugin, runSetup } from "./setup.js";
-import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 const directories: string[] = [];
 
@@ -80,8 +79,8 @@ describe("Hermes setup", () => {
       harness: "hermes",
     });
     for (const [, init] of fetchMock.mock.calls) {
-      expect(new Headers(init?.headers).get("user-agent")).toBe(
-        PLUGIN_USER_AGENT,
+      expect(new Headers(init?.headers).get("user-agent")).toMatch(
+        /^@uselemma\/hermes\/\d+\.\d+\.\d+$/,
       );
     }
     expect(installPlugin).toHaveBeenCalledOnce();

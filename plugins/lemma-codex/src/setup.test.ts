@@ -19,7 +19,6 @@ import {
   writeDataDirLocation,
   writeNotifyForwarder,
 } from "./storage.js";
-import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -103,8 +102,8 @@ describe("Lemma Codex setup", () => {
       "https://dev.api.uselemma.ai/coding-harness/device-authorizations/token",
     );
     for (const [, init] of fetchMock.mock.calls) {
-      expect(new Headers(init?.headers).get("user-agent")).toBe(
-        PLUGIN_USER_AGENT,
+      expect(new Headers(init?.headers).get("user-agent")).toMatch(
+        /^@uselemma\/codex-plugin\/\d+\.\d+\.\d+$/,
       );
     }
     expect(credentials).toEqual({

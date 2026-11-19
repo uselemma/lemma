@@ -2,7 +2,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { CompletedCodingAgentTurn } from "../../../packages/ts/tracing/src/index.js";
+import {
+  completeCodingAgentTurn,
+  startCodingAgentTurn,
+  type CompletedCodingAgentTurn,
+} from "../../../packages/ts/tracing/src/index.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -10,7 +14,11 @@ import {
   handleCursorHook,
   sanitizeCapturedValue,
 } from "./hook-handler.js";
-import { listPendingTurns, writeCredentials } from "./storage.js";
+import {
+  listPendingTurns,
+  queueCompletedTurn,
+  writeCredentials,
+} from "./storage.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -39,6 +47,7 @@ async function writeTranscript(
 }
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   await Promise.all(
     temporaryDirectories
       .splice(0)
@@ -47,6 +56,33 @@ afterEach(async () => {
 });
 
 describe("Cursor hook turn assembly", () => {
+  it("delivers traces with the plugin User-Agent", async () => {
+    const dataDir = await temporaryDataDir();
+    const turn = completeCodingAgentTurn(
+      startCodingAgentTurn({
+        harness: "cursor",
+        sessionId: "session-ua",
+        turnId: "turn-ua",
+        prompt: "Inspect the repository",
+        startedAt: "2026-11-18T10:00:00.000Z",
+      }),
+      { response: "Done.", endedAt: "2026-11-18T10:00:01.000Z" },
+    );
+    await queueCompletedTurn(dataDir, turn, {
+      apiUrl: "https://api.example.test",
+      projectId: "10000000-0000-0000-0000-000000000001",
+    });
+    const fetchMock = vi.fn<typeof fetch>(
+      async () => new Response("{}", { status: 201 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await flushPendingTurns({ dataDir })).toBe(1);
+    expect(
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("user-agent"),
+    ).toMatch(/^@uselemma\/cursor-plugin\/\d+\.\d+\.\d+$/);
+  });
+
   it("sends one complete redacted trace per generation", async () => {
     const dataDir = await temporaryDataDir();
     const sent: CompletedCodingAgentTurn[] = [];

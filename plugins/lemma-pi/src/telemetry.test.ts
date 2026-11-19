@@ -75,6 +75,9 @@ describe("Pi telemetry exporter", () => {
       "https://dev.api.uselemma.ai/traces/ingest",
     );
     expect(String(fetchMock.mock.calls[0][0])).not.toContain("/otel/v1/traces");
+    expect(
+      new Headers(fetchMock.mock.calls[0][1]?.headers).get("user-agent"),
+    ).toMatch(/^@uselemma\/pi\/\d+\.\d+\.\d+$/);
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as {
       project_id: string;
       trace: {
