@@ -8,6 +8,7 @@ No network: scripted chat model + in-memory transport.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import os
 import threading
 from typing import Any
@@ -317,3 +318,33 @@ def test_langgraph_ainvoke_is_one_root():
     assert trace["name"] == "support-graph"
     assert trace["thread_id"] == "thread-9"
     assert any(span["type"] == "generation" for span in trace["spans"])
+
+
+_request_id = contextvars.ContextVar("request_id")
+
+
+def test_ainvoke_delivery_sees_the_callers_context_vars():
+    seen = []
+
+    def before_send(payload):
+        seen.append(_request_id.get(None))
+        return payload
+
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+        before_send=before_send,
+    )
+    chain = RunnableLambda(lambda text: text)
+
+    async def run():
+        _request_id.set("req-1")
+        return await chain.ainvoke("hello", config={"callbacks": [handler]})
+
+    asyncio.run(run())
+    handler.flush()
+
+    assert len(calls) == 1
+    assert seen == ["req-1"]

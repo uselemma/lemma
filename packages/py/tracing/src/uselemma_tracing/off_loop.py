@@ -12,7 +12,6 @@ import os
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from contextvars import copy_context
-from functools import partial
 from typing import Callable, Literal
 
 from .delivery import (
@@ -66,7 +65,8 @@ class _Pool:
         self.pending: dict[Future[None], str] = {}
 
     def submit(self, fn: Callable[[], None], trace_id: str) -> Future[None] | None:
-        """Queue ``fn``; None when the backlog is full and it is not queued."""
+        """Queue ``fn`` to run in the submitting thread's context; None when the
+        backlog is full and it is not queued."""
         with self.lock:
             if self._max_backlog is not None and len(self.pending) >= self._max_backlog:
                 return None
@@ -75,7 +75,9 @@ class _Pool:
                     max_workers=self._workers,
                     thread_name_prefix=self._thread_name_prefix,
                 )
-            future = self.executor.submit(fn)
+            # Copied here, on the caller's thread, so before_send and a custom
+            # transport see the caller's ContextVars on the worker.
+            future = self.executor.submit(copy_context().run, fn)
             self.pending[future] = trace_id
         # Outside the lock: a future that already finished runs this at once.
         future.add_done_callback(self._forget)
@@ -110,14 +112,14 @@ def submit(fn: Callable[[], None], trace_id: str) -> bool:
 
 
 async def run_awaited(fn: Callable[[], None], trace_id: str) -> bool:
-    """Run ``fn`` on the awaited pool, in the caller's context, and wait for it;
-    False when the pool's backlog is full and it is not queued.
+    """Run ``fn`` on the awaited pool and wait for it; False when the pool's
+    backlog is full and it is not queued.
 
     Shielded: cancelling the caller, by its own timeout or by ``asyncio.run``
     shutting down, ends only the wait. The delivery still runs, or the exit
     drain reports it.
     """
-    future = _awaited.submit(partial(copy_context().run, fn), trace_id)
+    future = _awaited.submit(fn, trace_id)
     if future is None:
         return False
     await asyncio.shield(asyncio.wrap_future(future))

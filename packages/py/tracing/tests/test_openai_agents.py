@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextvars
 import json
 import threading
 from dataclasses import dataclass
@@ -1113,3 +1114,28 @@ async def test_openai_agents_drops_a_trace_past_the_delivery_backlog(
         f"uselemma-tracing: dropped trace {lemma_trace_id} before sending: "
         "delivery backlog full."
     )
+
+
+_request_id = contextvars.ContextVar("request_id")
+
+
+async def test_openai_agents_handed_off_delivery_sees_the_callers_context_vars():
+    _request_id.set("req-1")
+    seen = []
+
+    def before_send(payload):
+        seen.append(_request_id.get(None))
+        return payload
+
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: (201, "{}"),
+        before_send=before_send,
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_ctx", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_ctx", name="agent"))
+    processor.force_flush()
+
+    assert seen == ["req-1"]

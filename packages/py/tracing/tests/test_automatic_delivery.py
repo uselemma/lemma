@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import subprocess
 import sys
@@ -364,3 +365,28 @@ def test_asyncio_run_exiting_with_queued_awaited_deliveries_reports_them():
     assert completed.stdout.split() == ["sent"]
     assert "2 deliveries still queued at exit." in completed.stderr
     assert "Traceback" not in completed.stderr
+
+
+_request_id = contextvars.ContextVar("request_id")
+
+
+async def test_async_trace_delivery_sees_the_callers_context_vars():
+    _request_id.set("req-1")
+    seen = []
+
+    def before_send(payload):
+        seen.append(_request_id.get(None))
+        return payload
+
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: (201, "{}"),
+        before_send=before_send,
+    )
+
+    async def run(_trace):
+        return "ok"
+
+    assert await lemma.async_trace("support-agent", run) == "ok"
+    assert seen == ["req-1"]

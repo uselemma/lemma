@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextvars
 import subprocess
 import sys
 import textwrap
@@ -198,3 +199,14 @@ async def test_run_awaited_runs_on_the_awaited_pool_in_the_callers_context():
     [(thread_name, value)] = seen
     assert thread_name.startswith("uselemma-awaited-delivery")
     assert value == "req-1"
+
+
+def test_submit_runs_the_job_in_the_submitting_threads_context():
+    request_id = contextvars.ContextVar("request_id")
+    request_id.set("req-1")
+    seen = []
+
+    assert off_loop.submit(lambda: seen.append(request_id.get(None)), "trace-1")
+    off_loop.wait_pending()
+
+    assert seen == ["req-1"]
