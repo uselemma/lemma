@@ -1,78 +1,77 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { captureWarnings } from "../test-helpers";
-import { DROPPED_TRACE_WARNING_WINDOW_MS } from "./debug-delivery";
 import { disableDebugMode, enableDebugMode } from "./debug-mode";
 import {
-  flushDroppedTraceWarnings,
+  DROPPED_TRACE_WARNING_WINDOW_MS,
   reportDroppedTrace,
 } from "./dropped-traces";
 
-function drop(traceId: string, reason = "ingest returned 503") {
-  reportDroppedTrace({ traceId, attempts: 3, reason });
+const CAUSE = "after 3 attempts: ingest returned 503";
+const NEXT =
+  "Drops in the next 60s are counted, not logged; set LEMMA_DEBUG=1 to log each one.";
+
+function drop(traceId: string) {
+  reportDroppedTrace(traceId, CAUSE);
 }
 
 describe("dropped-trace warnings", () => {
-  let warn: ReturnType<typeof captureWarnings>;
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-    warn = captureWarnings();
-  });
-
-  afterEach(() => {
-    warn.mockRestore();
-    vi.useRealTimers();
-  });
-
   it("warns once, with the trace ID, on the first drop", () => {
+    const warn = captureWarnings();
     drop("trace-1");
 
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0]?.[0]).toBe(
-      "@uselemma/tracing: dropped trace trace-1 after 3 attempts: ingest returned 503. Further drops are counted and reported every 60s; set LEMMA_DEBUG=1 to log each one.",
-    );
+    expect(warn.mock.calls).toEqual([
+      [`@uselemma/tracing: dropped trace trace-1 ${CAUSE}. ${NEXT}`],
+    ]);
   });
 
-  it("writes no extra lines for a burst inside the window", () => {
+  it("counts drops inside the window without writing lines", () => {
+    vi.useFakeTimers();
+    const warn = captureWarnings();
     drop("trace-1");
-    for (let i = 2; i <= 50; i += 1) drop(`trace-${i}`);
+    for (let i = 2; i <= 50; i += 1) {
+      vi.advanceTimersByTime(1_000);
+      drop(`trace-${i}`);
+    }
 
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it("reports the window's count at its end", () => {
+  it("reports the count on the first drop after the window", () => {
+    vi.useFakeTimers();
+    const warn = captureWarnings();
     drop("trace-1");
     drop("trace-2");
-    drop("trace-3", "ingest request timed out after 10000ms");
-
+    drop("trace-3");
     vi.advanceTimersByTime(DROPPED_TRACE_WARNING_WINDOW_MS);
+    drop("trace-4");
 
     expect(warn).toHaveBeenCalledTimes(2);
     expect(warn.mock.calls[1]?.[0]).toBe(
-      "@uselemma/tracing: dropped 2 more traces in the last 60s; latest: ingest request timed out after 10000ms. Set LEMMA_DEBUG=1 to log each one.",
+      `@uselemma/tracing: dropped trace trace-4 ${CAUSE}. 2 more dropped since the last warning. ${NEXT}`,
     );
   });
 
-  it("counts drops left pending when the window expired before its timer ran", () => {
+  it("starts a new window and count at each warning", () => {
+    vi.useFakeTimers();
+    const warn = captureWarnings();
     drop("trace-1");
     drop("trace-2");
-    vi.setSystemTime(Date.now() + DROPPED_TRACE_WARNING_WINDOW_MS);
-    drop("trace-3");
-
-    expect(warn).toHaveBeenCalledTimes(2);
-    expect(warn.mock.calls[1]?.[0]).toContain("dropped 2 more traces");
-  });
-
-  it("warns with the trace ID again after a quiet window", () => {
-    drop("trace-1");
     vi.advanceTimersByTime(DROPPED_TRACE_WARNING_WINDOW_MS);
-    drop("trace-2");
+    drop("trace-3");
+    vi.advanceTimersByTime(DROPPED_TRACE_WARNING_WINDOW_MS - 1);
+    drop("trace-4");
+    vi.advanceTimersByTime(1);
+    drop("trace-5");
 
-    expect(warn).toHaveBeenCalledTimes(2);
-    expect(warn.mock.calls[1]?.[0]).toContain("dropped trace trace-2 after");
+    expect(warn.mock.calls.map((call) => call[0])).toEqual([
+      `@uselemma/tracing: dropped trace trace-1 ${CAUSE}. ${NEXT}`,
+      `@uselemma/tracing: dropped trace trace-3 ${CAUSE}. 1 more dropped since the last warning. ${NEXT}`,
+      `@uselemma/tracing: dropped trace trace-5 ${CAUSE}. 1 more dropped since the last warning. ${NEXT}`,
+    ]);
   });
 
   it("logs every drop in debug mode", () => {
+    const warn = captureWarnings();
     enableDebugMode();
     try {
       drop("trace-1");
@@ -83,28 +82,9 @@ describe("dropped-trace warnings", () => {
     }
 
     expect(warn.mock.calls.map((call) => call[0])).toEqual([
-      "@uselemma/tracing: dropped trace trace-1 after 3 attempts: ingest returned 503.",
-      "@uselemma/tracing: dropped trace trace-2 after 3 attempts: ingest returned 503.",
-      "@uselemma/tracing: dropped trace trace-3 after 3 attempts: ingest returned 503.",
+      `@uselemma/tracing: dropped trace trace-1 ${CAUSE}.`,
+      `@uselemma/tracing: dropped trace trace-2 ${CAUSE}.`,
+      `@uselemma/tracing: dropped trace trace-3 ${CAUSE}.`,
     ]);
-  });
-
-  it("prints the pending count once when the process exits", () => {
-    drop("trace-1");
-    drop("trace-2");
-    drop("trace-3");
-    vi.advanceTimersByTime(20_000);
-
-    const exitListeners = process
-      .listeners("exit")
-      .filter((listener) => listener === flushDroppedTraceWarnings);
-    expect(exitListeners).toHaveLength(1);
-    exitListeners[0]?.(0);
-    flushDroppedTraceWarnings();
-
-    expect(warn).toHaveBeenCalledTimes(2);
-    expect(warn.mock.calls[1]?.[0]).toBe(
-      "@uselemma/tracing: dropped 2 more traces in the last 20s; latest: ingest returned 503. Set LEMMA_DEBUG=1 to log each one.",
-    );
   });
 });

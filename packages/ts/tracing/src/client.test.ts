@@ -567,8 +567,6 @@ describe("Lemma", () => {
     expect(warn).toHaveBeenCalledWith(
       `@uselemma/tracing: unknown trace id "${trace.id}"; skipping span`,
     );
-
-    warn.mockRestore();
   });
 
   it("supports client-level detached observations by trace id", async () => {
@@ -629,8 +627,6 @@ describe("Lemma", () => {
     expect(warn).toHaveBeenCalledWith(
       "@uselemma/tracing: generation handle requires traceId; skipping generation",
     );
-
-    warn.mockRestore();
   });
 
   it("warns and no-ops detached observations for unknown trace ids", async () => {
@@ -649,8 +645,6 @@ describe("Lemma", () => {
     expect(warn).toHaveBeenCalledWith(
       '@uselemma/tracing: unknown trace id "missing-trace"; skipping span',
     );
-
-    warn.mockRestore();
   });
 
   it("warns and no-ops detached child observations without parentSpanId", async () => {
@@ -684,8 +678,6 @@ describe("Lemma", () => {
     expect(warn).toHaveBeenCalledWith(
       "@uselemma/tracing: tool has a parent, but parentSpanId was not provided; skipping tool",
     );
-
-    warn.mockRestore();
   });
 
   it("flushes failed traces and rethrows the original error", async () => {
@@ -727,7 +719,6 @@ describe("Lemma", () => {
       withFakeTimers(() => lemma.trace("support-agent", async () => "ok")),
     ).resolves.toBe("ok");
     expect(fetchMock).toHaveBeenCalledTimes(INGEST_MAX_ATTEMPTS);
-    warn.mockRestore();
   });
 
   it("rethrows the original error when the failed trace cannot be delivered", async () => {
@@ -748,7 +739,6 @@ describe("Lemma", () => {
         }),
       ),
     ).rejects.toBe(agentError);
-    warn.mockRestore();
 
     // The failed trace was still attempted, and recorded the agent's error.
     expect(fetchMock).toHaveBeenCalledTimes(INGEST_MAX_ATTEMPTS);
@@ -777,7 +767,6 @@ describe("Lemma", () => {
         }),
       ),
     ).rejects.toBe(agentError);
-    warn.mockRestore();
   });
 
   it("does not resend a successful run as a failed one when ingest fails", async () => {
@@ -793,7 +782,6 @@ describe("Lemma", () => {
     await expect(
       withFakeTimers(() => lemma.trace("support-agent", async () => "ok")),
     ).resolves.toBe("ok");
-    warn.mockRestore();
 
     expect(fetchMock).toHaveBeenCalledTimes(INGEST_MAX_ATTEMPTS);
     for (const call of fetchMock.mock.calls) {
@@ -819,7 +807,6 @@ describe("Lemma", () => {
       withFakeTimers(() => lemma.trace("support-agent", async () => "ok")),
     ).resolves.toBe("ok");
     expect(fetchMock).toHaveBeenCalledTimes(INGEST_MAX_ATTEMPTS);
-    warn.mockRestore();
   });
 
   it("preserves the callback error when ingest also fails", async () => {
@@ -838,7 +825,6 @@ describe("Lemma", () => {
         }),
       ),
     ).rejects.toThrow("boom");
-    warn.mockRestore();
   });
 
   it("resolves TraceHandle.end when ingest fails", async () => {
@@ -855,7 +841,6 @@ describe("Lemma", () => {
       withFakeTimers(() => trace.end({ output: "ok" })),
     ).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
   });
 
   it("ingest sends a self-built trace once, merging by default", async () => {
@@ -1186,7 +1171,6 @@ describe("Lemma", () => {
     } finally {
       disableDebugMode();
       spy.mockRestore();
-      warn.mockRestore();
     }
   });
 
@@ -1220,7 +1204,6 @@ describe("Lemma", () => {
     } finally {
       disableDebugMode();
       spy.mockRestore();
-      warn.mockRestore();
     }
   });
 
@@ -1533,7 +1516,6 @@ describe("automatic trace delivery", () => {
     );
     expect(new Set(bodies).size).toBe(1);
     expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
   });
 
   it("warns once when every attempt fails", async () => {
@@ -1549,9 +1531,8 @@ describe("automatic trace delivery", () => {
     expect(fetchMock).toHaveBeenCalledTimes(INGEST_MAX_ATTEMPTS);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0]?.[0]).toBe(
-      `@uselemma/tracing: dropped trace trace-1 after ${INGEST_MAX_ATTEMPTS} attempts: ingest returned 503. Further drops are counted and reported every 60s; set LEMMA_DEBUG=1 to log each one.`,
+      `@uselemma/tracing: dropped trace trace-1 after ${INGEST_MAX_ATTEMPTS} attempts: ingest returned 503. Drops in the next 60s are counted, not logged; set LEMMA_DEBUG=1 to log each one.`,
     );
-    warn.mockRestore();
   });
 
   it("does not retry a rejected request, and names the fix", async () => {
@@ -1567,9 +1548,8 @@ describe("automatic trace delivery", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0]?.[0]).toBe(
-      "@uselemma/tracing: dropped trace trace-1 after 1 attempt: ingest returned 401 (check LEMMA_API_KEY). Further drops are counted and reported every 60s; set LEMMA_DEBUG=1 to log each one.",
+      "@uselemma/tracing: dropped trace trace-1 after 1 attempt: ingest returned 401 (check LEMMA_API_KEY). Drops in the next 60s are counted, not logged; set LEMMA_DEBUG=1 to log each one.",
     );
-    warn.mockRestore();
   });
 
   it("times out a stalled send and retries it, even when fetch ignores the abort", async () => {
@@ -1591,7 +1571,6 @@ describe("automatic trace delivery", () => {
     expect(signals[0]?.aborted).toBe(true);
     expect(signals[1]?.aborted).toBe(false);
     expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
   });
 
   it("waits out a 429 Retry-After before resending", async () => {
@@ -1621,11 +1600,9 @@ describe("automatic trace delivery", () => {
 
   it("warns when the payload cannot be built, without sending", async () => {
     const warn = captureWarnings();
-    const toPayload = vi
-      .spyOn(TraceContext.prototype, "toPayload")
-      .mockImplementation(() => {
-        throw new Error("unserializable output");
-      });
+    vi.spyOn(TraceContext.prototype, "toPayload").mockImplementation(() => {
+      throw new Error("unserializable output");
+    });
     const fetchMock = vi.fn();
     const trace = lemmaWith(fetchMock).trace({
       id: "trace-1",
@@ -1636,10 +1613,8 @@ describe("automatic trace delivery", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(warn.mock.calls[0]?.[0]).toBe(
-      "@uselemma/tracing: dropped trace trace-1: unserializable output. Further drops are counted and reported every 60s; set LEMMA_DEBUG=1 to log each one.",
+      "@uselemma/tracing: dropped trace trace-1 before sending: unserializable output. Drops in the next 60s are counted, not logged; set LEMMA_DEBUG=1 to log each one.",
     );
-    toPayload.mockRestore();
-    warn.mockRestore();
   });
 
   it("ingest() sends once and throws when the send times out", async () => {

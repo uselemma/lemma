@@ -1546,11 +1546,13 @@ export class Lemma {
       failure = { error, attempts: 0 };
     }
     if (failure) {
-      reportDroppedTrace({
-        traceId: context.id,
-        attempts: failure.attempts,
-        reason: deliveryFailureReason(failure),
-      });
+      const reason = deliveryFailureReason(failure);
+      reportDroppedTrace(
+        context.id,
+        failure.attempts > 0
+          ? `after ${failure.attempts} attempt${failure.attempts === 1 ? "" : "s"}: ${reason}`
+          : `before sending: ${reason}`,
+      );
     }
   }
 

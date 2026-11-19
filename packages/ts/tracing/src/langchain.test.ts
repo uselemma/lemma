@@ -893,7 +893,6 @@ describe("langChain", () => {
     ).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(INGEST_MAX_ATTEMPTS);
     expect(warn).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
   });
 
   it("forwards release onto the ingest payload", async () => {

@@ -489,7 +489,7 @@ def _dropped_trace_warnings(caplog) -> list[str]:
     return [
         record.getMessage()
         for record in caplog.records
-        if record.name == "uselemma_tracing.client"
+        if record.name.startswith("uselemma_tracing")
         and record.levelname == "WARNING"
     ]
 
@@ -534,8 +534,8 @@ def test_automatic_delivery_warns_once_when_every_attempt_fails(caplog):
     assert len(calls) == INGEST_MAX_ATTEMPTS
     assert _dropped_trace_warnings(caplog) == [
         f"uselemma-tracing: dropped trace {trace_ids[0]} after "
-        f"{INGEST_MAX_ATTEMPTS} attempts: ingest returned 503. Further drops are "
-        "counted and reported every 60s; set LEMMA_DEBUG=1 to log each one."
+        f"{INGEST_MAX_ATTEMPTS} attempts: ingest returned 503. Drops in the next "
+        "60s are counted, not logged; set LEMMA_DEBUG=1 to log each one."
     ]
 
 
@@ -584,8 +584,7 @@ def test_automatic_delivery_warns_when_the_payload_cannot_be_built(caplog):
     assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
     assert calls == []
     [warning] = _dropped_trace_warnings(caplog)
-    assert ": ValueError: redaction failed. Further drops" in warning
-    assert "attempt" not in warning
+    assert " before sending: ValueError: redaction failed. Drops" in warning
 
 
 def test_before_send_drop_is_not_a_dropped_trace_warning(caplog):

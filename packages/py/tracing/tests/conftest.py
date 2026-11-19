@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from uselemma_tracing.client import _DroppedTraceWarnings
+from uselemma_tracing.dropped_traces import reset_dropped_trace_warnings
 
 
 @pytest.fixture(autouse=True)
@@ -14,11 +14,8 @@ def retry_sleeps(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def dropped_traces(monkeypatch):
-    """A fresh process-wide warning throttle, without a timer thread or exit hook."""
-    throttle = _DroppedTraceWarnings(
-        schedule=lambda _delay, _fn: None,
-        register_exit=lambda _fn: None,
-    )
-    monkeypatch.setattr("uselemma_tracing.client._dropped_traces", throttle)
-    return throttle
+def _fresh_dropped_trace_warnings():
+    """The dropped-trace warning budget is process-wide; each test starts fresh."""
+    reset_dropped_trace_warnings()
+    yield
+    reset_dropped_trace_warnings()

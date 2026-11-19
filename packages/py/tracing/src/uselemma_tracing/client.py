@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import atexit
 import copy
 import inspect
 import json
-import logging
 import os
-import threading
 import time
 import urllib.error
 import urllib.request
@@ -24,7 +21,6 @@ from .payload import (
     dumps_payload,
 )
 from .debug_delivery import (
-    DROPPED_TRACE_WARNING_WINDOW_SECONDS,
     EXPECTED_INGEST_SUCCESS_STATUS,
     INGEST_MAX_ATTEMPTS,
     INGEST_PATH,
@@ -42,6 +38,7 @@ from .debug_delivery import (
     pick_response_headers,
 )
 from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_enabled
+from .dropped_traces import report_dropped_trace
 from .error_message import describe_error as _describe_error
 from .error_message import failure_message as _failure_message
 from .release import normalize_release
@@ -65,8 +62,6 @@ except PackageNotFoundError:
 
 _SDK_USER_AGENT = f"uselemma-tracing/{_SDK_VERSION}"
 
-logger = logging.getLogger(__name__)
-
 # Retry backoff only, so it can be stubbed without stubbing the LEMMA_DEBUG_VERIFY
 # poll's ``time.sleep``.
 _retry_sleep = time.sleep
@@ -88,111 +83,6 @@ def _delivery_failure_reason(failure: _DeliveryFailure) -> str:
     return f"ingest returned {failure.status}" + (f" ({hint})" if hint else "")
 
 
-def _dropped_trace_line(trace_id: str, attempts: int, reason: str) -> str:
-    after = f" after {attempts} attempt{'' if attempts == 1 else 's'}" if attempts > 0 else ""
-    return f"uselemma-tracing: dropped trace {trace_id}{after}: {reason}."
-
-
-def _daemon_timer(delay: float, fn: Callable[[], None]) -> threading.Timer:
-    timer = threading.Timer(delay, fn)
-    # Must not keep a finished script alive for the rest of the window.
-    timer.daemon = True
-    timer.start()
-    return timer
-
-
-class _DroppedTraceWarnings:
-    """Process-wide throttle for dropped-trace warnings.
-
-    The first drop after a quiet window warns with its trace ID; later drops
-    in the window are counted into one line at the window's end. Debug mode
-    logs every drop.
-    """
-
-    def __init__(
-        self,
-        *,
-        clock: Callable[[], float] = time.monotonic,
-        schedule: Callable[[float, Callable[[], None]], Any] = _daemon_timer,
-        register_exit: Callable[[Callable[[], None]], Any] = atexit.register,
-    ) -> None:
-        self._clock = clock
-        self._schedule = schedule
-        self._register_exit = register_exit
-        self._lock = threading.Lock()
-        self._last_warned_at: float | None = None
-        self._pending = 0
-        self._latest_reason = ""
-        self._timer: Any = None
-        self._exit_flush_installed = False
-
-    def report(self, trace_id: str, attempts: int, reason: str) -> None:
-        if is_debug_mode_enabled():
-            logger.warning(_dropped_trace_line(trace_id, attempts, reason))
-            return
-        with self._lock:
-            now = self._clock()
-            remaining = (
-                None
-                if self._last_warned_at is None
-                else self._last_warned_at + DROPPED_TRACE_WARNING_WINDOW_SECONDS - now
-            )
-            window_open = remaining is not None and remaining > 0
-            if not window_open and self._pending == 0:
-                self._last_warned_at = now
-                message: str | None = (
-                    f"{_dropped_trace_line(trace_id, attempts, reason)} Further drops "
-                    "are counted and reported every "
-                    f"{int(DROPPED_TRACE_WARNING_WINDOW_SECONDS)}s; set LEMMA_DEBUG=1 "
-                    "to log each one."
-                )
-            else:
-                self._pending += 1
-                self._latest_reason = reason
-                self._install_exit_flush()
-                if remaining is not None and remaining > 0:
-                    if self._timer is None:
-                        self._timer = self._schedule(remaining, self.flush)
-                    return
-                # The window can expire with drops pending before its timer
-                # runs, for example after a fork; report them now.
-                message = self._take_summary(now)
-        if message:
-            logger.warning(message)
-
-    def flush(self) -> None:
-        """Log the count of drops not reported yet, and start a new window."""
-        with self._lock:
-            message = self._take_summary(self._clock())
-        if message:
-            logger.warning(message)
-
-    def _install_exit_flush(self) -> None:
-        # Integration flush()/shutdown() can run per request, so flushing there
-        # would log one line per request during an outage.
-        if not self._exit_flush_installed:
-            self._exit_flush_installed = True
-            self._register_exit(self.flush)
-
-    def _take_summary(self, now: float) -> str | None:
-        if self._timer is not None:
-            self._timer.cancel()
-            self._timer = None
-        if self._pending == 0:
-            return None
-        elapsed = now - (self._last_warned_at if self._last_warned_at is not None else now)
-        seconds = max(1, round(elapsed))
-        count = self._pending
-        self._pending = 0
-        self._last_warned_at = now
-        return (
-            f"uselemma-tracing: dropped {count} more trace{'' if count == 1 else 's'} "
-            f"in the last {seconds}s; latest: {self._latest_reason}. "
-            "Set LEMMA_DEBUG=1 to log each one."
-        )
-
-
-_dropped_traces = _DroppedTraceWarnings()
 
 
 def _merge_sdk_user_agent(headers: dict[str, str]) -> dict[str, str]:
@@ -1461,8 +1351,12 @@ class Lemma:
             # The payload could not be shaped or serialized; nothing was sent.
             failure = _DeliveryFailure(error=exc, attempts=0)
         if failure is not None:
-            _dropped_traces.report(
-                ctx.id, failure.attempts, _delivery_failure_reason(failure)
+            reason = _delivery_failure_reason(failure)
+            report_dropped_trace(
+                ctx.id,
+                f"after {failure.attempts} attempt{'' if failure.attempts == 1 else 's'}: {reason}"
+                if failure.attempts > 0
+                else f"before sending: {reason}",
             )
 
     def _shape_payload(self, payload: dict[str, Any]) -> dict[str, Any] | None:

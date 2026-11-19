@@ -29,10 +29,6 @@ INGEST_RETRY_BASE_DELAY_SECONDS = 0.5
 # Ceiling for one retry delay, a server Retry-After included, so a rate-limited
 # send cannot hold the caller for long.
 INGEST_RETRY_MAX_DELAY_SECONDS = 2.0
-# Window for repeat dropped-trace warnings. The first drop warns at once with
-# its trace ID; later drops in the window are counted into one line, which
-# keeps host-app logs readable and bounded during an outage or a bad key.
-DROPPED_TRACE_WARNING_WINDOW_SECONDS = 60.0
 
 IngestStatus = str  # "enqueued" | "ingested" | "ready" | "not_found"
 _SUCCESS_INGEST_STATUSES = frozenset({"enqueued", "ingested", "ready"})

@@ -1788,6 +1788,5 @@ describe("vercelAI", () => {
     ).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(INGEST_MAX_ATTEMPTS);
     expect(warn).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
   });
 });

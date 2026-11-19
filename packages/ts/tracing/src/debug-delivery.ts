@@ -30,12 +30,6 @@ export const INGEST_RETRY_BASE_DELAY_MS = 500;
  * rate-limited send cannot hold the caller's request for long.
  */
 export const INGEST_RETRY_MAX_DELAY_MS = 2_000;
-/**
- * Window for repeat dropped-trace warnings. The first drop warns at once with
- * its trace ID; later drops in the window are counted into one line, which
- * keeps host-app logs readable and bounded during an outage or a bad key.
- */
-export const DROPPED_TRACE_WARNING_WINDOW_MS = 60_000;
 
 /**
  * Statuses where resending the same payload can succeed. A resend after a
