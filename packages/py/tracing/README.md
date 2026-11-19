@@ -271,18 +271,19 @@ without them.
 
 ## LangChain and LangGraph
 
-Install the optional integration dependency and pass `langchain()` as a callback
-handler. Each root run owns one Lemma trace with current-turn input, final
-output or root error, promoted `thread_id` / `user_id`, typed nested
+Install the optional integration dependency and pass `langchain()` as a
+callback handler. Each root run owns one Lemma trace with current-turn input,
+final output or root error, promoted `thread_id` / `user_id`, typed nested
 generations/tools/spans, and real wall-clock bounds. Call `flush()` /
-`shutdown()` to finalize open traces immediately. When a sync `invoke()` runs
-inside an event loop, delivery goes to the worker pool, and `flush()` waits for
-it as OpenAI Agents' `force_flush()` does. On long-lived hosts,
-traces that stay idle (no child start/end) past `open_trace_ttl` (default
-2 hours) are finalized and sent, swept from every `on_*_start` at most
-every `eviction_interval` (default 5 minutes). A still-active long run is
-not evicted. Pass `open_trace_ttl=None` to disable. Stale traces are sent
-(same payload as `flush()`), not dropped.
+`shutdown()` to finalize open traces immediately. In async code (`ainvoke()`,
+or a sync `invoke()` inside an event loop), delivery goes to the worker pool
+without waiting, so call `flush()` before a short-lived process returns; it
+waits for those deliveries as OpenAI Agents' `force_flush()` does. On
+long-lived hosts, traces that stay idle (no child start/end) past
+`open_trace_ttl` (default 2 hours) are finalized and sent, swept from every
+`on_*_start` at most every `eviction_interval` (default 5 minutes). A
+still-active long run is not evicted. Pass `open_trace_ttl=None` to disable.
+Stale traces are sent (same payload as `flush()`), not dropped.
 
 ```bash
 pip install "uselemma-tracing[langchain]" langchain-openai

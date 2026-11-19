@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 from typing import Any
 
 import pytest
@@ -75,7 +76,7 @@ def test_callback_manager_accepts_handler():
     handler = _handler([])
     manager = CallbackManager.configure(inheritable_callbacks=[handler])
     assert manager.handlers
-    assert manager.handlers[0].run_inline is False
+    assert manager.handlers[0].run_inline is True
 
 
 def test_runnable_ainvoke_sends_one_trace():
@@ -100,6 +101,55 @@ def test_runnable_ainvoke_sends_one_trace():
     assert trace["name"] == "support-agent"
     assert trace["thread_id"] == "thread-1"
     assert trace["user_id"] == "user-1"
+
+
+def _gated_handler():
+    calls = []
+    send_threads = []
+    release = threading.Event()
+    record = make_transport(calls)
+
+    def transport(url, headers, body):
+        send_threads.append(threading.current_thread().name)
+        release.wait(timeout=5)
+        return record(url, headers, body)
+
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=transport,
+        agent_name="support-agent",
+    )
+    return handler, calls, send_threads, release
+
+
+def test_ainvoke_hands_delivery_to_the_sdk_pool_without_waiting():
+    handler, calls, send_threads, release = _gated_handler()
+    chain = RunnableLambda(lambda text: f"echo:{text}")
+
+    result = asyncio.run(chain.ainvoke("hello", config={"callbacks": [handler]}))
+
+    # ainvoke returned while the delivery is still held in the transport.
+    assert result == "echo:hello"
+    assert calls == []
+    release.set()
+    handler.flush()
+    assert len(calls) == 1
+    # The SDK's fire-and-forget pool, not the loop's default executor.
+    [thread_name] = send_threads
+    assert thread_name.startswith("uselemma-delivery_")
+    assert not thread_name.startswith("asyncio_")
+
+
+def test_flush_waits_for_an_ainvoke_delivery():
+    handler, calls, _send_threads, release = _gated_handler()
+    chain = RunnableLambda(lambda text: f"echo:{text}")
+
+    asyncio.run(chain.ainvoke("hello", config={"callbacks": [handler]}))
+    threading.Timer(0.1, release.set).start()
+    handler.flush()
+
+    assert len(calls) == 1
 
 
 def test_create_agent_ainvoke_is_one_root_with_tool_and_generation():

@@ -930,7 +930,7 @@ def test_handler_exposes_langchain_callback_flags():
         api_key="key",
         project_id=PROJECT_ID,
     )
-    assert handler.run_inline is False
+    assert handler.run_inline is True
     assert handler.raise_error is False
     assert handler.ignore_llm is False
     assert handler.ignore_chain is False

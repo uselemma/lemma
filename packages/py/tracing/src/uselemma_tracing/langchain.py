@@ -35,7 +35,7 @@ except ImportError:  # pragma: no cover - langchain is an optional extra
         """
 
         raise_error = False
-        run_inline = False
+        run_inline = True
         ignore_llm = False
         ignore_retry = False
         ignore_chain = False
@@ -644,6 +644,11 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
     """
 
     name = "lemma"
+    # Async runs call this handler on the event loop's thread instead of an
+    # executor thread, so finalizing hands delivery to the SDK's pool and
+    # ainvoke() does not wait for it. The callbacks only record spans in
+    # memory; delivery is the one blocking step.
+    run_inline = True
 
     def __init__(
         self,
