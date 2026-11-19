@@ -3,12 +3,12 @@ from __future__ import annotations
 import pytest
 
 from uselemma_tracing.delivery import (
+    BACKLOG_FULL,
     INGEST_MAX_ATTEMPTS,
     INGEST_RETRY_BASE_DELAY_SECONDS,
     INGEST_RETRY_MAX_DELAY_SECONDS,
     Delivered,
     DeliveryFailure,
-    backlog_full,
     deliver,
     failed_before_sending,
     still_queued,
@@ -146,7 +146,7 @@ def test_failed_before_sending_names_the_build_error():
 
 
 def test_backlog_full_names_the_backlog():
-    assert backlog_full() == "before sending: delivery backlog full"
+    assert BACKLOG_FULL == "before sending: delivery backlog full"
 
 
 def test_still_queued_counts_the_deliveries_and_the_moment():

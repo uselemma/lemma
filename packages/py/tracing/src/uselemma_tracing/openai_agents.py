@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from .client import Lemma, SpanHandle, TraceContext, _datetime_or_now, _duration_ms, _now
+from . import off_loop
 from .debug_mode import _lemma_debug
 from .error_message import describe_error
 from .model import pick_model_identity
@@ -313,7 +314,8 @@ class LemmaOpenAIAgentsProcessor:
             if delivery is not None:
                 self.lemma._deliver_automatic_from_sync_hook(*delivery)
         # Deliveries handed off an event loop must finish before a flush returns.
-        self.lemma._wait_for_process_sync_hook_deliveries()
+        # The wait is process-wide, so it covers every client's deliveries.
+        off_loop.wait_pending()
 
     def _resolve_thread_id(
         self,

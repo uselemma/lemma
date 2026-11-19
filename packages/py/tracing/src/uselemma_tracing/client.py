@@ -35,12 +35,12 @@ from .debug_delivery import (
 )
 from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_enabled
 from .delivery import (
+    BACKLOG_FULL,
     INGEST_MAX_ATTEMPTS,
     INGEST_REQUEST_TIMEOUT_SECONDS,
     INGEST_STRICT_ATTEMPTS,
     Delivered,
     DeliveryFailure,
-    backlog_full,
     deliver,
     failed_before_sending,
     ingest_failure_hint,
@@ -1038,11 +1038,6 @@ class TraceHandle(TraceContext):
         )
 
 
-@dataclass(frozen=True)
-class _DroppedByBeforeSend:
-    """``before_send`` returned None: an intentional drop, neither sent nor failed."""
-
-
 class Lemma:
     def __init__(
         self,
@@ -1241,12 +1236,12 @@ class Lemma:
             )
         except BaseException as exc:
             ctx.fail(exc)
-            await self._deliver_automatic_in_thread(ctx, started_at, _now())
+            await self._deliver_automatic_awaited(ctx, started_at, _now())
             raise
 
         if ctx.output_value is None:
             ctx.output(result)
-        await self._deliver_automatic_in_thread(ctx, started_at, _now())
+        await self._deliver_automatic_awaited(ctx, started_at, _now())
         return result
 
     def ingest(
@@ -1320,7 +1315,7 @@ class Lemma:
             payload["trace"]["release"] = self.release
         return payload
 
-    async def _deliver_automatic_in_thread(
+    async def _deliver_automatic_awaited(
         self,
         ctx: TraceContext,
         started_at: datetime,
@@ -1331,7 +1326,7 @@ class Lemma:
         if not await off_loop.run_awaited(
             lambda: self._deliver_automatic(ctx, started_at, ended_at), ctx.id
         ):
-            report_dropped_trace(ctx.id, backlog_full())
+            report_dropped_trace(ctx.id, BACKLOG_FULL)
 
     def _deliver_automatic_from_sync_hook(
         self,
@@ -1350,16 +1345,7 @@ class Lemma:
         elif not off_loop.submit(
             lambda: self._deliver_automatic(ctx, started_at, ended_at), ctx.id
         ):
-            report_dropped_trace(ctx.id, backlog_full())
-
-    @staticmethod
-    def _wait_for_process_sync_hook_deliveries() -> None:
-        """Wait for every delivery handed to the off-loop pool in this process.
-
-        The pool is process-wide, so this waits for other clients' and
-        processors' deliveries too, up to the drain deadline.
-        """
-        off_loop.wait_pending()
+            report_dropped_trace(ctx.id, BACKLOG_FULL)
 
     def _deliver_automatic(
         self,
@@ -1427,7 +1413,7 @@ class Lemma:
                 error=_failure_message(exc),
             )
             return failed_before_sending(exc)
-        if isinstance(built, _DroppedByBeforeSend):
+        if built is None:
             return None
         payload, body = built
         result = deliver(
@@ -1455,8 +1441,9 @@ class Lemma:
         ctx: TraceContext,
         started_at: datetime,
         ended_at: datetime,
-    ) -> tuple[dict[str, Any], bytes] | _DroppedByBeforeSend:
-        """Shape and serialize the payload; raises when that fails.
+    ) -> tuple[dict[str, Any], bytes] | None:
+        """Shape and serialize the payload; None when ``before_send`` dropped it,
+        and raises when shaping or serializing fails.
 
         Serialized once, so every attempt resends the same span IDs and ingest
         dedupes an earlier attempt that landed unseen.
@@ -1471,7 +1458,7 @@ class Lemma:
                 trace_id=ctx.id,
                 project_id=self.project_id,
             )
-            return _DroppedByBeforeSend()
+            return None
         body = dumps_payload(payload).encode()
         _lemma_debug(
             "client",

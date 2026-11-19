@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .client import Lemma, SpanHandle, TraceContext, _duration_ms, _now
+from . import off_loop
 from .langchain_eviction import (
     DEFAULT_EVICTION_INTERVAL,
     DEFAULT_OPEN_TRACE_TTL,
@@ -1458,7 +1459,8 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         for deliveries handed off an event loop."""
         for trace_id, stored in list(self._traces.items()):
             self._finalize(trace_id, stored)
-        self.lemma._wait_for_process_sync_hook_deliveries()
+        # The wait is process-wide, so it covers every client's deliveries.
+        off_loop.wait_pending()
 
     def shutdown(self) -> None:
         """Finalize open traces and reset integration state."""

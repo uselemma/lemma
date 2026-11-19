@@ -66,9 +66,8 @@ def failed_before_sending(error: Exception) -> DeliveryFailure:
     return DeliveryFailure(error=error, cause=f"before sending: {describe_error(error)}")
 
 
-def backlog_full() -> str:
-    """Cause for a delivery refused because the off-loop backlog is full."""
-    return "before sending: delivery backlog full"
+# Cause for a delivery refused because an off-loop pool's backlog is full.
+BACKLOG_FULL = "before sending: delivery backlog full"
 
 
 def still_queued(count: int, moment: Literal["flush", "exit"]) -> str:
