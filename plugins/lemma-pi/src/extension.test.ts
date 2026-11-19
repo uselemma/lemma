@@ -2,7 +2,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CompletedCodingAgentTurn } from "@uselemma/tracing";
 import type { LemmaPiCredentials } from "./credentials.js";
@@ -24,7 +24,44 @@ function extensionFixture() {
   return { handlers, pi, context, warnings };
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("Pi extension compatibility adapter", () => {
+  it("delivers traces with the plugin User-Agent", async () => {
+    const fixture = extensionFixture();
+    const fetchMock = vi.fn<typeof fetch>(
+      async () => new Response("{}", { status: 201 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    createLemmaPiExtension({
+      createId: () => "turn-ua",
+      readCredentials: () => ({
+        version: 1,
+        apiUrl: "https://api.example.test",
+        projectId: "10000000-0000-0000-0000-000000000001",
+        credentialId: "credential-1",
+        accessToken: "lemma_ci_scoped-secret",
+      }),
+    })(fixture.pi);
+
+    await fixture.handlers.get("before_agent_start")?.(
+      { type: "before_agent_start", prompt: "Inspect the repo" } as never,
+      fixture.context,
+    );
+    await fixture.handlers.get("agent_settled")?.(
+      { type: "agent_settled" } as never,
+      fixture.context,
+    );
+
+    expect(fixture.warnings).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("user-agent"),
+    ).toMatch(/^@uselemma\/pi\/\d+\.\d+\.\d+$/);
+  });
+
   it("maps native Pi lifecycle events with sensitive tool data redacted", async () => {
     const fixture = extensionFixture();
     const sendTrace = vi.fn(
