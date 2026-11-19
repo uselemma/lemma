@@ -20,11 +20,13 @@ _last_warned_at: float | None = None
 _suppressed = 0
 
 
-def report_dropped_trace(trace_id: str, cause: str) -> None:
+def report_dropped_trace(trace_id: str, cause: str, *, count: int = 1) -> None:
     """Warn about a trace that automatic delivery gave up on.
 
     ``cause`` completes "dropped trace <id> ...", for example
-    "after 3 attempts: ingest returned 503". Debug mode logs every drop.
+    "after 3 attempts: ingest returned 503". ``count`` covers a batch dropped
+    together, so a suppressed batch still adds up in the next warning. Debug
+    mode logs every report.
     """
     global _last_warned_at, _suppressed
     line = f"uselemma-tracing: dropped trace {trace_id} {cause}."
@@ -37,7 +39,7 @@ def report_dropped_trace(trace_id: str, cause: str) -> None:
             _last_warned_at is not None
             and now - _last_warned_at < DROPPED_TRACE_WARNING_WINDOW_SECONDS
         ):
-            _suppressed += 1
+            _suppressed += count
             return
         suppressed = _suppressed
         _last_warned_at = now

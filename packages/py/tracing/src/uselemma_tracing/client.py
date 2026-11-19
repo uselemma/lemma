@@ -1350,7 +1350,7 @@ class Lemma:
         if not off_loop.on_event_loop_thread():
             self._deliver_automatic(ctx, started_at, ended_at)
         elif not off_loop.submit(
-            lambda: self._deliver_automatic(ctx, started_at, ended_at)
+            lambda: self._deliver_automatic(ctx, started_at, ended_at), ctx.id
         ):
             report_dropped_trace(ctx.id, backlog_full().cause)
 

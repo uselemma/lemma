@@ -104,3 +104,15 @@ def test_debug_mode_logs_every_drop(clock, caplog):
     assert _warnings(caplog) == [
         f"uselemma-tracing: dropped trace trace-{index} {CAUSE}." for index in range(1, 4)
     ]
+
+
+def test_a_batch_drop_counts_toward_the_next_warning(clock, caplog):
+    _drop("trace-1")
+    report_dropped_trace("trace-2", "before sending: 5 deliveries still queued at flush", count=5)
+    clock.now += WINDOW
+    _drop("trace-3")
+
+    assert _warnings(caplog)[1].startswith(
+        f"uselemma-tracing: dropped trace trace-3 {CAUSE}. 5 more dropped since "
+        "the last warning."
+    )

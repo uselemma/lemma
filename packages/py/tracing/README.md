@@ -250,9 +250,12 @@ called them.
 Pass OpenAI Agents `group_id` for `thread_id` and metadata `user_id` /
 `userId` for `user_id`. Call `force_flush()` / `shutdown()` to finalize open
 traces once. In async code the processor hands each delivery to a worker pool,
-and `force_flush()` waits for those deliveries, so call it before a short-lived
-process returns. At most 1,000 deliveries wait at once, which bounds memory
-while Lemma is unreachable; a trace that finishes past that is dropped with a
+and `force_flush()` waits for those deliveries for up to 34 seconds, one
+delivery's worst case, so call it before a short-lived process returns.
+Deliveries that haven't started by then are dropped and reported in one
+warning; one that is already sending finishes on its own. Process exit waits
+the same way. At most 1,000 deliveries wait at once, which bounds memory while
+Lemma is unreachable; a trace that finishes past that is dropped with a
 warning.
 
 Enable debug mode to validate live span shape while developing:

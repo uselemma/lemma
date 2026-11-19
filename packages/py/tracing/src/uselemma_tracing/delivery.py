@@ -74,6 +74,15 @@ def backlog_full() -> DeliveryFailure:
     )
 
 
+def still_queued(count: int, moment: str) -> DeliveryFailure:
+    """Deliveries that had not started when a flush or exit stopped waiting."""
+    noun = "delivery" if count == 1 else "deliveries"
+    return DeliveryFailure(
+        error=RuntimeError(f"uselemma-tracing: {count} {noun} still queued"),
+        cause=f"before sending: {count} {noun} still queued at {moment}",
+    )
+
+
 def _failed_after(attempts: int, attempt: _SendFailed) -> DeliveryFailure:
     return DeliveryFailure(
         error=attempt.error,
