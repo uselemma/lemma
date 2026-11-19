@@ -11,6 +11,7 @@ from uselemma_tracing.delivery import (
     backlog_full,
     deliver,
     failed_before_sending,
+    still_queued,
     ingest_failure_hint,
     ingest_retry_delay_seconds,
     is_retryable_ingest_status,
@@ -145,4 +146,9 @@ def test_failed_before_sending_names_the_build_error():
 
 
 def test_backlog_full_names_the_backlog():
-    assert backlog_full().cause == "before sending: delivery backlog full"
+    assert backlog_full() == "before sending: delivery backlog full"
+
+
+def test_still_queued_counts_the_deliveries_and_the_moment():
+    assert still_queued(1, "flush") == "before sending: 1 delivery still queued at flush"
+    assert still_queued(3, "exit") == "before sending: 3 deliveries still queued at exit"

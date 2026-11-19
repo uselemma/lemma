@@ -313,7 +313,7 @@ class LemmaOpenAIAgentsProcessor:
             if delivery is not None:
                 self.lemma._deliver_automatic_from_sync_hook(*delivery)
         # Deliveries handed off an event loop must finish before a flush returns.
-        self.lemma._wait_for_sync_hook_deliveries()
+        self.lemma._wait_for_process_sync_hook_deliveries()
 
     def _resolve_thread_id(
         self,

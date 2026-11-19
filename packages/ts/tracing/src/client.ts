@@ -19,7 +19,6 @@ import {
 import {
   deliver,
   type DeliveryFailure,
-  type DeliveryResult,
   failedBeforeSending,
   INGEST_MAX_ATTEMPTS,
   INGEST_STRICT_ATTEMPTS,
@@ -1214,13 +1213,13 @@ export class Lemma {
     context: TraceContext,
     options: { startedAt: Date; endedAt?: Date },
   ): Promise<void> {
-    const result = await this.sendTrace(
+    const failure = await this.sendTrace(
       context,
       options.startedAt,
       options.endedAt ?? new Date(),
       INGEST_STRICT_ATTEMPTS,
     );
-    if (!result.ok) throw result.error;
+    if (failure) throw failure.error;
   }
 
   recordSpan(options: DetachedSpanOptions): SpanHandle | NoopSpanHandle {
@@ -1490,25 +1489,26 @@ export class Lemma {
     startedAt: Date,
     endedAt: Date,
   ) {
-    const result = await this.sendTrace(
+    const failure = await this.sendTrace(
       context,
       startedAt,
       endedAt,
       INGEST_MAX_ATTEMPTS,
     );
-    if (!result.ok) reportDroppedTrace(context.id, result.cause);
+    if (failure) reportDroppedTrace(context.id, failure.cause);
   }
 
   /**
-   * Build, send, and check one trace. A payload that cannot be built comes back
-   * as an undelivered result, so strict and automatic delivery handle it once.
+   * Build, send, and check one trace; undefined when it was delivered. A
+   * payload that cannot be built comes back as a failure, so strict and
+   * automatic delivery handle it once.
    */
   private async sendTrace(
     context: TraceContext,
     startedAt: Date,
     endedAt: Date,
     maxAttempts: number,
-  ): Promise<DeliveryResult> {
+  ): Promise<DeliveryFailure | undefined> {
     const built = this.buildIngestBody(context, startedAt, endedAt);
     if (!built.ok) return built;
     const result = await deliver(
@@ -1516,18 +1516,17 @@ export class Lemma {
       { traceId: context.id, projectId: this.projectId },
       maxAttempts,
     );
-    if (result.ok) {
-      // Debug-only checks; the trace is already stored, so a failure here
-      // must neither fail the caller nor count as a dropped trace.
-      try {
-        await this.afterTraceSent(built.payload, result.response);
-      } catch (error) {
-        console.warn(
-          `@uselemma/tracing: trace ${context.id} was delivered, but its post-send check failed: ${describeError(error)}`,
-        );
-      }
+    if (!result.ok) return result;
+    // Debug-only checks; the trace is already stored, so a failure here
+    // must neither fail the caller nor count as a dropped trace.
+    try {
+      await this.afterTraceSent(built.payload, result.response);
+    } catch (error) {
+      console.warn(
+        `@uselemma/tracing: trace ${context.id} was delivered, but its post-send check failed: ${describeError(error)}`,
+      );
     }
-    return result;
+    return undefined;
   }
 
   /**

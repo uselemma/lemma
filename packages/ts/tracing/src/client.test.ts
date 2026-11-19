@@ -1,12 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { captureWarnings, withFakeTimers } from "../test-helpers";
+import { captureWarnings, jsonBody, withFakeTimers } from "../test-helpers";
 import { Lemma, TraceContext } from "./client";
 import { INGEST_MAX_ATTEMPTS } from "./delivery";
 import { disableDebugMode, enableDebugMode } from "./debug-mode";
-
-function jsonBody(call: unknown[]) {
-  return JSON.parse(String((call[1] as RequestInit).body));
-}
 
 describe("Lemma", () => {
   it("posts a completed trace with one-off generation and tool events", async () => {

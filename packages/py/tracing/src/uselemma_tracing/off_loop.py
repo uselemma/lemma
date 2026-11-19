@@ -133,7 +133,7 @@ def _drain(pools: list[_Pool], moment: Literal["flush", "exit"]) -> None:
     ]
     if dropped:
         report_dropped_trace(
-            dropped[0], still_queued(len(dropped), moment).cause, count=len(dropped)
+            dropped[0], still_queued(len(dropped), moment), count=len(dropped)
         )
 
 

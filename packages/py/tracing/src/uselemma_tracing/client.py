@@ -40,7 +40,6 @@ from .delivery import (
     INGEST_STRICT_ATTEMPTS,
     Delivered,
     DeliveryFailure,
-    DeliveryResult,
     backlog_full,
     deliver,
     failed_before_sending,
@@ -1039,10 +1038,6 @@ class TraceHandle(TraceContext):
         )
 
 
-def _delivery_log_fields(payload: dict[str, Any]) -> dict[str, Any]:
-    return {"trace_id": payload["trace"]["id"], "project_id": payload["project_id"]}
-
-
 @dataclass(frozen=True)
 class _DroppedByBeforeSend:
     """``before_send`` returned None: an intentional drop, neither sent nor failed."""
@@ -1279,14 +1274,14 @@ class Lemma:
         are skipped. Raises on a non-2xx response and never mutates the trace's
         status, so a failed send can be retried as-is.
         """
-        result = self._send_trace(
+        failure = self._send_trace(
             context,
             started_at,
             ended_at or _now(),
             max_attempts=INGEST_STRICT_ATTEMPTS,
         )
-        if isinstance(result, DeliveryFailure):
-            raise result.error
+        if failure is not None:
+            raise failure.error
 
     def start_turn(
         self,
@@ -1354,11 +1349,15 @@ class Lemma:
         elif not off_loop.submit(
             lambda: self._deliver_automatic(ctx, started_at, ended_at), ctx.id
         ):
-            report_dropped_trace(ctx.id, backlog_full().cause)
+            report_dropped_trace(ctx.id, backlog_full())
 
     @staticmethod
-    def _wait_for_sync_hook_deliveries() -> None:
-        """Block until deliveries handed to the off-loop pool have finished."""
+    def _wait_for_process_sync_hook_deliveries() -> None:
+        """Wait for every delivery handed to the off-loop pool in this process.
+
+        The pool is process-wide, so this waits for other clients' and
+        processors' deliveries too, up to the drain deadline.
+        """
         off_loop.wait_pending()
 
     def _deliver_automatic(
@@ -1379,11 +1378,11 @@ class Lemma:
         ``BaseException`` from the transport -- ``KeyboardInterrupt``,
         ``SystemExit``, ``CancelledError`` -- is left to propagate.
         """
-        result = self._send_trace(
+        failure = self._send_trace(
             ctx, started_at, ended_at, max_attempts=INGEST_MAX_ATTEMPTS
         )
-        if isinstance(result, DeliveryFailure):
-            report_dropped_trace(ctx.id, result.cause)
+        if failure is not None:
+            report_dropped_trace(ctx.id, failure.cause)
 
     def _shape_payload(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Copy, optionally shrink, then let ``before_send`` redact or drop."""
@@ -1409,8 +1408,9 @@ class Lemma:
         ended_at: datetime,
         *,
         max_attempts: int,
-    ) -> DeliveryResult | _DroppedByBeforeSend:
-        """Build, send, and check one trace.
+    ) -> DeliveryFailure | None:
+        """Build, send, and check one trace; None when it was delivered or
+        ``before_send`` dropped it.
 
         A payload that cannot be built or shaped comes back as a
         ``DeliveryFailure``, so strict and automatic delivery handle it once.
@@ -1427,26 +1427,27 @@ class Lemma:
             )
             return failed_before_sending(exc)
         if isinstance(built, _DroppedByBeforeSend):
-            return built
+            return None
         payload, body = built
         result = deliver(
             lambda: self._post_ingest(body),
-            _delivery_log_fields(payload),
+            {"trace_id": payload["trace"]["id"], "project_id": payload["project_id"]},
             max_attempts=max_attempts,
         )
-        if isinstance(result, Delivered):
-            # Debug-only checks; the trace is already stored, so a failure here
-            # must neither fail the caller nor count as a dropped trace.
-            try:
-                self._after_trace_sent(payload, result)
-            except Exception as exc:
-                logger.warning(
-                    "uselemma-tracing: trace %s was delivered, but its post-send "
-                    "check failed: %s",
-                    ctx.id,
-                    _describe_error(exc),
-                )
-        return result
+        if isinstance(result, DeliveryFailure):
+            return result
+        # Debug-only checks; the trace is already stored, so a failure here
+        # must neither fail the caller nor count as a dropped trace.
+        try:
+            self._after_trace_sent(payload, result)
+        except Exception as exc:
+            logger.warning(
+                "uselemma-tracing: trace %s was delivered, but its post-send "
+                "check failed: %s",
+                ctx.id,
+                _describe_error(exc),
+            )
+        return None
 
     def _build_ingest_body(
         self,

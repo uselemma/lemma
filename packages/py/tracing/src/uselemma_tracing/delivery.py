@@ -4,7 +4,7 @@ import math
 import random as _random
 from dataclasses import dataclass
 from time import sleep
-from typing import Any, Callable, Mapping, Union
+from typing import Any, Callable, Literal, Mapping, Union
 
 from .debug_delivery import pick_response_headers
 from .debug_mode import _lemma_debug
@@ -66,21 +66,15 @@ def failed_before_sending(error: Exception) -> DeliveryFailure:
     return DeliveryFailure(error=error, cause=f"before sending: {describe_error(error)}")
 
 
-def backlog_full() -> DeliveryFailure:
-    """A delivery refused because the off-loop backlog is full; nothing was sent."""
-    return DeliveryFailure(
-        error=RuntimeError("uselemma-tracing: delivery backlog full"),
-        cause="before sending: delivery backlog full",
-    )
+def backlog_full() -> str:
+    """Cause for a delivery refused because the off-loop backlog is full."""
+    return "before sending: delivery backlog full"
 
 
-def still_queued(count: int, moment: str) -> DeliveryFailure:
-    """Deliveries that had not started when a flush or exit stopped waiting."""
+def still_queued(count: int, moment: Literal["flush", "exit"]) -> str:
+    """Cause for deliveries that had not started when a flush or exit stopped waiting."""
     noun = "delivery" if count == 1 else "deliveries"
-    return DeliveryFailure(
-        error=RuntimeError(f"uselemma-tracing: {count} {noun} still queued"),
-        cause=f"before sending: {count} {noun} still queued at {moment}",
-    )
+    return f"before sending: {count} {noun} still queued at {moment}"
 
 
 def _failed_after(attempts: int, attempt: _SendFailed) -> DeliveryFailure:

@@ -26,5 +26,5 @@ def test_build_config_warnings():
 
 def test_pick_response_headers():
     assert pick_response_headers(
-        {"CF-Ray": "abc123", "Content-Type": "application/json"}
+        {"cf-ray": "abc123", "content-type": "application/json"}
     ) == {"cf-ray": "abc123"}
