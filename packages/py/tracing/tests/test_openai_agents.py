@@ -1035,3 +1035,31 @@ async def test_openai_agents_trace_end_on_the_event_loop_delivers_off_it():
 
     assert len(send_threads) == 1
     assert send_threads[0] != loop_thread
+
+
+def _lock_checking_processor():
+    held = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: held.append(processor._lock._is_owned()) or (201, "{}"),
+    )
+    processor = openai_agents(lemma)
+    return processor, held
+
+
+def test_openai_agents_trace_end_delivers_after_releasing_the_lock():
+    processor, held = _lock_checking_processor()
+    processor.on_trace_start(FakeTrace(trace_id="trace_lock", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_lock", name="agent"))
+
+    assert held == [False]
+
+
+def test_openai_agents_force_flush_delivers_after_releasing_the_lock():
+    processor, held = _lock_checking_processor()
+    processor.on_trace_start(FakeTrace(trace_id="trace_open_1", name="agent"))
+    processor.on_trace_start(FakeTrace(trace_id="trace_open_2", name="agent"))
+    processor.force_flush()
+
+    assert held == [False, False]

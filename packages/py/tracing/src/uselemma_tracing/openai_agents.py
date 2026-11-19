@@ -5,7 +5,7 @@ import threading
 from concurrent.futures import Future, wait
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
 
 from .client import Lemma, SpanHandle, TraceContext, _datetime_or_now, _duration_ms, _now
 from .debug_mode import _lemma_debug
@@ -275,7 +275,9 @@ class LemmaOpenAIAgentsProcessor:
                 _get(trace, "group_id"),
                 _get(trace, "metadata"),
             )
-            self._finalize(trace_id, stored)
+            delivery = self._finalize(trace_id, stored)
+        if delivery is not None:
+            self._deliver(delivery)
 
     def on_span_start(self, span: Any) -> None:
         with self._lock:
@@ -307,8 +309,13 @@ class LemmaOpenAIAgentsProcessor:
         # for traces that never received on_trace_end), then drop them so a
         # later on_trace_end or force_flush can't resend and duplicate spans.
         with self._lock:
-            for trace_id, stored in list(self._traces.items()):
+            deliveries = [
                 self._finalize(trace_id, stored)
+                for trace_id, stored in list(self._traces.items())
+            ]
+        for delivery in deliveries:
+            if delivery is not None:
+                self._deliver(delivery)
         # Deliveries handed off an event loop must finish before a flush returns.
         with self._deliveries_lock:
             pending = list(self._deliveries)
@@ -388,11 +395,18 @@ class LemmaOpenAIAgentsProcessor:
             self._spans.pop(span_id, None)
             self._ended_spans.pop(span_id, None)
 
-    def _finalize(self, trace_id: str, stored: _StoredTrace) -> None:
+    def _finalize(
+        self, trace_id: str, stored: _StoredTrace
+    ) -> Callable[[], None] | None:
+        """Close ``stored`` and return its delivery, or None if it already ended.
+
+        Callers run the delivery after releasing ``self._lock``, so no send or
+        retry backoff holds up the other trace hooks.
+        """
         self._traces.pop(trace_id, None)
         self._forget_trace_spans(trace_id)
         if stored.ended:
-            return
+            return None
         stored.ended = True
 
         ended_at = stored.latest_end or _now()
@@ -405,15 +419,12 @@ class LemmaOpenAIAgentsProcessor:
             stored.context.fail(stored.root_error)
         elif stored.root_output is not None:
             stored.context.output(stored.root_output)
-        self._deliver(stored.context, started_at, ended_at)
+        context = stored.context
+        return lambda: self.lemma._deliver_automatic(context, started_at, ended_at)
 
-    def _deliver(
-        self, context: TraceContext, started_at: datetime, ended_at: datetime
-    ) -> None:
+    def _deliver(self, delivery: Callable[[], None]) -> None:
         # The SDK calls trace hooks on the event loop's thread during async runs.
-        future = run_off_event_loop(
-            lambda: self.lemma._deliver_automatic(context, started_at, ended_at)
-        )
+        future = run_off_event_loop(delivery)
         if future is None:
             return
         with self._deliveries_lock:
