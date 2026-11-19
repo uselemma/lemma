@@ -18,7 +18,6 @@ from .delivery import (
     INGEST_MAX_ATTEMPTS,
     INGEST_REQUEST_TIMEOUT_SECONDS,
     INGEST_RETRY_MAX_DELAY_SECONDS,
-    still_queued,
 )
 from .dropped_traces import report_dropped_trace
 
@@ -45,31 +44,36 @@ OFF_LOOP_DRAIN_DEADLINE_SECONDS = (
     + (INGEST_MAX_ATTEMPTS - 1) * INGEST_RETRY_MAX_DELAY_SECONDS
 )
 
+# Causes for the drops reported here; each completes "dropped trace <id> ...".
+_BACKLOG_FULL = "before sending: delivery backlog full"
+
+
+def _still_queued(count: int, moment: Literal["flush", "exit"]) -> str:
+    noun = "delivery" if count == 1 else "deliveries"
+    return f"before sending: {count} {noun} still queued at {moment}"
+
 
 class _Pool:
     """A lazily started executor that tracks each queued or running delivery."""
 
-    def __init__(
-        self, workers: int, thread_name_prefix: str, *, max_backlog: int | None = None
-    ) -> None:
+    def __init__(self, workers: int, thread_name_prefix: str) -> None:
         self._workers = workers
         self._thread_name_prefix = thread_name_prefix
-        self._max_backlog = max_backlog
         self.reset()
 
     def reset(self) -> None:
-        self.lock = threading.Lock()
+        # Reentrant: hand_off holds it around its backlog check and the submit,
+        # and a done callback runs at once on the submitting thread when the
+        # future already finished.
+        self.lock = threading.RLock()
         self.executor: ThreadPoolExecutor | None = None
         # Each queued or running delivery, with the Lemma trace ID it sends,
         # in submission order.
         self.pending: dict[Future[None], str] = {}
 
-    def submit(self, fn: Callable[[], None], trace_id: str) -> Future[None] | None:
-        """Queue ``fn`` to run in the submitting thread's context; None when the
-        backlog is full and it is not queued."""
+    def submit(self, fn: Callable[[], None], trace_id: str) -> Future[None]:
+        """Queue ``fn`` to run in the submitting thread's context."""
         with self.lock:
-            if self._max_backlog is not None and len(self.pending) >= self._max_backlog:
-                return None
             if self.executor is None:
                 self.executor = ThreadPoolExecutor(
                     max_workers=self._workers,
@@ -79,7 +83,6 @@ class _Pool:
             # transport see the caller's ContextVars on the worker.
             future = self.executor.submit(copy_context().run, fn)
             self.pending[future] = trace_id
-        # Outside the lock: a future that already finished runs this at once.
         future.add_done_callback(self._forget)
         return future
 
@@ -92,23 +95,35 @@ class _Pool:
             self.pending.pop(future, None)
 
 
-_fire_and_forget = _Pool(
-    OFF_LOOP_WORKERS, "uselemma-delivery", max_backlog=OFF_LOOP_MAX_BACKLOG
-)
+_fire_and_forget = _Pool(OFF_LOOP_WORKERS, "uselemma-delivery")
 _awaited = _Pool(AWAITED_WORKERS, "uselemma-awaited-delivery")
 
 
-def on_event_loop_thread() -> bool:
+def hand_off(fn: Callable[[], None], trace_id: str) -> None:
+    """Deliver from a sync hook that an async framework may call on its loop thread.
+
+    Inline when the thread runs no event loop; otherwise queued on the
+    fire-and-forget pool without waiting, or reported as dropped when that
+    pool's backlog is full.
+    """
+    if not _on_event_loop_thread():
+        fn()
+        return
+    pool = _fire_and_forget
+    with pool.lock:
+        full = len(pool.pending) >= OFF_LOOP_MAX_BACKLOG
+        if not full:
+            pool.submit(fn, trace_id)
+    if full:
+        report_dropped_trace(trace_id, _BACKLOG_FULL)
+
+
+def _on_event_loop_thread() -> bool:
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         return False
     return True
-
-
-def submit(fn: Callable[[], None], trace_id: str) -> bool:
-    """Queue ``fn`` without waiting; False when the backlog is full and it is not queued."""
-    return _fire_and_forget.submit(fn, trace_id) is not None
 
 
 async def run_awaited(fn: Callable[[], None], trace_id: str) -> None:
@@ -119,7 +134,6 @@ async def run_awaited(fn: Callable[[], None], trace_id: str) -> None:
     which still runs or is reported by the exit drain.
     """
     future = _awaited.submit(fn, trace_id)
-    assert future is not None, "the awaited pool has no backlog cap"
     loop = asyncio.get_running_loop()
     waiter: asyncio.Future[None] = loop.create_future()
 
@@ -166,7 +180,7 @@ def _drain(pools: list[_Pool], moment: Literal["flush", "exit"]) -> None:
     ]
     if dropped:
         report_dropped_trace(
-            dropped[0], still_queued(len(dropped), moment), count=len(dropped)
+            dropped[0], _still_queued(len(dropped), moment), count=len(dropped)
         )
 
 

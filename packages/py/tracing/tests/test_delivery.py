@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from uselemma_tracing.delivery import (
-    BACKLOG_FULL,
     INGEST_MAX_ATTEMPTS,
     INGEST_RETRY_BASE_DELAY_SECONDS,
     INGEST_RETRY_MAX_DELAY_SECONDS,
@@ -11,7 +10,6 @@ from uselemma_tracing.delivery import (
     DeliveryFailure,
     deliver,
     failed_before_sending,
-    still_queued,
     ingest_failure_hint,
     ingest_retry_delay_seconds,
     is_retryable_ingest_status,
@@ -143,12 +141,3 @@ def test_failed_before_sending_names_the_build_error():
     assert failed_before_sending(error) == DeliveryFailure(
         error=error, cause="before sending: ValueError: redaction failed"
     )
-
-
-def test_backlog_full_names_the_backlog():
-    assert BACKLOG_FULL == "before sending: delivery backlog full"
-
-
-def test_still_queued_counts_the_deliveries_and_the_moment():
-    assert still_queued(1, "flush") == "before sending: 1 delivery still queued at flush"
-    assert still_queued(3, "exit") == "before sending: 3 deliveries still queued at exit"

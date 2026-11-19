@@ -4,7 +4,7 @@ import math
 import random as _random
 from dataclasses import dataclass
 from time import sleep
-from typing import Any, Callable, Literal, Mapping, Union
+from typing import Any, Callable, Mapping, Union
 
 from .debug_delivery import pick_response_headers
 from .debug_mode import _lemma_debug
@@ -64,16 +64,6 @@ _SendAttempt = Union[Delivered, _SendFailed]
 def failed_before_sending(error: Exception) -> DeliveryFailure:
     """A payload that could not be built or shaped; nothing was sent."""
     return DeliveryFailure(error=error, cause=f"before sending: {describe_error(error)}")
-
-
-# Cause for a delivery refused because an off-loop pool's backlog is full.
-BACKLOG_FULL = "before sending: delivery backlog full"
-
-
-def still_queued(count: int, moment: Literal["flush", "exit"]) -> str:
-    """Cause for deliveries that had not started when a flush or exit stopped waiting."""
-    noun = "delivery" if count == 1 else "deliveries"
-    return f"before sending: {count} {noun} still queued at {moment}"
 
 
 def _failed_after(attempts: int, attempt: _SendFailed) -> DeliveryFailure:

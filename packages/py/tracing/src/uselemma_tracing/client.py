@@ -35,7 +35,6 @@ from .debug_delivery import (
 )
 from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_enabled
 from .delivery import (
-    BACKLOG_FULL,
     INGEST_MAX_ATTEMPTS,
     INGEST_REQUEST_TIMEOUT_SECONDS,
     INGEST_STRICT_ATTEMPTS,
@@ -1339,12 +1338,9 @@ class Lemma:
         Inline when the thread runs no loop; otherwise handed to the off-loop
         pool, because the transport and retry backoff block.
         """
-        if not off_loop.on_event_loop_thread():
-            self._deliver_automatic(ctx, started_at, ended_at)
-        elif not off_loop.submit(
+        off_loop.hand_off(
             lambda: self._deliver_automatic(ctx, started_at, ended_at), ctx.id
-        ):
-            report_dropped_trace(ctx.id, BACKLOG_FULL)
+        )
 
     def _deliver_automatic(
         self,

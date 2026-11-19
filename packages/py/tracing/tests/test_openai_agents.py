@@ -1088,9 +1088,7 @@ async def test_openai_agents_force_flush_waits_for_handed_off_deliveries():
 async def test_openai_agents_drops_a_trace_past_the_delivery_backlog(
     monkeypatch, caplog
 ):
-    monkeypatch.setattr(
-        off_loop, "_fire_and_forget", off_loop._Pool(1, "uselemma-delivery", max_backlog=0)
-    )
+    monkeypatch.setattr(off_loop, "OFF_LOOP_MAX_BACKLOG", 0)
     sent = []
     lemma = Lemma(
         api_key="key",

@@ -39,18 +39,28 @@ def _lemma_warnings(caplog) -> list[str]:
     ]
 
 
-def test_on_event_loop_thread_is_false_without_a_running_loop():
-    assert not off_loop.on_event_loop_thread()
+def test_hand_off_delivers_inline_without_a_running_loop():
+    ran = []
+
+    off_loop.hand_off(lambda: ran.append(threading.get_ident()), "trace-1")
+
+    assert ran == [threading.get_ident()]
 
 
-async def test_on_event_loop_thread_is_true_on_a_running_loop():
-    assert off_loop.on_event_loop_thread()
+async def test_hand_off_queues_on_the_pool_when_a_loop_is_running():
+    ran = []
+
+    off_loop.hand_off(lambda: ran.append(threading.current_thread().name), "trace-1")
+    off_loop.wait_pending()
+
+    [thread_name] = ran
+    assert thread_name.startswith("uselemma-delivery_")
 
 
 def test_wait_pending_returns_once_queued_jobs_finish():
     job, release, ran = _gated()
 
-    assert off_loop.submit(job, "trace-1")
+    off_loop._fire_and_forget.submit(job, "trace-1")
     threading.Timer(0.05, release.set).start()
     off_loop.wait_pending()
 
@@ -58,17 +68,15 @@ def test_wait_pending_returns_once_queued_jobs_finish():
     assert ran[0] != threading.get_ident()
 
 
-def test_submit_refuses_a_job_past_the_backlog_cap(monkeypatch):
-    monkeypatch.setattr(
-        off_loop, "_fire_and_forget", off_loop._Pool(4, "uselemma-delivery", max_backlog=2)
-    )
+async def test_hand_off_reports_a_delivery_past_the_backlog_cap(monkeypatch, caplog):
+    monkeypatch.setattr(off_loop, "OFF_LOOP_MAX_BACKLOG", 2)
     first, release_first, ran_first = _gated()
     second, release_second, ran_second = _gated()
     refused = []
 
-    assert off_loop.submit(first, "trace-1")
-    assert off_loop.submit(second, "trace-2")
-    assert not off_loop.submit(lambda: refused.append(True), "trace-3")
+    off_loop.hand_off(first, "trace-1")
+    off_loop.hand_off(second, "trace-2")
+    off_loop.hand_off(lambda: refused.append(True), "trace-3")
 
     release_first.set()
     release_second.set()
@@ -76,16 +84,21 @@ def test_submit_refuses_a_job_past_the_backlog_cap(monkeypatch):
 
     assert refused == []
     assert ran_first and ran_second
-    assert off_loop.submit(lambda: None, "trace-4")
+    [warning] = _lemma_warnings(caplog)
+    assert warning.startswith(
+        "uselemma-tracing: dropped trace trace-3 before sending: delivery backlog full."
+    )
 
 
-def test_the_awaited_pool_has_no_backlog_cap(one_worker_pools):
-    _first, release, _ran = _gated()
-    for index in range(off_loop.OFF_LOOP_MAX_BACKLOG + 1):
-        job = _first if index == 0 else (lambda: None)
-        assert off_loop._awaited.submit(job, f"trace-{index}") is not None
-    release.set()
-    off_loop._drain([off_loop._awaited], "flush")
+def test_still_queued_counts_the_deliveries_and_the_moment():
+    assert (
+        off_loop._still_queued(1, "flush")
+        == "before sending: 1 delivery still queued at flush"
+    )
+    assert (
+        off_loop._still_queued(3, "exit")
+        == "before sending: 3 deliveries still queued at exit"
+    )
 
 
 def test_the_drain_deadline_is_one_delivery_worst_case():
@@ -100,9 +113,9 @@ def test_flush_stops_at_the_deadline_and_reports_unstarted_deliveries(
     in_flight, release, ran_in_flight = _gated()
     queued_ran = []
 
-    assert off_loop.submit(in_flight, "trace-a")
-    assert off_loop.submit(lambda: queued_ran.append("b"), "trace-b")
-    assert off_loop.submit(lambda: queued_ran.append("c"), "trace-c")
+    off_loop._fire_and_forget.submit(in_flight, "trace-a")
+    off_loop._fire_and_forget.submit(lambda: queued_ran.append("b"), "trace-b")
+    off_loop._fire_and_forget.submit(lambda: queued_ran.append("c"), "trace-c")
 
     started = time.monotonic()
     off_loop.wait_pending()
@@ -129,7 +142,7 @@ def test_exit_stops_at_the_deadline_and_reports_unstarted_deliveries():
         off_loop._fire_and_forget = off_loop._Pool(1, "uselemma-delivery")
         off_loop.OFF_LOOP_DRAIN_DEADLINE_SECONDS = 0.2
         for index in range(4):
-            off_loop.submit(lambda: time.sleep(1), f"trace-{index}")
+            off_loop._fire_and_forget.submit(lambda: time.sleep(1), f"trace-{index}")
         """
     )
     started = time.monotonic()
@@ -150,7 +163,7 @@ def test_exit_stops_at_the_deadline_and_reports_unstarted_deliveries():
 def test_a_forked_child_starts_with_empty_pools():
     job, release, _ran = _gated()
     awaited_job, release_awaited, _awaited_ran = _gated()
-    assert off_loop.submit(job, "trace-1")
+    off_loop._fire_and_forget.submit(job, "trace-1")
     off_loop._awaited.submit(awaited_job, "trace-2")
 
     off_loop._reset()
@@ -160,7 +173,7 @@ def test_a_forked_child_starts_with_empty_pools():
         assert pool.pending == {}
     release.set()
     release_awaited.set()
-    assert off_loop.submit(lambda: None, "trace-3")
+    off_loop._fire_and_forget.submit(lambda: None, "trace-3")
     off_loop.wait_pending()
 
 
@@ -185,8 +198,6 @@ def test_the_exit_drain_also_cuts_queued_awaited_deliveries(
 
 
 async def test_run_awaited_runs_on_the_awaited_pool_in_the_callers_context():
-    import contextvars
-
     request_id = contextvars.ContextVar("request_id")
     request_id.set("req-1")
     seen = []
@@ -206,7 +217,7 @@ def test_submit_runs_the_job_in_the_submitting_threads_context():
     request_id.set("req-1")
     seen = []
 
-    assert off_loop.submit(lambda: seen.append(request_id.get(None)), "trace-1")
+    off_loop._fire_and_forget.submit(lambda: seen.append(request_id.get(None)), "trace-1")
     off_loop.wait_pending()
 
     assert seen == ["req-1"]
