@@ -9,6 +9,64 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="November 18, 2026" tags={["New releases", "Improvements", "Bug fixes", "[API]", "[MCP]", "[Analytics]", "[Issues]", "[Traces]", "[Artifacts]", "[Dashboard]", "[Slack]"]} rss={{ title: "Issue status, analytics, and trace reads use one set of routes" }}>
+
+  ## API
+
+  - **Removed calls:** A superseded REST path or MCP tool doesn’t respond, and there is no alias. The routes in this update replace issue status, issue reads, traces, spans, artifacts, monitors, and analytics.
+  - **Review:** `POST /issues/{issue_id}/review` (`review_issue`) moves an open issue to `in_progress`. An existing assignee stays. `claim_unassigned` defaults to true and assigns an unassigned issue to the caller.
+  - **Resolve:** `POST /issues/{issue_id}/resolve` (`resolve_issue`) resolves an open or `in_progress` issue. `resolution_evidence` is a `caller_attestation` or an HTTPS `deployment_reference`, and each needs an explanation of 1 to 2000 characters. Saving a pull request doesn’t resolve the issue.
+  - **Dismiss:** `POST /issues/{issue_id}/dismiss` (`dismiss_issue`) dismisses an open or `in_progress` issue. `dismissal_reason` is `False positive`, `Working as intended`, `Test or synthetic traffic`, `Acceptable edge case`, `Known limitation`, or `Out of scope`. `dismissal_detail` is 1 to 2000 characters.
+  - **Reopen:** `POST /issues/{issue_id}/reopen` (`reopen_issue`) returns an `in_progress`, `resolved`, or `dismissed` issue to `open`.
+  - **Illegal status:** An illegal status change returns 409 and changes nothing. `transition_issues`, `set_issue_status`, and `POST /issues/transitions` don’t respond.
+  - **Issue read:** `GET /issues/{issue_id}` (`get_issue`) reads one issue and omits the Linear ticket. `GET /issues/{issue_id}/markdown` and `get_issue_markdown` don’t respond.
+  - **Occurrences:** `GET /issues/{issue_id}/occurrences` (`list_issue_occurrences`) lists occurrences newest first. `GET /issues/{issue_id}/series` (`get_issue_series`) returns the daily counts. `read_issues` doesn’t respond.
+  - **Issue list:** `GET /issues` (`list_issues`) returns issues that still have occurrences. Omit `status` for open and `in_progress`. `status=all` returns every status. Follow `next_request`. The cursor expires after 15 minutes.
+  - **Batch:** `POST /issues/batch` (`batch_update_issues`) applies one shared update to 1 to 50 issues and returns one result per id. A failed id leaves the other issues applied. `POST /issues/bulk-status` and the other bulk issue routes don’t respond.
+  - **Trace search:** `POST /traces/query` (`query_traces`) finds traces. The match is `none`, `trace_input`, or `span_content`, and it names the fields to return. `id` is always included. `GET /traces/search` doesn’t respond.
+  - **Trace read:** `GET /traces/{trace_id}` (`get_trace`) requires `fields`. `id` is always included. A missing trace, or another project's trace, is 404. Counts stay on the query hit. Spans, occurrences, and monitors are separate routes.
+  - **Facets:** `POST /traces/facets` (`query_trace_facets`) returns counts for the matching traces.
+  - **Spans:** `POST /traces/{trace_id}/spans/query` (`query_trace_spans`) lists or filters spans in tree order. `limit` is 1 to 500 and defaults to 100. A page returns at most 100 spans. REST uses the HTTP response ceiling, so one full span is returned. MCP returns 400 `item_too_large` when a span and its requested context exceed the 64 KiB agent ceiling.
+  - **Monitor:** `GET /monitors/{monitor_id}` (`get_monitor_detail`) reads one monitor. It includes the fit rate and series for the last 14 days, and it omits the learned format, the seed hint, and the expected behavior. `GET /projects/{project_id}/monitors/{monitor_id}` doesn’t respond. A deleted monitor is 404.
+  - **Monitor list:** `GET /projects/{project_id}/monitors` (`list_monitors`) lists live monitors. `agent_name` is an exact match, and a miss is an empty list. A deleted monitor is absent.
+  - **Correction:** `POST /monitors/{monitor_id}/corrections` (`correct_monitor_judgment`) records, undoes, or restores one judgment correction. It doesn’t change issue status or start recalibration. The same key and body replay for 30 days. A different body with that key returns 409.
+
+  ## MCP
+
+  - **Tool names:** The MCP tool named with each route in this update is that operation. A removed tool name doesn’t respond.
+
+  ## Analytics
+
+  - **Catalog:** `GET /projects/{project_id}/analytics` lists events, fields, operators, time buckets, and query limits. The MCP tool is `describe_project_analytics`. `GET /projects/{project_id}/analytics/catalog` doesn’t respond.
+  - **Views:** `GET /projects/{project_id}/analytics/views` returns one dashboard report as `{view, payload}`. `view` is `base`, `window`, `model_scorecard`, `agent_scorecard`, `tool_aggregates`, or `roi`. A windowed view needs `start_inclusive` and `end_exclusive`. `roi` doesn’t take that window. The MCP tool is `get_project_analytics`. `GET /projects/{project_id}/analytics?view=` and a path such as `/agent-scorecard` don’t respond.
+  - **Query:** `POST /projects/{project_id}/analytics/query` runs one catalog query. The MCP tool is `query_project_analytics`.
+
+  ## Artifacts
+
+  - **Agent:** `GET /projects/{project_id}/artifacts` (`list_project_artifacts`) requires `agent_name`. An empty value is the untagged agent. The string `null` is an agent name. Omitting `agent_name` is rejected, and the detail tells you to send null for the untagged agent.
+
+  ## Issues
+
+  - **Unsupported request:** New traces don’t file **Unsupported request**. A correct decline leaves no occurrence. A false claim that the work succeeded stays **Factual misrepresentation**. A task the agent could perform and skipped stays **Skipped work**. The category filter omits **Unsupported request**. An existing issue in that category stays on the list until you dismiss it.
+
+  ## Traces
+
+  - **Open a trace:** Opening a [trace](/platform/traces) shows the span, including a span larger than 64 KiB.
+  - **Conversation:** In the trace drawer, tool calls sit between the user message and the reply. A row opens that span.
+  - **Carried tool result:** On a new trace, an AI SDK tool result in the next generation's input counts as a tool call. Tool-call stats and issue detection see that the tool ran. The result doesn’t count as a failed tool call. Traces already stored stay as they are.
+
+  ## Dashboard
+
+  - **Setup failed:** A [monitor](/platform/monitors) whose setup failed shows **Setup didn’t finish.** and **Internal error.** **Retry setup** starts creation again.
+  - **Long tool result:** A monitor that reads a trace without a field cap keeps each tool result whole, including the end of a long result.
+
+  ## Slack
+
+  - **Unsupported request:** [Slack](/connections/slack) doesn’t page an issue in the **Unsupported request** category.
+  - **Alert channel:** The Slack alert channel shows the channel already chosen until you search. A search loads one page of matches. Loading channels doesn’t show as a reconnect error.
+
+</Update>
+
 <Update label="November 9, 2026" tags={["Improvements", "Bug fixes", "[Issues]", "[Slack]", "[Dashboard]", "[API keys]", "[Artifacts]"]} rss={{ title: "Issues open on Open, and Slack pages yellow once and red once" }}>
 
   ## Issues
