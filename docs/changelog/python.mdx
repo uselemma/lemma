@@ -9,6 +9,16 @@ meta:
   audience: "Engineers using the Python tracing SDK"
 ---
 
+<Update label="7.13.1" description="November 18, 2026" tags={["Bug fixes", "[Ingest]"]} rss={{ title: "Automatic delivery retries and warns on a dropped trace" }}>
+
+  ## Ingest
+
+  - **Retries:** `trace()`, `async_trace()`, and the LangChain and OpenAI Agents integrations retry a network error, a timeout, a 408, a 429, or a 5xx twice with backoff before giving up. [ingest()](/tracing/instrumentation/traces) still sends once and raises.
+  - **Timeout:** The default transport times out a stalled socket after 10 seconds instead of waiting forever.
+  - **Dropped traces:** The first trace that can’t be delivered logs a warning on the `uselemma_tracing.client` logger with its ID and the reason, without debug mode. Later drops are counted into one line per minute. With `LEMMA_DEBUG=1`, every drop is logged.
+
+</Update>
+
 <Update label="7.13.0" description="November 16, 2026" tags={["Improvements", "[OpenAI Agents]"]} rss={{ title: "OpenAI Agents traces show the model call and the reply" }}>
 
   ## OpenAI Agents
@@ -100,7 +110,7 @@ meta:
 
   ## Ingest
 
-  - **Fail open:** `trace()`, `async_trace()`, and `TraceHandle.end()` catch HTTP and network errors, log them, and do not rethrow. [ingest()](/tracing/instrumentation/traces) still raises. A delivery failure does not replace your agent’s error.
+  - **Fail open:** `trace()` and `async_trace()` catch HTTP and network errors, log them, and do not rethrow. [ingest()](/tracing/instrumentation/traces) still raises. A delivery failure does not replace your agent’s error.
 
 </Update>
 

@@ -9,6 +9,16 @@ meta:
   audience: "Engineers using the TypeScript tracing SDK"
 ---
 
+<Update label="7.13.1" description="November 18, 2026" tags={["Bug fixes", "[Ingest]"]} rss={{ title: "Automatic delivery retries and warns on a dropped trace" }}>
+
+  ## Ingest
+
+  - **Retries:** `trace()`, `TraceHandle.end()`, and the LangChain, Vercel AI, Mastra, and OpenAI Agents integrations retry a network error, a timeout, a 408, a 429, or a 5xx twice with backoff before giving up. [ingest()](/tracing/instrumentation/traces) still sends once and throws.
+  - **Timeout:** Each send times out after 10 seconds, so a stalled connection can’t hold your request open.
+  - **Dropped traces:** The first trace that can’t be delivered logs a `console.warn` with its ID and the reason, without debug mode. Later drops are counted into one line per minute. With `LEMMA_DEBUG=1`, every drop is logged.
+
+</Update>
+
 <Update label="7.13.0" description="November 16, 2026" tags={["Improvements", "[OpenAI Agents]"]} rss={{ title: "OpenAI Agents traces show the model call and the reply" }}>
 
   ## OpenAI Agents
