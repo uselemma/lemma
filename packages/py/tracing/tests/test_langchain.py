@@ -1,8 +1,10 @@
+import asyncio
 import json
 import threading
+import time
 
 from helpers import PROJECT_ID, make_transport
-from uselemma_tracing import langchain, langgraph
+from uselemma_tracing import langchain, langgraph, off_loop
 
 
 def test_langchain_records_generation_retriever_and_tool_children():
@@ -1466,3 +1468,44 @@ async def test_langchain_aflush_sends_open_traces_once_off_the_loop():
 
     assert len(send_threads) == 1
     assert send_threads[0] != threading.get_ident()
+
+
+async def test_concurrent_aflush_calls_each_return_within_one_drain_deadline(monkeypatch):
+    deadline = 0.5
+    monkeypatch.setattr(off_loop, "OFF_LOOP_DRAIN_DEADLINE_SECONDS", deadline)
+    release = threading.Event()
+
+    def stalled_transport(_url, _headers, _body):
+        release.wait(timeout=10)
+        return 503, "down"
+
+    handler = langchain(api_key="key", project_id=PROJECT_ID, transport=stalled_transport)
+    # More flushes than the awaited pool has workers, so a flush that waited on
+    # a worker would queue behind another flush's whole deadline.
+    flushes = 3 * off_loop.AWAITED_WORKERS
+    loop_gaps = []
+
+    async def heartbeat():
+        last = time.monotonic()
+        while True:
+            await asyncio.sleep(0.01)
+            now = time.monotonic()
+            loop_gaps.append(now - last)
+            last = now
+
+    async def request(index):
+        handler.on_chain_start({"name": "support-agent"}, "hi", run_id=f"chain-{index}")
+        handler.on_chain_end("done", run_id=f"chain-{index}")
+        started = time.monotonic()
+        await handler.aflush()
+        return time.monotonic() - started
+
+    ticker = asyncio.create_task(heartbeat())
+    try:
+        latencies = await asyncio.gather(*(request(index) for index in range(flushes)))
+    finally:
+        ticker.cancel()
+        release.set()
+
+    assert max(latencies) < 2 * deadline
+    assert max(loop_gaps) < deadline / 2

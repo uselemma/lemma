@@ -299,36 +299,3 @@ async def test_await_pending_waits_for_queued_jobs_without_blocking_the_loop():
     await asyncio.wait_for(flush, 5)
 
     assert len(ran) == 1
-
-
-async def test_await_pending_waits_on_the_awaited_pool(monkeypatch):
-    wait_threads = []
-    wait_pending = off_loop.wait_pending
-
-    def recording_wait_pending():
-        wait_threads.append(threading.current_thread().name)
-        wait_pending()
-
-    monkeypatch.setattr(off_loop, "wait_pending", recording_wait_pending)
-    await off_loop.await_pending()
-
-    [thread_name] = wait_threads
-    assert thread_name.startswith("uselemma-awaited-delivery")
-
-
-async def test_a_queued_flush_wait_is_not_reported_as_a_dropped_trace(
-    one_worker_pools, monkeypatch, caplog
-):
-    monkeypatch.setattr(off_loop, "OFF_LOOP_DRAIN_DEADLINE_SECONDS", 0.2)
-    in_flight, release, _ran = _gated()
-    off_loop._awaited.submit(in_flight, "trace-a")
-
-    # Queued behind the in-flight delivery on the single awaited worker.
-    flush = asyncio.create_task(off_loop.await_pending())
-    await asyncio.sleep(0)
-    assert list(off_loop._awaited.snapshot().values()) == ["trace-a"]
-    off_loop._drain_at_exit()
-    release.set()
-    await asyncio.wait_for(flush, 5)
-
-    assert _lemma_warnings(caplog) == []

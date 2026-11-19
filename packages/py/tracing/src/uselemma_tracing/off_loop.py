@@ -2,8 +2,8 @@
 
 Automatic delivery blocks on the transport and on retry backoff. A sync hook
 that an async framework calls on its loop thread hands delivery to the
-fire-and-forget pool; ``async_trace`` awaits delivery, and an async flush its
-wait for that pool, on the awaited pool.
+fire-and-forget pool; ``async_trace`` awaits delivery on the awaited pool. An
+async flush waits for the fire-and-forget pool on the event loop.
 """
 
 from __future__ import annotations
@@ -73,13 +73,8 @@ class _Pool:
         # in submission order.
         self.pending: dict[Future[None], str] = {}
 
-    def submit(self, fn: Callable[[], None], trace_id: str | None) -> Future[None]:
-        """Queue ``fn`` to run in the submitting thread's context.
-
-        ``trace_id`` is None for work that delivers no trace, such as a flush's
-        wait: it is not tracked, so the drains neither wait for it nor report it
-        as a dropped trace.
-        """
+    def submit(self, fn: Callable[[], None], trace_id: str) -> Future[None]:
+        """Queue ``fn`` to run in the submitting thread's context."""
         # Copied here, on the caller's thread, so before_send and a custom
         # transport see the caller's ContextVars on the worker.
         context = copy_context()
@@ -94,8 +89,7 @@ class _Pool:
             except RuntimeError:
                 future = None
             else:
-                if trace_id is not None:
-                    self.pending[future] = trace_id
+                self.pending[future] = trace_id
         if future is None:
             # Executors refuse new work once interpreter shutdown starts. A
             # thread that outlives the main thread still delivers, inline.
@@ -169,15 +163,22 @@ def _on_event_loop_thread() -> bool:
     return True
 
 
-async def run_awaited(fn: Callable[[], None], trace_id: str | None) -> None:
+async def run_awaited(fn: Callable[[], None], trace_id: str) -> None:
     """Run ``fn`` on the awaited pool and wait for it.
 
     Cancelling the caller, by its own timeout or by ``asyncio.run`` shutting
-    down, ends only the wait: nothing links the waiter back to ``fn``, which
-    still runs, or, when it delivers a trace, is reported by the exit drain.
+    down, ends only the wait: nothing links the waiter back to the delivery,
+    which still runs or is reported by the exit drain.
     """
     future = _awaited.submit(fn, trace_id)
-    loop = asyncio.get_running_loop()
+    await _waiter_on(asyncio.get_running_loop(), future)
+
+
+def _waiter_on(
+    loop: asyncio.AbstractEventLoop, future: Future[None]
+) -> asyncio.Future[None]:
+    """A future on ``loop`` that settles when ``future`` does. Unlike
+    ``asyncio.wrap_future``'s, cancelling it leaves the delivery untouched."""
     waiter: asyncio.Future[None] = loop.create_future()
 
     def wake(done: Future[None]) -> None:
@@ -188,7 +189,7 @@ async def run_awaited(fn: Callable[[], None], trace_id: str | None) -> None:
             pass
 
     future.add_done_callback(wake)
-    await waiter
+    return waiter
 
 
 def _settle(waiter: asyncio.Future[None], done: Future[None]) -> None:
@@ -211,13 +212,16 @@ def wait_pending() -> None:
 
 
 async def await_pending() -> None:
-    """``wait_pending`` for async code: the wait runs on the awaited pool, so
-    the event loop keeps running while queued deliveries finish.
-
-    The wait takes an awaited worker, so while every worker is busy with an
-    ``async_trace`` delivery it starts only once one frees up.
-    """
-    await run_awaited(wait_pending, None)
+    """``wait_pending`` for async code: the wait runs on the event loop, so the
+    loop keeps running while queued deliveries finish."""
+    pending = _fire_and_forget.snapshot()
+    if pending:
+        loop = asyncio.get_running_loop()
+        await asyncio.wait(
+            [_waiter_on(loop, future) for future in pending],
+            timeout=OFF_LOOP_DRAIN_DEADLINE_SECONDS,
+        )
+    _cut_unstarted([_fire_and_forget], pending, "flush")
 
 
 def _drain(pools: list[_Pool], moment: Literal["flush", "exit"]) -> None:
@@ -225,6 +229,15 @@ def _drain(pools: list[_Pool], moment: Literal["flush", "exit"]) -> None:
     for pool in pools:
         pending.update(pool.snapshot())
     wait(pending, timeout=OFF_LOOP_DRAIN_DEADLINE_SECONDS)
+    _cut_unstarted(pools, pending, moment)
+
+
+def _cut_unstarted(
+    pools: list[_Pool],
+    pending: dict[Future[None], str],
+    moment: Literal["flush", "exit"],
+) -> None:
+    """Drop each delivery in ``pending`` that has not started and report them once."""
     # Submission order, so the report names the oldest dropped delivery.
     dropped = [
         trace_id for pool in pools for trace_id in pool.claim_unstarted(pending)
