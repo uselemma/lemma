@@ -250,12 +250,12 @@ async function defaultSendTrace(input: {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   const fetchWithTimeout: typeof fetch = async (request, init) =>
-    fetch(request, withPluginUserAgent({ ...init, signal: controller.signal }));
+    fetch(request, { ...init, signal: controller.signal });
   const lemma = new Lemma({
     apiKey: input.accessToken,
     projectId: input.projectId,
     baseUrl: input.apiUrl,
-    fetch: fetchWithTimeout,
+    fetch: withPluginUserAgent(fetchWithTimeout),
   });
   const trace = codingAgentTurnTrace(input.turn);
   try {

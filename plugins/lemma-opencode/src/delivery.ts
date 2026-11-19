@@ -6,6 +6,7 @@ export function createDeliveryFetch(
   fetchImplementation: typeof fetch = fetch,
   timeoutMilliseconds = DELIVERY_TIMEOUT_MS,
 ): typeof fetch {
+  const send = withPluginUserAgent(fetchImplementation);
   return async (request, init) => {
     const controller = new AbortController();
     const signal = init?.signal
@@ -19,10 +20,7 @@ export function createDeliveryFetch(
       }, timeoutMilliseconds);
     });
     const requestAndBody = (async () => {
-      const response = await fetchImplementation(
-        request,
-        withPluginUserAgent({ ...init, signal }),
-      );
+      const response = await send(request, { ...init, signal });
       if (response.ok || !response.body) return response;
       const body = await response.arrayBuffer();
       return new Response(body, {

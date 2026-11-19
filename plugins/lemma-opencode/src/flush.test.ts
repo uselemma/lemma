@@ -112,14 +112,14 @@ describe("OpenCode pending delivery", () => {
       1,
     );
     expect(await readdir(join(dataDir, "pending"))).toEqual([]);
-    expect(successfulFetch).toHaveBeenCalledWith(
-      "https://dev.api.uselemma.ai/traces/ingest",
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({
-          Authorization: "Bearer lemma_ci_scoped-secret",
-        }),
-      }),
+    const [url, init] = successfulFetch.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe("https://dev.api.uselemma.ai/traces/ingest");
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("authorization")).toBe(
+      "Bearer lemma_ci_scoped-secret",
     );
   });
 
@@ -206,13 +206,13 @@ describe("OpenCode pending delivery", () => {
     const fetchMock = vi.fn(async () => Response.json({}, { status: 201 }));
 
     expect(await flushPendingTurns({ dataDir, fetch: fetchMock })).toBe(1);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://dev.api.uselemma.ai/traces/ingest",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer lemma_ci_scoped-secret-new",
-        }),
-      }),
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe("https://dev.api.uselemma.ai/traces/ingest");
+    expect(new Headers(init.headers).get("authorization")).toBe(
+      "Bearer lemma_ci_scoped-secret-new",
     );
     expect(await readdir(join(dataDir, "pending"))).toEqual([]);
   });
