@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import threading
@@ -671,6 +672,27 @@ async def test_async_trace_retries_off_the_event_loop_thread(monkeypatch):
     assert len(send_threads) == INGEST_MAX_ATTEMPTS
     assert len(sleep_threads) == INGEST_MAX_ATTEMPTS - 1
     assert loop_thread not in send_threads + sleep_threads
+
+
+async def test_concurrent_async_traces_each_await_their_own_delivery():
+    # Each call waits on its own worker thread, so neither queues behind the other.
+    barrier = threading.Barrier(2, timeout=5)
+
+    def transport(_url, _headers, _body):
+        barrier.wait()
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    async def run(_trace):
+        return "ok"
+
+    results = await asyncio.gather(
+        lemma.async_trace("first", run), lemma.async_trace("second", run)
+    )
+
+    assert results == ["ok", "ok"]
+    assert not barrier.broken
 
 
 def test_ingest_sends_a_self_built_trace_once_merging_by_default():
