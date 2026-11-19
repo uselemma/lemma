@@ -3,8 +3,7 @@ import packageJson from "../package.json" with { type: "json" };
 const PLUGIN_USER_AGENT = `${packageJson.name}/${packageJson.version}`;
 
 // The tracing SDK takes no User-Agent option, matching the Python SDK, so the
-// plugin relabels its own requests here. An SDK option could replace these
-// copies.
+// plugin relabels its own requests here.
 export function withPluginUserAgent(
   fetchImplementation: typeof fetch,
 ): typeof fetch {
