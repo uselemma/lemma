@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -1000,3 +1001,37 @@ def test_openai_agents_force_flush_does_not_raise_on_ingest_503():
     processor.on_trace_start(FakeTrace(trace_id="trace_503", name="agent"))
     processor.on_trace_end(FakeTrace(trace_id="trace_503", name="agent"))
     processor.force_flush()
+
+
+def test_openai_agents_trace_end_outside_an_event_loop_delivers_inline():
+    calling_thread = threading.get_ident()
+    send_threads = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: send_threads.append(threading.get_ident())
+        or (201, "{}"),
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_sync", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_sync", name="agent"))
+
+    assert send_threads == [calling_thread]
+
+
+async def test_openai_agents_trace_end_on_the_event_loop_delivers_off_it():
+    loop_thread = threading.get_ident()
+    send_threads = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: send_threads.append(threading.get_ident())
+        or (201, "{}"),
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_async", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_async", name="agent"))
+    processor.force_flush()
+
+    assert len(send_threads) == 1
+    assert send_threads[0] != loop_thread

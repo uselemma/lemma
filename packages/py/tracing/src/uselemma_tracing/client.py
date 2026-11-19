@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import inspect
 import json
@@ -1232,12 +1233,12 @@ class Lemma:
             )
         except BaseException as exc:
             ctx.fail(exc)
-            self._deliver_automatic(ctx, started_at, _now())
+            await self._deliver_automatic_off_loop(ctx, started_at, _now())
             raise
 
         if ctx.output_value is None:
             ctx.output(result)
-        self._deliver_automatic(ctx, started_at, _now())
+        await self._deliver_automatic_off_loop(ctx, started_at, _now())
         return result
 
     def ingest(
@@ -1303,6 +1304,15 @@ class Lemma:
         if self.release:
             payload["trace"]["release"] = self.release
         return payload
+
+    async def _deliver_automatic_off_loop(
+        self,
+        ctx: TraceContext,
+        started_at: datetime,
+        ended_at: datetime,
+    ) -> None:
+        # The transport and retry backoff block; keep both off the event loop.
+        await asyncio.to_thread(self._deliver_automatic, ctx, started_at, ended_at)
 
     def _deliver_automatic(
         self,

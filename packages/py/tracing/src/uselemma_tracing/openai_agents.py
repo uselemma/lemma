@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import threading
+from concurrent.futures import Future, wait
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 from .client import Lemma, SpanHandle, TraceContext, _datetime_or_now, _duration_ms, _now
 from .debug_mode import _lemma_debug
+from .delivery import run_off_event_loop
 from .error_message import describe_error
 from .model import pick_model_identity
 from .openai_agents_containers import (
@@ -252,6 +254,8 @@ class LemmaOpenAIAgentsProcessor:
         self._span_trace_ids: dict[str, str] = {}
         self._ended_spans: dict[str, SpanRecord] = {}
         self._lock = threading.RLock()
+        self._deliveries: set[Future[None]] = set()
+        self._deliveries_lock = threading.Lock()
 
     def on_trace_start(self, trace: Any) -> None:
         with self._lock:
@@ -305,6 +309,10 @@ class LemmaOpenAIAgentsProcessor:
         with self._lock:
             for trace_id, stored in list(self._traces.items()):
                 self._finalize(trace_id, stored)
+        # Deliveries handed off an event loop must finish before a flush returns.
+        with self._deliveries_lock:
+            pending = list(self._deliveries)
+        wait(pending)
 
     def _resolve_thread_id(
         self,
@@ -395,13 +403,26 @@ class LemmaOpenAIAgentsProcessor:
 
         if stored.root_error:
             stored.context.fail(stored.root_error)
-            self.lemma._deliver_automatic(stored.context, started_at, ended_at)
-            return
-
-        if stored.root_output is not None:
+        elif stored.root_output is not None:
             stored.context.output(stored.root_output)
+        self._deliver(stored.context, started_at, ended_at)
 
-        self.lemma._deliver_automatic(stored.context, started_at, ended_at)
+    def _deliver(
+        self, context: TraceContext, started_at: datetime, ended_at: datetime
+    ) -> None:
+        # The SDK calls trace hooks on the event loop's thread during async runs.
+        future = run_off_event_loop(
+            lambda: self.lemma._deliver_automatic(context, started_at, ended_at)
+        )
+        if future is None:
+            return
+        with self._deliveries_lock:
+            self._deliveries.add(future)
+        future.add_done_callback(self._forget_delivery)
+
+    def _forget_delivery(self, future: Future[None]) -> None:
+        with self._deliveries_lock:
+            self._deliveries.discard(future)
 
     def _ensure_trace(self, trace: Any) -> _StoredTrace:
         trace_id = _get(trace, "trace_id")

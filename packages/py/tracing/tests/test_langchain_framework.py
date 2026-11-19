@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 from typing import Any
 
 import pytest
@@ -100,6 +101,34 @@ def test_runnable_ainvoke_sends_one_trace():
     assert trace["name"] == "support-agent"
     assert trace["thread_id"] == "thread-1"
     assert trace["user_id"] == "user-1"
+
+
+def test_runnable_ainvoke_delivers_off_the_event_loop_thread():
+    calls = []
+    send_threads = []
+    record = make_transport(calls)
+
+    def transport(url, headers, body):
+        send_threads.append(threading.get_ident())
+        return record(url, headers, body)
+
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=transport,
+        agent_name="support-agent",
+    )
+    chain = RunnableLambda(lambda text: f"echo:{text}")
+
+    async def run() -> tuple[str, int]:
+        result = await chain.ainvoke("hello", config={"callbacks": [handler]})
+        return result, threading.get_ident()
+
+    result, loop_thread = asyncio.run(run())
+
+    assert result == "echo:hello"
+    assert len(calls) == 1
+    assert send_threads and loop_thread not in send_threads
 
 
 def test_create_agent_ainvoke_is_one_root_with_tool_and_generation():

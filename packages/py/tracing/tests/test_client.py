@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from datetime import datetime, timezone
 
 import pytest
@@ -619,6 +620,30 @@ def test_before_send_drop_is_not_a_dropped_trace_warning(caplog):
 
     assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
     assert _dropped_trace_warnings(caplog) == []
+
+
+async def test_async_trace_retries_off_the_event_loop_thread(monkeypatch):
+    loop_thread = threading.get_ident()
+    send_threads = []
+    sleep_threads = []
+    monkeypatch.setattr(
+        "uselemma_tracing.delivery.sleep",
+        lambda _seconds: sleep_threads.append(threading.get_ident()),
+    )
+
+    def transport(_url, _headers, _body):
+        send_threads.append(threading.get_ident())
+        return 503, "busy"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+
+    async def run(_trace):
+        return "ok"
+
+    assert await lemma.async_trace("support-agent", run) == "ok"
+    assert len(send_threads) == INGEST_MAX_ATTEMPTS
+    assert len(sleep_threads) == INGEST_MAX_ATTEMPTS - 1
+    assert loop_thread not in send_threads + sleep_threads
 
 
 def test_ingest_sends_a_self_built_trace_once_merging_by_default():
