@@ -303,7 +303,7 @@ class LemmaOpenAIAgentsProcessor:
 
     def force_flush(self) -> None:
         self._finalize_open_traces()
-        # Process-wide: every client's deliveries finish or are dropped at the deadline.
+        # Process-wide: waits on every client's queued deliveries.
         off_loop.wait_pending()
 
     async def aforce_flush(self) -> None:
