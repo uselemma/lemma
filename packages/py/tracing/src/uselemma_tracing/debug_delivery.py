@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable, Mapping
 
 PRODUCTION_BASE_URL = "https://api.uselemma.ai"
 INGEST_PATH = "/traces/ingest"
@@ -50,26 +49,10 @@ def build_config_warnings(base_url: str, project_id: str) -> list[str]:
     return warnings
 
 
-def ingest_failure_hint(status: int) -> str | None:
-    hints = {
-        401: "check LEMMA_API_KEY",
-        403: "API key doesn't own this project_id",
-        429: "ingest rate limit exceeded; lower the trace rate if it persists",
-        404: "baseUrl likely wrong (not Lemma API)",
-    }
-    return hints.get(status)
-
-
-_DIAGNOSTIC_HEADERS = ("cf-ray", "server", "date")
-
-
-def pick_response_headers(
-    headers: Mapping[str, str], names: Iterable[str] = _DIAGNOSTIC_HEADERS
-) -> dict[str, str]:
-    """Pick ``names`` (lowercase) from ``headers``, matching case-insensitively."""
+def pick_response_headers(headers: dict[str, str]) -> dict[str, str]:
     picked: dict[str, str] = {}
     lowered = {key.lower(): value for key, value in headers.items()}
-    for name in names:
+    for name in ("cf-ray", "server", "date"):
         value = lowered.get(name)
         if value:
             picked[name] = value

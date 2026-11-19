@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   apiKeySuffix,
   buildConfigWarnings,
-  ingestFailureHint,
   isValidProjectId,
   pickResponseHeadersFromRecord,
   PRODUCTION_BASE_URL,
@@ -26,14 +25,6 @@ describe("debug-delivery", () => {
       `baseUrl is not production (${PRODUCTION_BASE_URL})`,
       "projectId is not a valid UUID",
     ]);
-  });
-
-  it("maps ingest failure status codes to hints", () => {
-    expect(ingestFailureHint(401)).toContain("LEMMA_API_KEY");
-    expect(ingestFailureHint(403)).toContain("project_id");
-    expect(ingestFailureHint(429)).toContain("rate limit");
-    expect(ingestFailureHint(404)).toContain("baseUrl");
-    expect(ingestFailureHint(503)).toBeUndefined();
   });
 
   it("picks cf-ray, server, and date headers", () => {

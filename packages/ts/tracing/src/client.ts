@@ -3,7 +3,6 @@ import {
   buildConfigWarnings,
   EXPECTED_INGEST_SUCCESS_STATUS,
   type IngestStatus,
-  ingestFailureHint,
   INGEST_PATH,
   INGEST_STATUS_PATH,
   INGEST_STATUS_POLL_INTERVAL_MS,
@@ -11,7 +10,6 @@ import {
   isSuccessfulIngestStatus,
   parseIngestStatus,
   pickResponseHeaders,
-  sleep,
 } from "./debug-delivery";
 import {
   isDebugModeEnabled,
@@ -19,9 +17,11 @@ import {
   lemmaDebug,
 } from "./debug-mode";
 import {
-  type DeliveryLogFields,
+  deliver,
+  type DeliveryResult,
   INGEST_MAX_ATTEMPTS,
-  sendWithRetries,
+  ingestFailureHint,
+  sleep,
   withIngestTimeout,
 } from "./delivery";
 import { reportDroppedTrace } from "./dropped-traces";
@@ -493,10 +493,6 @@ function normalizeSpan(
 
 function warnNoop(message: string) {
   console.warn(`@uselemma/tracing: ${message}`);
-}
-
-function deliveryLogFields(payload: SdkTracePayload): DeliveryLogFields {
-  return { traceId: payload.trace.id, projectId: payload.project_id };
 }
 
 function isTraceEndOptions(value: unknown): value is TraceEndOptions {
@@ -1215,11 +1211,13 @@ export class Lemma {
     context: TraceContext,
     options: { startedAt: Date; endedAt?: Date },
   ): Promise<void> {
-    await this.flushTrace(
+    const result = await this.sendTrace(
       context,
       options.startedAt,
       options.endedAt ?? new Date(),
+      1,
     );
+    if (!result.ok) throw result.error;
   }
 
   recordSpan(options: DetachedSpanOptions): SpanHandle | NoopSpanHandle {
@@ -1489,41 +1487,34 @@ export class Lemma {
     startedAt: Date,
     endedAt: Date,
   ) {
-    let built: { payload: SdkTracePayload; body: string };
-    try {
-      built = this.buildIngestBody(context, startedAt, endedAt);
-    } catch (error) {
-      reportDroppedTrace(context.id, `before sending: ${describeError(error)}`);
-      return;
-    }
-    const { attempt, attempts } = await sendWithRetries(
-      (signal) => this.postIngest(built.body, signal),
-      deliveryLogFields(built.payload),
+    const result = await this.sendTrace(
+      context,
+      startedAt,
+      endedAt,
       INGEST_MAX_ATTEMPTS,
     );
-    if (!attempt.ok) {
-      reportDroppedTrace(
-        context.id,
-        `after ${attempts} attempt${attempts === 1 ? "" : "s"}: ${attempt.reason}`,
-      );
-      return;
-    }
-    await this.afterTraceSent(built.payload, attempt.response);
+    if (!result.ok) reportDroppedTrace(context.id, result.cause);
   }
 
-  private async flushTrace(
+  /**
+   * Build, send, and check one trace. A payload that cannot be built comes back
+   * as an undelivered result, so strict and automatic delivery handle it once.
+   */
+  private async sendTrace(
     context: TraceContext,
     startedAt: Date,
     endedAt: Date,
-  ) {
-    const { payload, body } = this.buildIngestBody(context, startedAt, endedAt);
-    const { attempt } = await sendWithRetries(
-      (signal) => this.postIngest(body, signal),
-      deliveryLogFields(payload),
-      1,
+    maxAttempts: number,
+  ): Promise<DeliveryResult> {
+    const built = this.buildIngestBody(context, startedAt, endedAt);
+    if (!built.ok) return built;
+    const result = await deliver(
+      (signal) => this.postIngest(built.body, signal),
+      { traceId: context.id, projectId: this.projectId },
+      maxAttempts,
     );
-    if (!attempt.ok) throw attempt.error;
-    await this.afterTraceSent(payload, attempt.response);
+    if (result.ok) await this.afterTraceSent(built.payload, result.response);
+    return result;
   }
 
   /**
@@ -1534,21 +1525,31 @@ export class Lemma {
     context: TraceContext,
     startedAt: Date,
     endedAt: Date,
-  ): { payload: SdkTracePayload; body: string } {
-    const payload = this.stampRelease(
-      context.toPayload(this.projectId, startedAt, endedAt),
-    );
-    const body = JSON.stringify(payload);
-    lemmaDebug("client", "sending trace", {
-      traceId: payload.trace.id,
-      name: payload.trace.name,
-      spanCount: payload.trace.spans.length,
-      projectId: payload.project_id,
-      bodyBytes: new TextEncoder().encode(body).length,
-      requestedAt: new Date().toISOString(),
-      url: `${this.baseUrl}${INGEST_PATH}`,
-    });
-    return { payload, body };
+  ):
+    | { ok: true; payload: SdkTracePayload; body: string }
+    | Extract<DeliveryResult, { ok: false }> {
+    try {
+      const payload = this.stampRelease(
+        context.toPayload(this.projectId, startedAt, endedAt),
+      );
+      const body = JSON.stringify(payload);
+      lemmaDebug("client", "sending trace", {
+        traceId: payload.trace.id,
+        name: payload.trace.name,
+        spanCount: payload.trace.spans.length,
+        projectId: payload.project_id,
+        bodyBytes: new TextEncoder().encode(body).length,
+        requestedAt: new Date().toISOString(),
+        url: `${this.baseUrl}${INGEST_PATH}`,
+      });
+      return { ok: true, payload, body };
+    } catch (error) {
+      return {
+        ok: false,
+        error,
+        cause: `before sending: ${describeError(error)}`,
+      };
+    }
   }
 
   private postIngest(body: string, signal: AbortSignal): Promise<Response> {

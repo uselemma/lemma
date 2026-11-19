@@ -8,9 +8,9 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from time import sleep
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Mapping, Union
 
-from .debug_delivery import ingest_failure_hint, pick_response_headers
+from .debug_delivery import pick_response_headers
 from .debug_mode import _lemma_debug
 from .error_message import describe_error, failure_message
 
@@ -37,25 +37,45 @@ INGEST_RETRY_MAX_DELAY_SECONDS = 2.0
 OFF_LOOP_DELIVERY_WORKERS = 4
 
 # One POST of a serialized payload; the client owns the URL and credentials.
-PostIngest = Callable[[], Tuple[int, str, Dict[str, str]]]
+# Response header keys are lowercase.
+PostIngest = Callable[[], tuple[int, str, dict[str, str]]]
 
 
 @dataclass(frozen=True)
-class Sent:
+class Delivered:
     status: int
-    headers: Dict[str, str]
+    headers: dict[str, str]
 
 
 @dataclass(frozen=True)
-class SendFailed:
+class NotDelivered:
     error: Exception
-    # Completes "dropped trace <id> after N attempts: ...".
+    # Completes "dropped trace <id> ...".
+    cause: str
+
+
+DeliveryResult = Union[Delivered, NotDelivered]
+
+
+@dataclass(frozen=True)
+class _SendFailed:
+    error: Exception
     reason: str
     retryable: bool
-    retry_after: Optional[str]
+    retry_after_seconds: float | None
 
 
-SendAttempt = Union[Sent, SendFailed]
+_SendAttempt = Union[Delivered, _SendFailed]
+
+
+def ingest_failure_hint(status: int) -> str | None:
+    hints = {
+        401: "check LEMMA_API_KEY",
+        403: "API key doesn't own this project_id",
+        429: "ingest rate limit exceeded; lower the trace rate if it persists",
+        404: "baseUrl likely wrong (not Lemma API)",
+    }
+    return hints.get(status)
 
 
 def is_retryable_ingest_status(status: int) -> bool:
@@ -67,19 +87,7 @@ def is_retryable_ingest_status(status: int) -> bool:
     return status == 408 or status == 429 or status >= 500
 
 
-def ingest_retry_delay_seconds(
-    retry: int,
-    retry_after: str | None,
-    random: Callable[[], float] = _random.random,
-) -> float:
-    """Delay before retry number ``retry`` (1-based)."""
-    backoff = INGEST_RETRY_BASE_DELAY_SECONDS * 2 ** (retry - 1)
-    jittered = backoff / 2 + random() * (backoff / 2)
-    server_delay = _retry_after_seconds(retry_after)
-    return min(INGEST_RETRY_MAX_DELAY_SECONDS, max(jittered, server_delay or 0.0))
-
-
-def _retry_after_seconds(value: str | None) -> float | None:
+def parse_retry_after_seconds(value: str | None) -> float | None:
     """Only the delta-seconds form; an HTTP-date falls back to backoff."""
     if value is None or not value.strip():
         return None
@@ -90,7 +98,18 @@ def _retry_after_seconds(value: str | None) -> float | None:
     return seconds if math.isfinite(seconds) and seconds >= 0 else None
 
 
-def send_once(post: PostIngest, log_fields: Mapping[str, Any]) -> SendAttempt:
+def ingest_retry_delay_seconds(
+    retry: int,
+    retry_after_seconds: float | None,
+    random: Callable[[], float] = _random.random,
+) -> float:
+    """Delay before retry number ``retry`` (1-based)."""
+    backoff = INGEST_RETRY_BASE_DELAY_SECONDS * 2 ** (retry - 1)
+    jittered = backoff / 2 + random() * (backoff / 2)
+    return min(INGEST_RETRY_MAX_DELAY_SECONDS, max(jittered, retry_after_seconds or 0.0))
+
+
+def _send_once(post: PostIngest, log_fields: Mapping[str, Any]) -> _SendAttempt:
     """Send once and classify the outcome."""
     try:
         status, text, headers = post()
@@ -98,11 +117,14 @@ def send_once(post: PostIngest, log_fields: Mapping[str, Any]) -> SendAttempt:
         _lemma_debug(
             "client", "trace ingest failed", **log_fields, error=failure_message(exc)
         )
-        return SendFailed(
-            error=exc, reason=describe_error(exc), retryable=True, retry_after=None
+        return _SendFailed(
+            error=exc,
+            reason=describe_error(exc),
+            retryable=True,
+            retry_after_seconds=None,
         )
     if 200 <= status < 300:
-        return Sent(status=status, headers=headers)
+        return Delivered(status=status, headers=headers)
     hint = ingest_failure_hint(status)
     _lemma_debug(
         "client",
@@ -113,28 +135,33 @@ def send_once(post: PostIngest, log_fields: Mapping[str, Any]) -> SendAttempt:
         **pick_response_headers(headers),
         **({"hint": hint} if hint else {}),
     )
-    return SendFailed(
+    return _SendFailed(
         error=RuntimeError(f"uselemma-tracing: failed to ingest trace ({status}): {text}"),
         reason=f"ingest returned {status}" + (f" ({hint})" if hint else ""),
         retryable=is_retryable_ingest_status(status),
-        retry_after=pick_response_headers(headers, ("retry-after",)).get("retry-after"),
+        retry_after_seconds=parse_retry_after_seconds(headers.get("retry-after")),
     )
 
 
-def send_with_retries(
+def deliver(
     post: PostIngest, log_fields: Mapping[str, Any], *, max_attempts: int
-) -> tuple[SendAttempt, int]:
-    """Send up to ``max_attempts`` times, backing off between retryable failures.
-
-    Returns the last attempt and how many were made.
-    """
+) -> DeliveryResult:
+    """Send up to ``max_attempts`` times, backing off between retryable failures."""
     attempts = 0
     while True:
         attempts += 1
-        attempt = send_once(post, log_fields)
-        if isinstance(attempt, Sent) or not attempt.retryable or attempts >= max_attempts:
-            return attempt, attempts
-        delay = ingest_retry_delay_seconds(attempts, attempt.retry_after)
+        attempt = _send_once(post, log_fields)
+        if isinstance(attempt, Delivered):
+            return attempt
+        if not attempt.retryable or attempts >= max_attempts:
+            return NotDelivered(
+                error=attempt.error,
+                cause=(
+                    f"after {attempts} attempt{'' if attempts == 1 else 's'}: "
+                    f"{attempt.reason}"
+                ),
+            )
+        delay = ingest_retry_delay_seconds(attempts, attempt.retry_after_seconds)
         _lemma_debug(
             "client",
             "retrying trace ingest",

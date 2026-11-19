@@ -1,8 +1,4 @@
-import {
-  ingestFailureHint,
-  pickResponseHeaders,
-  sleep,
-} from "./debug-delivery";
+import { pickResponseHeaders } from "./debug-delivery";
 import { lemmaDebug } from "./debug-mode";
 import { describeError, failureMessage } from "./error-message";
 
@@ -29,6 +25,21 @@ export const INGEST_RETRY_BASE_DELAY_MS = 500;
  */
 export const INGEST_RETRY_MAX_DELAY_MS = 2_000;
 
+export function ingestFailureHint(status: number): string | undefined {
+  switch (status) {
+    case 401:
+      return "check LEMMA_API_KEY";
+    case 403:
+      return "API key doesn't own this project_id";
+    case 429:
+      return "ingest rate limit exceeded; lower the trace rate if it persists";
+    case 404:
+      return "baseUrl likely wrong (not Lemma API)";
+    default:
+      return undefined;
+  }
+}
+
 /**
  * Statuses where resending the same payload can succeed. A resend after a
  * success the client never saw is harmless: ingest skips stored span IDs.
@@ -37,25 +48,29 @@ export function isRetryableIngestStatus(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
 }
 
+/** Only the delta-seconds form; an HTTP-date falls back to backoff. */
+export function parseRetryAfterMs(value: string | null): number | null {
+  if (!value?.trim()) return null;
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1_000 : null;
+}
+
 /** Delay before retry number `retry` (1-based). */
 export function ingestRetryDelayMs(
   retry: number,
-  retryAfter: string | null,
+  retryAfterMs: number | null,
   random: () => number = Math.random,
 ): number {
   const backoff = INGEST_RETRY_BASE_DELAY_MS * 2 ** (retry - 1);
   const jittered = backoff / 2 + random() * (backoff / 2);
   return Math.min(
     INGEST_RETRY_MAX_DELAY_MS,
-    Math.max(jittered, retryAfterMs(retryAfter) ?? 0),
+    Math.max(jittered, retryAfterMs ?? 0),
   );
 }
 
-/** Only the delta-seconds form; an HTTP-date falls back to backoff. */
-function retryAfterMs(value: string | null): number | null {
-  if (!value?.trim()) return null;
-  const seconds = Number(value);
-  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1_000 : null;
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -88,21 +103,25 @@ export async function withIngestTimeout<T>(
 export type PostIngest = (signal: AbortSignal) => Promise<Response>;
 
 /** Identifiers on every delivery debug line. */
-export type DeliveryLogFields = { traceId?: string; projectId: string };
+export type DeliveryLogFields = { traceId: string; projectId: string };
 
-export type SendAttempt =
+export type DeliveryResult =
+  | { ok: true; response: Response }
+  /** `cause` completes "dropped trace <id> …". */
+  | { ok: false; error: unknown; cause: string };
+
+type SendAttempt =
   | { ok: true; response: Response }
   | {
       ok: false;
       error: unknown;
-      /** Completes "dropped trace <id> after N attempts: …". */
       reason: string;
       retryable: boolean;
-      retryAfter: string | null;
+      retryAfterMs: number | null;
     };
 
 /** Send once under the request timeout and classify the outcome. */
-export async function sendOnce(
+async function sendOnce(
   post: PostIngest,
   log: DeliveryLogFields,
 ): Promise<SendAttempt> {
@@ -127,7 +146,7 @@ export async function sendOnce(
         ),
         reason: `ingest returned ${response.status}${hint ? ` (${hint})` : ""}`,
         retryable: isRetryableIngestStatus(response.status),
-        retryAfter: response.headers.get("retry-after"),
+        retryAfterMs: parseRetryAfterMs(response.headers.get("retry-after")),
       };
     });
   } catch (error) {
@@ -140,26 +159,28 @@ export async function sendOnce(
       error,
       reason: describeError(error),
       retryable: true,
-      retryAfter: null,
+      retryAfterMs: null,
     };
   }
 }
 
-/**
- * Send up to `maxAttempts` times, backing off between retryable failures.
- * Returns the last attempt and how many were made.
- */
-export async function sendWithRetries(
+/** Send up to `maxAttempts` times, backing off between retryable failures. */
+export async function deliver(
   post: PostIngest,
   log: DeliveryLogFields,
   maxAttempts: number,
-): Promise<{ attempt: SendAttempt; attempts: number }> {
+): Promise<DeliveryResult> {
   for (let attempts = 1; ; attempts += 1) {
     const attempt = await sendOnce(post, log);
-    if (attempt.ok || !attempt.retryable || attempts >= maxAttempts) {
-      return { attempt, attempts };
+    if (attempt.ok) return { ok: true, response: attempt.response };
+    if (!attempt.retryable || attempts >= maxAttempts) {
+      return {
+        ok: false,
+        error: attempt.error,
+        cause: `after ${attempts} attempt${attempts === 1 ? "" : "s"}: ${attempt.reason}`,
+      };
     }
-    const delayMs = ingestRetryDelayMs(attempts, attempt.retryAfter);
+    const delayMs = ingestRetryDelayMs(attempts, attempt.retryAfterMs);
     lemmaDebug("client", "retrying trace ingest", {
       ...log,
       attempt: attempts,

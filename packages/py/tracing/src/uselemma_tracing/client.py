@@ -29,7 +29,6 @@ from .debug_delivery import (
     INGEST_STATUS_POLL_TIMEOUT_SECONDS,
     api_key_suffix,
     build_config_warnings,
-    ingest_failure_hint,
     is_successful_ingest_status,
     parse_ingest_status,
     pick_response_headers,
@@ -38,9 +37,11 @@ from .debug_mode import _lemma_debug, is_debug_mode_enabled, is_debug_verify_ena
 from .delivery import (
     INGEST_MAX_ATTEMPTS,
     INGEST_REQUEST_TIMEOUT_SECONDS,
-    SendFailed,
-    Sent,
-    send_with_retries,
+    Delivered,
+    DeliveryResult,
+    NotDelivered,
+    deliver,
+    ingest_failure_hint,
 )
 from .dropped_traces import report_dropped_trace
 from .error_message import describe_error as _describe_error
@@ -65,9 +66,6 @@ except PackageNotFoundError:
     _SDK_VERSION = "unknown"
 
 _SDK_USER_AGENT = f"uselemma-tracing/{_SDK_VERSION}"
-
-def _delivery_log_fields(payload: dict[str, Any]) -> dict[str, Any]:
-    return {"trace_id": payload["trace"]["id"], "project_id": payload["project_id"]}
 
 
 def _merge_sdk_user_agent(headers: dict[str, str]) -> dict[str, str]:
@@ -1035,6 +1033,10 @@ class TraceHandle(TraceContext):
         )
 
 
+def _delivery_log_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    return {"trace_id": payload["trace"]["id"], "project_id": payload["project_id"]}
+
+
 class Lemma:
     def __init__(
         self,
@@ -1329,26 +1331,11 @@ class Lemma:
         transport -- ``KeyboardInterrupt``, ``SystemExit``, ``CancelledError``
         -- is left to propagate.
         """
-        try:
-            built = self._build_ingest_body(ctx, started_at, ended_at)
-        except Exception as exc:
-            report_dropped_trace(ctx.id, f"before sending: {_describe_error(exc)}")
-            return
-        if built is None:
-            return
-        payload, body = built
-        attempt, attempts = send_with_retries(
-            lambda: self._post_ingest(body),
-            _delivery_log_fields(payload),
-            max_attempts=INGEST_MAX_ATTEMPTS,
+        result = self._send_trace(
+            ctx, started_at, ended_at, max_attempts=INGEST_MAX_ATTEMPTS
         )
-        if isinstance(attempt, SendFailed):
-            report_dropped_trace(
-                ctx.id,
-                f"after {attempts} attempt{'' if attempts == 1 else 's'}: {attempt.reason}",
-            )
-            return
-        self._after_trace_sent(payload, attempt)
+        if isinstance(result, NotDelivered):
+            report_dropped_trace(ctx.id, result.cause)
 
     def _shape_payload(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         """Copy, optionally shrink, then let ``before_send`` redact or drop."""
@@ -1373,18 +1360,38 @@ class Lemma:
         started_at: datetime,
         ended_at: datetime,
     ) -> None:
-        built = self._build_ingest_body(ctx, started_at, ended_at)
+        result = self._send_trace(ctx, started_at, ended_at, max_attempts=1)
+        if isinstance(result, NotDelivered):
+            raise result.error
+
+    def _send_trace(
+        self,
+        ctx: TraceContext,
+        started_at: datetime,
+        ended_at: datetime,
+        *,
+        max_attempts: int,
+    ) -> DeliveryResult | None:
+        """Build, send, and check one trace; None when ``before_send`` dropped it.
+
+        A payload that cannot be built comes back as ``NotDelivered``, so strict
+        and automatic delivery handle it once.
+        """
+        try:
+            built = self._build_ingest_body(ctx, started_at, ended_at)
+        except Exception as exc:
+            return NotDelivered(error=exc, cause=f"before sending: {_describe_error(exc)}")
         if built is None:
-            return
+            return None
         payload, body = built
-        attempt, _attempts = send_with_retries(
+        result = deliver(
             lambda: self._post_ingest(body),
             _delivery_log_fields(payload),
-            max_attempts=1,
+            max_attempts=max_attempts,
         )
-        if isinstance(attempt, SendFailed):
-            raise attempt.error
-        self._after_trace_sent(payload, attempt)
+        if isinstance(result, Delivered):
+            self._after_trace_sent(payload, result)
+        return result
 
     def _build_ingest_body(
         self,
@@ -1441,7 +1448,7 @@ class Lemma:
             body,
         )
 
-    def _after_trace_sent(self, payload: dict[str, Any], sent: Sent) -> None:
+    def _after_trace_sent(self, payload: dict[str, Any], sent: Delivered) -> None:
         sent_warnings: list[str] = []
         if sent.status != EXPECTED_INGEST_SUCCESS_STATUS:
             sent_warnings.append(
@@ -1488,7 +1495,12 @@ class Lemma:
             url: str, headers: dict[str, str], body: bytes
         ) -> tuple[int, str, dict[str, str]]:
             result = transport(url, _merge_sdk_user_agent(headers), body)
-            response_headers = dict(result[2]) if len(result) >= 3 else {}
+            # Lowercased once here, so every reader indexes by lowercase name.
+            response_headers = (
+                {key.lower(): value for key, value in result[2].items()}
+                if len(result) >= 3
+                else {}
+            )
             return result[0], result[1], response_headers
 
         return wrapped
