@@ -35,7 +35,7 @@ except ImportError:  # pragma: no cover - langchain is an optional extra
         """
 
         raise_error = False
-        run_inline = True
+        run_inline = False
         ignore_llm = False
         ignore_retry = False
         ignore_chain = False
