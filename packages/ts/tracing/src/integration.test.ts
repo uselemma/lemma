@@ -5,12 +5,14 @@ import {
 } from "node:http";
 import { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
+import { SDK_USER_AGENT } from "./client";
 import { Lemma, langChain, openAIAgents, vercelAI } from "./index";
 
 type CapturedRequest = {
   method: string | undefined;
   url: string | undefined;
   authorization: string | undefined;
+  userAgent: string | undefined;
   body: any;
 };
 
@@ -32,6 +34,7 @@ async function startIngestServer() {
         method: request.method,
         url: request.url,
         authorization: request.headers.authorization,
+        userAgent: request.headers["user-agent"],
         body: JSON.parse(await readBody(request)),
       });
       response.writeHead(201, { "Content-Type": "application/json" });
@@ -198,6 +201,7 @@ describe("HTTP tracing integration", () => {
       expect(request.method).toBe("POST");
       expect(request.url).toBe("/traces/ingest");
       expect(request.authorization).toBe("Bearer key");
+      expect(request.userAgent).toBe(SDK_USER_AGENT);
       expect(request.body.project_id).toBe(
         "10000000-0000-0000-0000-000000000001",
       );

@@ -17,6 +17,7 @@ meta:
   - **Retries:** `trace()`, `TraceHandle.end()`, and the LangChain, Vercel AI, Mastra, and OpenAI Agents integrations retry a network error, a timeout, a 408, a 429, or a 5xx twice, waiting at most 2 seconds between tries. [ingest()](/tracing/instrumentation/traces) still sends once and throws.
   - **Timeout:** Each upload attempt times out after 10 seconds, so a stalled connection can’t hold your request open.
   - **Repeated drops:** Drops in the minute after a warning are counted, and the next warning says how many. With `LEMMA_DEBUG=1`, every drop is logged.
+  - **SDK version:** Every request sends `User-Agent: @uselemma/tracing/<version>`, including through a `fetch` you pass to `new Lemma()`, so Lemma can tell which SDK version your project runs. A `fetch` that sets its own `User-Agent` replaces it.
 
 </Update>
 

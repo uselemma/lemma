@@ -37,6 +37,7 @@ import {
   type TokenUsage,
   type WireTokenUsage,
 } from "./usage";
+import { SDK_PACKAGE_NAME, SDK_VERSION } from "./version";
 
 export type { OperationUsageResult, TokenUsage, WireTokenUsage } from "./usage";
 export {
@@ -53,10 +54,17 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
+/** Sent on every request so ingest can record which SDK version a project runs. */
+export const SDK_USER_AGENT = `${SDK_PACKAGE_NAME}/${SDK_VERSION}`;
+
 export type LemmaClientOptions = {
   apiKey?: string;
   projectId?: string;
   baseUrl?: string;
+  /**
+   * Sends every request. Each call carries `User-Agent: @uselemma/tracing/<version>`
+   * in `init.headers`; a fetch that sets its own User-Agent replaces it.
+   */
   fetch?: typeof fetch;
   /** Deployed app version stamped on every ingest payload. */
   release?: string;
@@ -1409,6 +1417,17 @@ export class Lemma {
     });
   }
 
+  /** The headers every request sends: identity, then credentials, then `extra`. */
+  private requestHeaders(
+    extra: Record<string, string> = {},
+  ): Record<string, string> {
+    return {
+      "User-Agent": SDK_USER_AGENT,
+      Authorization: `Bearer ${this.apiKey}`,
+      ...extra,
+    };
+  }
+
   private async fetchIngestStatus(
     otelTraceId: string,
   ): Promise<IngestStatus | null> {
@@ -1419,7 +1438,7 @@ export class Lemma {
     try {
       return await withIngestTimeout(async (signal) => {
         const response = await this.fetchImpl(url, {
-          headers: { Authorization: `Bearer ${this.apiKey}` },
+          headers: this.requestHeaders(),
           signal,
         });
         if (!response.ok) return null;
@@ -1566,10 +1585,7 @@ export class Lemma {
   private postIngest(body: string, signal: AbortSignal): Promise<Response> {
     return this.fetchImpl(`${this.baseUrl}${INGEST_PATH}`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: this.requestHeaders({ "Content-Type": "application/json" }),
       body,
       signal,
     });

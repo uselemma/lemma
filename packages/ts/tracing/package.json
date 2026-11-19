@@ -35,10 +35,11 @@
     "LICENSE"
   ],
   "scripts": {
-    "type-check": "tsc --noEmit",
-    "build": "tsc",
+    "prepare": "node scripts/write-version.mjs",
+    "type-check": "node scripts/write-version.mjs && tsc --noEmit",
+    "build": "node scripts/write-version.mjs && tsc",
     "clean": "rm -rf dist",
-    "test": "vitest run",
+    "test": "node scripts/write-version.mjs && vitest run",
     "prepublishOnly": "pnpm run type-check && pnpm run build"
   },
   "dependencies": {},
