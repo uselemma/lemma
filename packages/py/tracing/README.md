@@ -157,10 +157,16 @@ tree for display). Retries of the same complete payload are safe — already-sto
 span IDs are skipped — so a failed send can be retried as-is. It raises on a
 non-2xx response and never mutates the trace's status.
 
-Automatic delivery (`trace` / `async_trace`) fails open: a Lemma ingest
-4xx/5xx or network error is logged in debug mode and dropped so it cannot fail
-the caller's application. LangChain and OpenAI Agents flush through this path.
-Use `ingest()` when you need a failed send to raise so you can retry.
+Automatic delivery (`trace` / `async_trace`) fails open so it cannot fail the
+caller's application. The default transport times out a stalled socket after
+10 seconds. A network error, timeout, 408, 429, or 5xx is retried twice with
+backoff; when every attempt fails, or Lemma rejects the trace with another 4xx,
+the trace is dropped with a warning on the `uselemma_tracing.client` logger.
+The first drop names the trace ID and the reason; later drops are counted into
+one line per minute, and `LEMMA_DEBUG=1` logs each one. LangChain and OpenAI
+Agents flush through this path. Use `ingest()` when you need a failed send to
+raise so you can retry: it sends once and does not retry. `TraceHandle.end()`
+delivers through `ingest()`, so a failed send raises there too.
 
 ## Cross-process turns
 
@@ -385,7 +391,8 @@ lemma = Lemma(before_send=scrub)
 ```
 
 If `before_send` raises, `ingest()` raises so you can retry; automatic
-delivery (`trace` / LangChain flush) fails open and does not send. Returning
+delivery (`trace` / LangChain flush) fails open, does not send, and logs a
+dropped-trace warning. Returning
 `None` is a successful drop on both paths.
 
 **Structural keys** identify, time, and classify the tree. Redactors must

@@ -236,7 +236,9 @@ Return values are captured automatically. Use `trace.output()` only when the rec
   </Tab>
 </Tabs>
 
-If the callback throws, the SDK records the trace as failed, sends it to Lemma, and rethrows the original error. Automatic delivery (`trace` / `async_trace` / `TraceHandle.end()`) fails open: a Lemma ingest 4xx/5xx or network error is logged in debug mode and dropped, so it cannot fail the caller’s application or replace the original error. A transport failure on a successful run is not recorded as an agent failure. Use `ingest()` when you need a failed send to raise so you can retry.
+If the callback throws, the SDK records the trace as failed, sends it to Lemma, and rethrows the original error. Automatic delivery fails open, so a Lemma outage can’t fail your application or replace the original error. It covers `trace()` in both SDKs, `async_trace()` in Python, and `TraceHandle.end()` in TypeScript. A transport failure on a successful run is not recorded as an agent failure.
+
+Each send times out after 10 seconds. Automatic delivery retries a network error, a timeout, a 408, a 429, or a 5xx twice with backoff, waiting at most 2 seconds each time, including a `Retry-After` from Lemma. When every attempt fails, or Lemma rejects the trace with another 4xx, the SDK drops the trace and logs a warning: `console.warn` in TypeScript, the `uselemma_tracing.client` logger in Python. The first dropped trace warns with its ID. Later drops are counted and reported in one line per minute, so an outage or a bad key can’t flood your logs, and a count still pending when the process exits is logged then. With `LEMMA_DEBUG=1`, every dropped trace is logged. In Python, the timeout applies to the default transport; a custom `transport` sets its own. Use `ingest()` when you need a failed send to raise so you can retry: it sends once and does not retry. In Python, `TraceHandle.end()` delivers through `ingest()`, so it also sends once and raises on a non-2xx response or a network error.
 
 ## Pass trace context to helpers
 
