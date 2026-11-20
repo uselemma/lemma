@@ -157,10 +157,32 @@ tree for display). Retries of the same complete payload are safe — already-sto
 span IDs are skipped — so a failed send can be retried as-is. It raises on a
 non-2xx response and never mutates the trace's status.
 
-Automatic delivery (`trace` / `async_trace`) fails open: a Lemma ingest
-4xx/5xx or network error is logged in debug mode and dropped so it cannot fail
-the caller's application. LangChain and OpenAI Agents flush through this path.
-Use `ingest()` when you need a failed send to raise so you can retry.
+Automatic delivery (`trace` / `async_trace`) fails open so it cannot fail the
+caller's application. The default transport times out a stalled socket after 10
+seconds. A network error, timeout, 408, 429, or 5xx is retried twice with
+backoff; when every attempt fails, or Lemma rejects the trace with another 4xx,
+the trace is dropped with a warning on the `uselemma_tracing` logger. The first
+drop names the trace ID and the reason; drops in the minute after a warning are
+counted, the next warning says how many, and `LEMMA_DEBUG=1` logs each one.
+LangChain and OpenAI Agents flush through this path. `trace` and `async_trace`
+wait for delivery, retries included, before they return; `async_trace` waits on
+the SDK's own worker threads, so retries block neither the event loop nor its
+default executor. Up to `min(32, CPU count + 4)` of those deliveries run at
+once; during an outage, more queue, and each is still delivered or reported. If
+your own timeout or cancellation ends the call while delivery runs, that call's
+result is lost, though the trace is still delivered. An `async_trace` cancelled
+while its callback runs doesn't wait for delivery: the cancellation reaches you
+at once and the trace is delivered in the background. Use `ingest()` when you
+need a failed send to raise so you can retry: it sends once and does not retry.
+`TraceHandle.end()` delivers through `ingest()`, so a failed send raises there
+too.
+
+A serverless runtime that freezes the process once your handler returns can
+lose the background upload of a cancelled `async_trace`. Put the timeout inside
+the callback instead, with `asyncio.wait_for()` (or `asyncio.timeout()` on
+3.11+): `async_trace` then sees a `TimeoutError`, not a cancellation, and
+uploads the failed run before it returns. That adds the upload to your
+handler's run time, up to 34 seconds while Lemma is unreachable.
 
 ## Cross-process turns
 
@@ -237,9 +259,17 @@ become Lemma generations, function spans become Lemma tool spans, and parent
 IDs are preserved so tools stay nested under the generation or agent span that
 called them.
 
-Pass OpenAI Agents `group_id` for `thread_id` and metadata `user_id` /
-`userId` for `user_id`. Call `force_flush()` / `shutdown()` to finalize open
-traces once.
+Pass OpenAI Agents `group_id` for `thread_id` and metadata `user_id` / `userId`
+for `user_id`. Call `force_flush()` / `shutdown()` to finalize open traces
+once. In async code the processor hands each delivery to a worker pool, so
+await `aforce_flush()` before a short-lived process returns; it waits without
+blocking the event loop. `aforce_flush()` and `force_flush()` wait up to 34
+seconds for deliveries still queued, then drop the rest with one warning; a
+delivery already sending continues after they return. Process exit drops queued
+deliveries at the same deadline, then lets a delivery already sending finish,
+which can take up to 34 seconds more. At most 1,000 deliveries wait at once,
+which bounds memory while Lemma is unreachable; a trace that finishes past that
+is dropped with a warning.
 
 Enable debug mode to validate live span shape while developing:
 
@@ -255,16 +285,19 @@ without them.
 
 ## LangChain and LangGraph
 
-Install the optional integration dependency and pass `langchain()` as a callback
-handler. Each root run owns one Lemma trace with current-turn input, final
-output or root error, promoted `thread_id` / `user_id`, typed nested
+Install the optional integration dependency and pass `langchain()` as a
+callback handler. Each root run owns one Lemma trace with current-turn input,
+final output or root error, promoted `thread_id` / `user_id`, typed nested
 generations/tools/spans, and real wall-clock bounds. Call `flush()` /
-`shutdown()` to finalize open traces immediately. On long-lived hosts,
-traces that stay idle (no child start/end) past `open_trace_ttl` (default
-2 hours) are finalized and sent, swept from every `on_*_start` at most
-every `eviction_interval` (default 5 minutes). A still-active long run is
-not evicted. Pass `open_trace_ttl=None` to disable. Stale traces are sent
-(same payload as `flush()`), not dropped.
+`shutdown()` to finalize open traces immediately. In async code (`ainvoke()`,
+or a sync `invoke()` inside an event loop), delivery goes to the worker pool
+without waiting, so await `aflush()` before a short-lived process returns; it
+waits for those deliveries as OpenAI Agents' `aforce_flush()` does, without
+blocking the event loop. On long-lived hosts, traces that stay idle (no child
+start/end) past `open_trace_ttl` (default 2 hours) are finalized and sent,
+swept from every `on_*_start` at most every `eviction_interval` (default 5
+minutes). A still-active long run is not evicted. Pass `open_trace_ttl=None` to
+disable. Stale traces are sent (same payload as `flush()`), not dropped.
 
 ```bash
 pip install "uselemma-tracing[langchain]" langchain-openai
@@ -385,7 +418,8 @@ lemma = Lemma(before_send=scrub)
 ```
 
 If `before_send` raises, `ingest()` raises so you can retry; automatic
-delivery (`trace` / LangChain flush) fails open and does not send. Returning
+delivery (`trace` / LangChain flush) fails open, does not send, and logs a
+dropped-trace warning. Returning
 `None` is a successful drop on both paths.
 
 **Structural keys** identify, time, and classify the tree. Redactors must

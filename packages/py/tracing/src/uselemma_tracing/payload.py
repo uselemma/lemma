@@ -43,7 +43,7 @@ _NESTED_CONTENT_MAPS = frozenset({"metadata", "attributes"})
 
 
 def dumps_payload(value: Any) -> str:
-    """Serialize the way ``Lemma._send`` does, so size checks match the POST."""
+    """Serialize the way ``Lemma._build_ingest_body`` does, so size checks match the POST."""
     return json.dumps(value, default=str)
 
 

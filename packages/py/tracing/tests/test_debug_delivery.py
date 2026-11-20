@@ -2,7 +2,6 @@ from uselemma_tracing.debug_delivery import (
     PRODUCTION_BASE_URL,
     api_key_suffix,
     build_config_warnings,
-    ingest_failure_hint,
     is_valid_project_id,
     pick_response_headers,
 )
@@ -25,12 +24,7 @@ def test_build_config_warnings():
     ]
 
 
-def test_ingest_failure_hint():
-    assert "LEMMA_API_KEY" in ingest_failure_hint(401)
-    assert ingest_failure_hint(503) is None
-
-
 def test_pick_response_headers():
     assert pick_response_headers(
-        {"CF-Ray": "abc123", "Content-Type": "application/json"}
+        {"cf-ray": "abc123", "content-type": "application/json"}
     ) == {"cf-ray": "abc123"}

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import json
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from uselemma_tracing import disable_debug_mode, enable_debug_mode, openai_agents
+from uselemma_tracing import disable_debug_mode, enable_debug_mode, off_loop, openai_agents
 from uselemma_tracing.client import Lemma
 
 PROJECT_ID = "10000000-0000-0000-0000-000000000001"
@@ -1000,3 +1003,182 @@ def test_openai_agents_force_flush_does_not_raise_on_ingest_503():
     processor.on_trace_start(FakeTrace(trace_id="trace_503", name="agent"))
     processor.on_trace_end(FakeTrace(trace_id="trace_503", name="agent"))
     processor.force_flush()
+
+
+def test_openai_agents_trace_end_outside_an_event_loop_delivers_inline():
+    calling_thread = threading.get_ident()
+    send_threads = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: send_threads.append(threading.get_ident())
+        or (201, "{}"),
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_sync", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_sync", name="agent"))
+
+    assert send_threads == [calling_thread]
+
+
+async def test_openai_agents_trace_end_on_the_event_loop_delivers_off_it():
+    loop_thread = threading.get_ident()
+    send_threads = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: send_threads.append(threading.get_ident())
+        or (201, "{}"),
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_async", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_async", name="agent"))
+    processor.force_flush()
+
+    assert len(send_threads) == 1
+    assert send_threads[0] != loop_thread
+
+
+def _lock_checking_processor():
+    held = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: held.append(processor._lock._is_owned()) or (201, "{}"),
+    )
+    processor = openai_agents(lemma)
+    return processor, held
+
+
+def test_openai_agents_trace_end_delivers_after_releasing_the_lock():
+    processor, held = _lock_checking_processor()
+    processor.on_trace_start(FakeTrace(trace_id="trace_lock", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_lock", name="agent"))
+
+    assert held == [False]
+
+
+def test_openai_agents_force_flush_delivers_after_releasing_the_lock():
+    processor, held = _lock_checking_processor()
+    processor.on_trace_start(FakeTrace(trace_id="trace_open_1", name="agent"))
+    processor.on_trace_start(FakeTrace(trace_id="trace_open_2", name="agent"))
+    processor.force_flush()
+
+    assert held == [False, False]
+
+
+async def test_openai_agents_force_flush_waits_for_handed_off_deliveries():
+    release = threading.Event()
+    sent = []
+
+    def transport(*_args):
+        release.wait(timeout=5)
+        sent.append(True)
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_flush", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_flush", name="agent"))
+    threading.Timer(0.05, release.set).start()
+    processor.force_flush()
+
+    assert sent == [True]
+
+
+async def test_openai_agents_aforce_flush_waits_without_blocking_the_loop():
+    release = threading.Event()
+    sent = []
+
+    def transport(*_args):
+        release.wait(timeout=5)
+        sent.append(True)
+        return 201, "{}"
+
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=transport)
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_aflush", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_aflush", name="agent"))
+
+    flush = asyncio.create_task(processor.aforce_flush())
+    # The loop keeps running while the delivery is held in the transport.
+    await asyncio.sleep(0.05)
+    assert not flush.done()
+    assert sent == []
+    release.set()
+    await asyncio.wait_for(flush, 5)
+
+    assert sent == [True]
+
+
+async def test_openai_agents_aforce_flush_sends_open_traces_once_off_the_loop():
+    loop_thread = threading.get_ident()
+    send_threads = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: send_threads.append(threading.get_ident())
+        or (201, "{}"),
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_open", name="agent"))
+    await processor.aforce_flush()
+    processor.on_trace_end(FakeTrace(trace_id="trace_open", name="agent"))
+    await processor.aforce_flush()
+
+    assert len(send_threads) == 1
+    assert send_threads[0] != loop_thread
+
+
+async def test_openai_agents_drops_a_trace_past_the_delivery_backlog(
+    monkeypatch, caplog
+):
+    monkeypatch.setattr(off_loop, "OFF_LOOP_MAX_BACKLOG", 0)
+    sent = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: sent.append(True) or (201, "{}"),
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_full", name="agent"))
+    lemma_trace_id = processor._traces["trace_full"].context.id
+    processor.on_trace_end(FakeTrace(trace_id="trace_full", name="agent"))
+    processor.force_flush()
+
+    assert sent == []
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name.startswith("uselemma_tracing")
+    ]
+    assert len(warnings) == 1
+    assert warnings[0].startswith(
+        f"uselemma-tracing: dropped trace {lemma_trace_id} before sending: "
+        "delivery backlog full."
+    )
+
+
+_request_id = contextvars.ContextVar("request_id")
+
+
+async def test_openai_agents_handed_off_delivery_sees_the_callers_context_vars():
+    _request_id.set("req-1")
+    seen = []
+
+    def before_send(payload):
+        seen.append(_request_id.get(None))
+        return payload
+
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=lambda *_args: (201, "{}"),
+        before_send=before_send,
+    )
+    processor = openai_agents(lemma)
+    processor.on_trace_start(FakeTrace(trace_id="trace_ctx", name="agent"))
+    processor.on_trace_end(FakeTrace(trace_id="trace_ctx", name="agent"))
+    processor.force_flush()
+
+    assert seen == ["req-1"]

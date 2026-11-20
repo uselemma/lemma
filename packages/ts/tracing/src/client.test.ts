@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { captureWarnings, jsonBody, withFakeTimers } from "../test-helpers";
 import { Lemma, TraceContext } from "./client";
+import { INGEST_MAX_ATTEMPTS } from "./delivery";
 import { disableDebugMode, enableDebugMode } from "./debug-mode";
-
-function jsonBody(call: unknown[]) {
-  return JSON.parse(String((call[1] as RequestInit).body));
-}
 
 describe("Lemma", () => {
   it("posts a completed trace with one-off generation and tool events", async () => {
@@ -562,8 +560,6 @@ describe("Lemma", () => {
     expect(warn).toHaveBeenCalledWith(
       `@uselemma/tracing: unknown trace id "${trace.id}"; skipping span`,
     );
-
-    warn.mockRestore();
   });
 
   it("supports client-level detached observations by trace id", async () => {
@@ -624,8 +620,6 @@ describe("Lemma", () => {
     expect(warn).toHaveBeenCalledWith(
       "@uselemma/tracing: generation handle requires traceId; skipping generation",
     );
-
-    warn.mockRestore();
   });
 
   it("warns and no-ops detached observations for unknown trace ids", async () => {
@@ -644,8 +638,6 @@ describe("Lemma", () => {
     expect(warn).toHaveBeenCalledWith(
       '@uselemma/tracing: unknown trace id "missing-trace"; skipping span',
     );
-
-    warn.mockRestore();
   });
 
   it("warns and no-ops detached child observations without parentSpanId", async () => {
@@ -679,8 +671,6 @@ describe("Lemma", () => {
     expect(warn).toHaveBeenCalledWith(
       "@uselemma/tracing: tool has a parent, but parentSpanId was not provided; skipping tool",
     );
-
-    warn.mockRestore();
   });
 
   it("flushes failed traces and rethrows the original error", async () => {
@@ -710,6 +700,7 @@ describe("Lemma", () => {
   });
 
   it("fails open when automatic trace ingest returns a non-2xx", async () => {
+    captureWarnings();
     const fetchMock = vi.fn(async () => new Response("nope", { status: 503 }));
     const lemma = new Lemma({
       apiKey: "key",
@@ -718,9 +709,9 @@ describe("Lemma", () => {
     });
 
     await expect(
-      lemma.trace("support-agent", async () => "ok"),
+      withFakeTimers(() => lemma.trace("support-agent", async () => "ok")),
     ).resolves.toBe("ok");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(INGEST_MAX_ATTEMPTS);
   });
 
   it("rethrows the original error when the failed trace cannot be delivered", async () => {
@@ -732,15 +723,18 @@ describe("Lemma", () => {
     });
 
     const agentError = new Error("tool timed out");
+    captureWarnings();
 
     await expect(
-      lemma.trace("support-agent", async () => {
-        throw agentError;
-      }),
+      withFakeTimers(() =>
+        lemma.trace("support-agent", async () => {
+          throw agentError;
+        }),
+      ),
     ).rejects.toBe(agentError);
 
     // The failed trace was still attempted, and recorded the agent's error.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(INGEST_MAX_ATTEMPTS);
     const body = jsonBody(fetchMock.mock.calls[0]);
     expect(body.trace.status).toBe("ERROR");
     expect(body.trace.error).toBe("tool timed out");
@@ -757,11 +751,14 @@ describe("Lemma", () => {
     });
 
     const agentError = new Error("premature termination");
+    captureWarnings();
 
     await expect(
-      lemma.trace("support-agent", async () => {
-        throw agentError;
-      }),
+      withFakeTimers(() =>
+        lemma.trace("support-agent", async () => {
+          throw agentError;
+        }),
+      ),
     ).rejects.toBe(agentError);
   });
 
@@ -774,18 +771,22 @@ describe("Lemma", () => {
       fetch: fetchMock as typeof fetch,
     });
 
+    captureWarnings();
     await expect(
-      lemma.trace("support-agent", async () => "ok"),
+      withFakeTimers(() => lemma.trace("support-agent", async () => "ok")),
     ).resolves.toBe("ok");
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const body = jsonBody(fetchMock.mock.calls[0]);
-    expect(body.trace.status).toBeUndefined();
-    expect(body.trace.error).toBeNull();
-    expect(body.trace.output).toBe("ok");
+    expect(fetchMock).toHaveBeenCalledTimes(INGEST_MAX_ATTEMPTS);
+    for (const call of fetchMock.mock.calls) {
+      const body = jsonBody(call);
+      expect(body.trace.status).toBeUndefined();
+      expect(body.trace.error).toBeNull();
+      expect(body.trace.output).toBe("ok");
+    }
   });
 
   it("fails open when automatic trace ingest fetch rejects", async () => {
+    captureWarnings();
     const fetchMock = vi.fn(async () => {
       throw new Error("network down");
     });
@@ -796,8 +797,9 @@ describe("Lemma", () => {
     });
 
     await expect(
-      lemma.trace("support-agent", async () => "ok"),
+      withFakeTimers(() => lemma.trace("support-agent", async () => "ok")),
     ).resolves.toBe("ok");
+    expect(fetchMock).toHaveBeenCalledTimes(INGEST_MAX_ATTEMPTS);
   });
 
   it("preserves the callback error when ingest also fails", async () => {
@@ -808,10 +810,13 @@ describe("Lemma", () => {
       fetch: fetchMock as typeof fetch,
     });
 
+    captureWarnings();
     await expect(
-      lemma.trace("support-agent", async () => {
-        throw new Error("boom");
-      }),
+      withFakeTimers(() =>
+        lemma.trace("support-agent", async () => {
+          throw new Error("boom");
+        }),
+      ),
     ).rejects.toThrow("boom");
   });
 
@@ -823,8 +828,12 @@ describe("Lemma", () => {
       fetch: fetchMock as typeof fetch,
     });
 
+    const warn = captureWarnings();
     const trace = lemma.trace({ name: "support-agent" });
-    await expect(trace.end({ output: "ok" })).resolves.toBeUndefined();
+    await expect(
+      withFakeTimers(() => trace.end({ output: "ok" })),
+    ).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 
   it("ingest sends a self-built trace once, merging by default", async () => {
@@ -910,6 +919,8 @@ describe("Lemma", () => {
     await expect(
       lemma.ingest(context, { startedAt: new Date() }),
     ).rejects.toThrow("failed to ingest trace (503): nope");
+    // Producers keep their own retry backlog, so ingest() sends once.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     // A transport failure must not fabricate an error status on the trace.
     expect(jsonBody(fetchMock.mock.calls[0]).trace.status).toBeUndefined();
   });
@@ -1124,9 +1135,13 @@ describe("Lemma", () => {
       fetch: fetchMock as typeof fetch,
     });
 
+    captureWarnings();
+
     try {
       await expect(
-        lemma.trace({ name: "support-agent" }, async () => "ok"),
+        withFakeTimers(() =>
+          lemma.trace({ name: "support-agent" }, async () => "ok"),
+        ),
       ).resolves.toBe("ok");
 
       const failedLog = spy.mock.calls.find((call) =>
@@ -1134,10 +1149,17 @@ describe("Lemma", () => {
       );
       expect(failedLog?.[1]).toMatchObject({
         status: 429,
-        hint: "ingest rate limit exceeded; retry with backoff",
+        hint: "ingest rate limit exceeded; lower the trace rate if it persists",
         "cf-ray": "ray-429",
         server: "cloudflare",
         projectId: "10000000-0000-0000-0000-000000000001",
+      });
+      const retryLog = spy.mock.calls.find((call) =>
+        String(call[0]).includes("retrying trace ingest"),
+      );
+      expect(retryLog?.[1]).toMatchObject({
+        attempt: 1,
+        maxAttempts: INGEST_MAX_ATTEMPTS,
       });
     } finally {
       disableDebugMode();
@@ -1156,10 +1178,13 @@ describe("Lemma", () => {
       projectId: "10000000-0000-0000-0000-000000000001",
       fetch: fetchMock as typeof fetch,
     });
+    captureWarnings();
 
     try {
       await expect(
-        lemma.trace({ name: "support-agent" }, async () => "ok"),
+        withFakeTimers(() =>
+          lemma.trace({ name: "support-agent" }, async () => "ok"),
+        ),
       ).resolves.toBe("ok");
 
       const failedLog = spy.mock.calls.find((call) =>
@@ -1454,4 +1479,3 @@ describe("Lemma", () => {
     });
   });
 });
-

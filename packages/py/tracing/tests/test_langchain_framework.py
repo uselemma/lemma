@@ -8,7 +8,9 @@ No network: scripted chat model + in-memory transport.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import os
+import threading
 from typing import Any
 
 import pytest
@@ -75,7 +77,7 @@ def test_callback_manager_accepts_handler():
     handler = _handler([])
     manager = CallbackManager.configure(inheritable_callbacks=[handler])
     assert manager.handlers
-    assert manager.handlers[0].run_inline is False
+    assert manager.handlers[0].run_inline is True
 
 
 def test_runnable_ainvoke_sends_one_trace():
@@ -100,6 +102,74 @@ def test_runnable_ainvoke_sends_one_trace():
     assert trace["name"] == "support-agent"
     assert trace["thread_id"] == "thread-1"
     assert trace["user_id"] == "user-1"
+
+
+def _gated_handler():
+    calls = []
+    send_threads = []
+    release = threading.Event()
+    record = make_transport(calls)
+
+    def transport(url, headers, body):
+        send_threads.append(threading.current_thread().name)
+        release.wait(timeout=5)
+        return record(url, headers, body)
+
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=transport,
+        agent_name="support-agent",
+    )
+    return handler, calls, send_threads, release
+
+
+def test_ainvoke_hands_delivery_to_the_sdk_pool_without_waiting():
+    handler, calls, send_threads, release = _gated_handler()
+    chain = RunnableLambda(lambda text: f"echo:{text}")
+
+    result = asyncio.run(chain.ainvoke("hello", config={"callbacks": [handler]}))
+
+    # ainvoke returned while the delivery is still held in the transport.
+    assert result == "echo:hello"
+    assert calls == []
+    release.set()
+    handler.flush()
+    assert len(calls) == 1
+    # The SDK's fire-and-forget pool, not the loop's default executor.
+    [thread_name] = send_threads
+    assert thread_name.startswith("uselemma-delivery_")
+    assert not thread_name.startswith("asyncio_")
+
+
+def test_flush_waits_for_an_ainvoke_delivery():
+    handler, calls, _send_threads, release = _gated_handler()
+    chain = RunnableLambda(lambda text: f"echo:{text}")
+
+    asyncio.run(chain.ainvoke("hello", config={"callbacks": [handler]}))
+    threading.Timer(0.1, release.set).start()
+    handler.flush()
+
+    assert len(calls) == 1
+
+
+def test_aflush_waits_for_an_ainvoke_delivery_without_blocking_the_loop():
+    handler, calls, _send_threads, release = _gated_handler()
+    chain = RunnableLambda(lambda text: f"echo:{text}")
+
+    async def run():
+        await chain.ainvoke("hello", config={"callbacks": [handler]})
+        flush = asyncio.create_task(handler.aflush())
+        # The loop keeps running while the delivery is held in the transport.
+        await asyncio.sleep(0.05)
+        assert not flush.done()
+        assert calls == []
+        release.set()
+        await asyncio.wait_for(flush, 5)
+
+    asyncio.run(run())
+
+    assert len(calls) == 1
 
 
 def test_create_agent_ainvoke_is_one_root_with_tool_and_generation():
@@ -267,3 +337,33 @@ def test_langgraph_ainvoke_is_one_root():
     assert trace["name"] == "support-graph"
     assert trace["thread_id"] == "thread-9"
     assert any(span["type"] == "generation" for span in trace["spans"])
+
+
+_request_id = contextvars.ContextVar("request_id")
+
+
+def test_ainvoke_delivery_sees_the_callers_context_vars():
+    seen = []
+
+    def before_send(payload):
+        seen.append(_request_id.get(None))
+        return payload
+
+    calls = []
+    handler = langchain(
+        api_key="key",
+        project_id=PROJECT_ID,
+        transport=make_transport(calls),
+        before_send=before_send,
+    )
+    chain = RunnableLambda(lambda text: text)
+
+    async def run():
+        _request_id.set("req-1")
+        return await chain.ainvoke("hello", config={"callbacks": [handler]})
+
+    asyncio.run(run())
+    handler.flush()
+
+    assert len(calls) == 1
+    assert seen == ["req-1"]

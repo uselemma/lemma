@@ -7,6 +7,10 @@ from datetime import datetime, timezone
 import pytest
 
 from uselemma_tracing.client import Lemma, SpanHandle, TraceContext
+from uselemma_tracing.delivery import (
+    INGEST_MAX_ATTEMPTS,
+    INGEST_REQUEST_TIMEOUT_SECONDS,
+)
 from uselemma_tracing.debug_mode import disable_debug_mode, enable_debug_mode
 
 PROJECT_ID = "10000000-0000-0000-0000-000000000001"
@@ -14,6 +18,7 @@ PROJECT_ID = "10000000-0000-0000-0000-000000000001"
 
 def test_default_urllib_transport_identifies_the_sdk(monkeypatch):
     requests = []
+    timeouts = []
 
     class Response:
         status = 201
@@ -28,8 +33,9 @@ def test_default_urllib_transport_identifies_the_sdk(monkeypatch):
         def __exit__(self, *_args):
             return False
 
-    def urlopen(request):
+    def urlopen(request, timeout=None):
         requests.append(request)
+        timeouts.append(timeout)
         return Response()
 
     monkeypatch.setattr("uselemma_tracing.client.urllib.request.urlopen", urlopen)
@@ -50,6 +56,7 @@ def test_default_urllib_transport_identifies_the_sdk(monkeypatch):
         request.get_header("User-agent").startswith("uselemma-tracing/")
         for request in requests
     )
+    assert timeouts == [INGEST_REQUEST_TIMEOUT_SECONDS] * 2
 
 
 def test_custom_transport_receives_sdk_user_agent():
@@ -560,6 +567,8 @@ def test_ingest_surfaces_failures_without_fabricating_status():
     with pytest.raises(RuntimeError, match="failed to ingest trace"):
         lemma.ingest(context, started_at=_now_utc())
 
+    # Producers keep their own retry backlog, so ingest() sends once.
+    assert len(calls) == 1
     assert calls[0]["trace"]["status"] is None
 
 
@@ -1005,7 +1014,7 @@ def test_trace_reraises_the_agent_error_when_delivery_fails():
         lemma.trace("support-agent", agent)
 
     # The failed trace was still attempted, and recorded the agent's error.
-    assert len(bodies) == 1
+    assert len(bodies) == INGEST_MAX_ATTEMPTS
     assert bodies[0]["trace"]["status"] == "ERROR"
     assert bodies[0]["trace"]["error"] == "_AgentError: tool timed out"
 
@@ -1022,7 +1031,7 @@ async def test_async_trace_reraises_the_agent_error_when_delivery_fails():
     with pytest.raises(_AgentError, match="premature termination"):
         await lemma.async_trace("support-agent", agent)
 
-    assert len(bodies) == 1
+    assert len(bodies) == INGEST_MAX_ATTEMPTS
     assert bodies[0]["trace"]["error"] == "_AgentError: premature termination"
 
 
@@ -1035,10 +1044,11 @@ def test_trace_does_not_resend_a_successful_run_as_a_failed_one():
 
     assert lemma.trace("support-agent", lambda _trace: "ok") == "ok"
 
-    assert len(bodies) == 1
-    assert bodies[0]["trace"].get("status") is None
-    assert bodies[0]["trace"].get("error") is None
-    assert bodies[0]["trace"]["output"] == "ok"
+    assert len(bodies) == INGEST_MAX_ATTEMPTS
+    for body in bodies:
+        assert body["trace"].get("status") is None
+        assert body["trace"].get("error") is None
+        assert body["trace"]["output"] == "ok"
 
 
 def test_before_send_can_scrub_without_a_custom_transport():
@@ -1093,6 +1103,7 @@ def test_before_send_none_drops_without_calling_transport():
 
 def test_before_send_unchanged_uses_default_transport_user_agent(monkeypatch):
     requests = []
+    timeouts = []
 
     class Response:
         status = 201
@@ -1107,8 +1118,9 @@ def test_before_send_unchanged_uses_default_transport_user_agent(monkeypatch):
         def __exit__(self, *_args):
             return False
 
-    def urlopen(request):
+    def urlopen(request, timeout=None):
         requests.append(request)
+        timeouts.append(timeout)
         return Response()
 
     monkeypatch.setattr("uselemma_tracing.client.urllib.request.urlopen", urlopen)

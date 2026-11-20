@@ -270,6 +270,7 @@ Use debug mode like this:
 2. Await `lemma.trace(...)`; do not fire and forget.
 3. For TypeScript handles, call and await `trace.end(...)` in `finally` or the terminal callback.
 4. Avoid recording child work after the root callback has returned unless using detached recording by ID and an explicit `trace.end(...)` path.
+5. In Python async code, move a timeout that wraps `lemma.async_trace(...)` inside the callback. A cancelled `async_trace` uploads in the background, so the runtime can freeze before `trace sent` appears; a timeout inside the callback raises `TimeoutError`, and `async_trace` uploads the run before it re-raises.
 
 ## Finish With the Contract
 

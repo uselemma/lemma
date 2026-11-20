@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { jsonBody } from "../test-helpers";
+import { captureWarnings, jsonBody, withFakeTimers } from "../test-helpers";
 import { Lemma } from "./client";
+import { INGEST_MAX_ATTEMPTS } from "./delivery";
 import { vercelAI } from "./vercel-ai";
 
 describe("vercelAI", () => {
@@ -1778,8 +1779,14 @@ describe("vercelAI", () => {
       model: { provider: "openai", modelId: "gpt-4o" },
       prompt: "hello",
     });
-    await integration.onEnd?.({ text: "hi" });
-    await expect(integration.flush()).resolves.toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const warn = captureWarnings();
+    await expect(
+      withFakeTimers(async () => {
+        await integration.onEnd?.({ text: "hi" });
+        await integration.flush();
+      }),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(INGEST_MAX_ATTEMPTS);
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });

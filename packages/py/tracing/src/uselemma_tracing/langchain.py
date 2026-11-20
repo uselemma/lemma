@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .client import Lemma, SpanHandle, TraceContext, _duration_ms, _now
+from . import off_loop
 from .langchain_eviction import (
     DEFAULT_EVICTION_INTERVAL,
     DEFAULT_OPEN_TRACE_TTL,
@@ -643,6 +644,11 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
     """
 
     name = "lemma"
+    # Async runs call this handler on the event loop's thread instead of an
+    # executor thread, so finalizing hands delivery to the SDK's pool and
+    # ainvoke() does not wait for it. The callbacks only record spans in
+    # memory; delivery is the one blocking step.
+    run_inline = True
 
     def __init__(
         self,
@@ -895,13 +901,13 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
 
         if stored.root_error:
             stored.context.fail(stored.root_error)
-            self.lemma._deliver_automatic(stored.context, started_at, ended_at)
-            return
-
-        if stored.root_output is not None:
+        elif stored.root_output is not None:
             stored.context.output(stored.root_output)
-
-        self.lemma._deliver_automatic(stored.context, started_at, ended_at)
+        # Called on the event loop's thread for every ainvoke(), and for a sync
+        # invoke() inside a running loop; delivery is handed off in both cases.
+        self.lemma._deliver_automatic_without_blocking_loop(
+            stored.context, started_at, ended_at
+        )
 
     def _maybe_finalize_owner(self, run: StoredRun, ended_at: datetime) -> None:
         if not run.owns_trace:
@@ -1457,7 +1463,19 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         self._maybe_finalize_owner(run, ended_at)
 
     def flush(self) -> None:
-        """Finalize all open owned traces (idempotent; does not resend)."""
+        """Finalize all open owned traces (idempotent; does not resend), then wait
+        for deliveries handed to the worker pool from a running event loop."""
+        self._finalize_open_traces()
+        # Process-wide: waits on every client's queued deliveries.
+        off_loop.wait_pending()
+
+    async def aflush(self) -> None:
+        """``flush()`` for async code: waits for the same deliveries without
+        blocking the event loop."""
+        self._finalize_open_traces()
+        await off_loop.await_pending()
+
+    def _finalize_open_traces(self) -> None:
         for trace_id, stored in list(self._traces.items()):
             self._finalize(trace_id, stored)
 

@@ -25,7 +25,7 @@ instrument_openai_agents()
 result = await Runner.run(agent, message)
 ```
 
-Optional: wrap with `trace(..., group_id=thread_id)` so the Agents SDK session id becomes Lemma `thread_id` (same grouping API Langfuse uses). Call `processor.force_flush()` in short-lived CLIs.
+Optional: wrap with `trace(..., group_id=thread_id)` so the Agents SDK session id becomes Lemma `thread_id` (same grouping API Langfuse uses). Await `processor.aforce_flush()` in short-lived CLIs.
 
 ## Trace shape
 

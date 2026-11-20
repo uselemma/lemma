@@ -1,4 +1,5 @@
 import json
+import threading
 
 from helpers import PROJECT_ID, make_transport
 from uselemma_tracing import langchain, langgraph
@@ -929,7 +930,7 @@ def test_handler_exposes_langchain_callback_flags():
         api_key="key",
         project_id=PROJECT_ID,
     )
-    assert handler.run_inline is False
+    assert handler.run_inline is True
     assert handler.raise_error is False
     assert handler.ignore_llm is False
     assert handler.ignore_chain is False
@@ -1423,3 +1424,46 @@ def test_long_running_trace_with_open_child_is_not_evicted():
     handler.on_chain_start({"name": "other"}, "later", run_id="other-1")
     assert "long-1" in handler._traces
     assert "llm-open" in handler._runs
+
+
+def _thread_recording_handler():
+    send_threads = []
+    calls = []
+    record = make_transport(calls)
+
+    def transport(url, headers, body):
+        send_threads.append(threading.get_ident())
+        return record(url, headers, body)
+
+    handler = langchain(api_key="key", project_id=PROJECT_ID, transport=transport)
+    return handler, send_threads
+
+
+def test_langchain_delivers_inline_without_a_running_loop():
+    handler, send_threads = _thread_recording_handler()
+    handler.on_chain_start({"name": "support-agent"}, "hi", run_id="chain-1")
+    handler.on_chain_end("done", run_id="chain-1")
+
+    assert send_threads == [threading.get_ident()]
+
+
+async def test_langchain_delivers_off_a_running_loop():
+    # A sync invoke() inside a running loop calls the handler on the loop thread.
+    handler, send_threads = _thread_recording_handler()
+    handler.on_chain_start({"name": "support-agent"}, "hi", run_id="chain-1")
+    handler.on_chain_end("done", run_id="chain-1")
+    handler.flush()
+
+    assert len(send_threads) == 1
+    assert send_threads[0] != threading.get_ident()
+
+
+async def test_langchain_aflush_sends_open_traces_once_off_the_loop():
+    handler, send_threads = _thread_recording_handler()
+    handler.on_chain_start({"name": "support-agent"}, "hi", run_id="chain-1")
+    await handler.aflush()
+    await handler.aflush()
+
+    assert len(send_threads) == 1
+    assert send_threads[0] != threading.get_ident()
+

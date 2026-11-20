@@ -22,7 +22,7 @@ async def call_agent(user_message: str):
 
 async def shutdown():
     # Finalize any still-open traces exactly once (safe if on_trace_end already ran).
-    processor.force_flush()
+    await processor.aforce_flush()
 
 
 # Equivalent without instrument helper:

@@ -3,7 +3,6 @@ import {
   buildConfigWarnings,
   EXPECTED_INGEST_SUCCESS_STATUS,
   type IngestStatus,
-  ingestFailureHint,
   INGEST_PATH,
   INGEST_STATUS_PATH,
   INGEST_STATUS_POLL_INTERVAL_MS,
@@ -11,14 +10,24 @@ import {
   isSuccessfulIngestStatus,
   parseIngestStatus,
   pickResponseHeaders,
-  sleep,
 } from "./debug-delivery";
 import {
   isDebugModeEnabled,
   isDebugVerifyEnabled,
   lemmaDebug,
 } from "./debug-mode";
-import { failureMessage } from "./error-message";
+import {
+  deliver,
+  type DeliveryFailure,
+  failedBeforeSending,
+  INGEST_MAX_ATTEMPTS,
+  INGEST_STRICT_ATTEMPTS,
+  ingestFailureHint,
+  sleep,
+  withIngestTimeout,
+} from "./delivery";
+import { reportDroppedTrace } from "./dropped-traces";
+import { describeError, failureMessage } from "./error-message";
 import { normalizeRelease } from "./release";
 import {
   attachResultUsage,
@@ -1055,14 +1064,9 @@ export class Lemma {
 
     let response: Response;
     try {
-      response = await this.fetchImpl(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body,
-      });
+      response = await withIngestTimeout((signal) =>
+        this.postIngest(body, signal),
+      );
     } catch {
       hints.push("ingest request failed (network error)");
       return {
@@ -1209,11 +1213,13 @@ export class Lemma {
     context: TraceContext,
     options: { startedAt: Date; endedAt?: Date },
   ): Promise<void> {
-    await this.flushTrace(
+    const failure = await this.sendTrace(
       context,
       options.startedAt,
       options.endedAt ?? new Date(),
+      INGEST_STRICT_ATTEMPTS,
     );
+    if (failure) throw failure.error;
   }
 
   recordSpan(options: DetachedSpanOptions): SpanHandle | NoopSpanHandle {
@@ -1411,14 +1417,17 @@ export class Lemma {
       `?project_id=${encodeURIComponent(this.projectId)}` +
       `&otel_trace_id=${encodeURIComponent(otelTraceId)}`;
     try {
-      const response = await this.fetchImpl(url, {
-        headers: { Authorization: `Bearer ${this.apiKey}` },
+      return await withIngestTimeout(async (signal) => {
+        const response = await this.fetchImpl(url, {
+          headers: { Authorization: `Bearer ${this.apiKey}` },
+          signal,
+        });
+        if (!response.ok) return null;
+        const data = (await response.json()) as {
+          status?: unknown;
+        };
+        return parseIngestStatus(data.status);
       });
-      if (!response.ok) return null;
-      const data = (await response.json()) as {
-        status?: unknown;
-      };
-      return parseIngestStatus(data.status);
     } catch {
       return null;
     }
@@ -1470,78 +1479,104 @@ export class Lemma {
   }
 
   /**
-   * Automatic SDK delivery. Catches transport / non-2xx so Lemma being down
-   * cannot fail the caller's app. {@link Lemma.ingest} uses {@link flushTrace}
-   * (strict) so queue/plugin producers can retry.
+   * Automatic SDK delivery. Retries transient failures, then fails open with
+   * a rate-limited warning so Lemma being down cannot fail the caller's app.
+   * {@link Lemma.ingest} sends once and throws, because queue/plugin producers
+   * keep their own retry backlog.
    */
   private async flushTraceAutomatic(
     context: TraceContext,
     startedAt: Date,
     endedAt: Date,
   ) {
-    try {
-      await this.flushTrace(context, startedAt, endedAt);
-    } catch {
-      // flushTrace already lemmaDebug'd "trace ingest failed".
-    }
+    const failure = await this.sendTrace(
+      context,
+      startedAt,
+      endedAt,
+      INGEST_MAX_ATTEMPTS,
+    );
+    if (failure) reportDroppedTrace(context.id, failure.cause);
   }
 
-  private async flushTrace(
+  /**
+   * Build, send, and check one trace; undefined when it was delivered. A
+   * payload that cannot be built comes back as a failure, so strict and
+   * automatic delivery handle it once.
+   */
+  private async sendTrace(
     context: TraceContext,
     startedAt: Date,
     endedAt: Date,
-  ) {
-    const payload = this.stampRelease(
-      context.toPayload(this.projectId, startedAt, endedAt),
+    maxAttempts: number,
+  ): Promise<DeliveryFailure | undefined> {
+    const built = this.buildIngestBody(context, startedAt, endedAt);
+    if (!built.ok) return built;
+    const result = await deliver(
+      (signal) => this.postIngest(built.body, signal),
+      { traceId: context.id, projectId: this.projectId },
+      maxAttempts,
     );
-    const body = JSON.stringify(payload);
-    const url = `${this.baseUrl}${INGEST_PATH}`;
-    lemmaDebug("client", "sending trace", {
-      traceId: payload.trace.id,
-      name: payload.trace.name,
-      spanCount: payload.trace.spans.length,
-      projectId: payload.project_id,
-      bodyBytes: new TextEncoder().encode(body).length,
-      requestedAt: new Date().toISOString(),
-      url,
-    });
-    let response: Response;
+    if (!result.ok) return result;
+    // Debug-only checks; the trace is already stored, so a failure here
+    // must neither fail the caller nor count as a dropped trace.
     try {
-      response = await this.fetchImpl(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body,
-      });
+      await this.afterTraceSent(built.payload, result.response);
     } catch (error) {
-      lemmaDebug("client", "trace ingest failed", {
-        traceId: payload.trace.id,
-        projectId: payload.project_id,
-        error: failureMessage(error) ?? String(error),
-      });
-      throw error;
-    }
-
-    const responseHeaders = pickResponseHeaders(response.headers);
-
-    if (!response.ok) {
-      const responseBody = await response.text().catch(() => "");
-      const hint = ingestFailureHint(response.status);
-      lemmaDebug("client", "trace ingest failed", {
-        traceId: payload.trace.id,
-        projectId: payload.project_id,
-        status: response.status,
-        body: responseBody,
-        ...responseHeaders,
-        ...(hint ? { hint } : {}),
-      });
-      throw new Error(
-        `@uselemma/tracing: failed to ingest trace (${response.status})${responseBody ? `: ${responseBody}` : ""}`,
+      console.warn(
+        `@uselemma/tracing: trace ${context.id} was delivered, but its post-send check failed: ${describeError(error)}`,
       );
     }
+    return undefined;
+  }
 
+  /**
+   * Serialize once, so every attempt resends the same span IDs and ingest
+   * dedupes an earlier attempt that landed unseen.
+   */
+  private buildIngestBody(
+    context: TraceContext,
+    startedAt: Date,
+    endedAt: Date,
+  ): { ok: true; payload: SdkTracePayload; body: string } | DeliveryFailure {
+    try {
+      const payload = this.stampRelease(
+        context.toPayload(this.projectId, startedAt, endedAt),
+      );
+      const body = JSON.stringify(payload);
+      lemmaDebug("client", "sending trace", {
+        traceId: payload.trace.id,
+        name: payload.trace.name,
+        spanCount: payload.trace.spans.length,
+        projectId: payload.project_id,
+        bodyBytes: new TextEncoder().encode(body).length,
+        requestedAt: new Date().toISOString(),
+        url: `${this.baseUrl}${INGEST_PATH}`,
+      });
+      return { ok: true, payload, body };
+    } catch (error) {
+      lemmaDebug("client", "trace ingest failed", {
+        traceId: context.id,
+        projectId: this.projectId,
+        error: failureMessage(error) ?? String(error),
+      });
+      return failedBeforeSending(error);
+    }
+  }
+
+  private postIngest(body: string, signal: AbortSignal): Promise<Response> {
+    return this.fetchImpl(`${this.baseUrl}${INGEST_PATH}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body,
+      signal,
+    });
+  }
+
+  private async afterTraceSent(payload: SdkTracePayload, response: Response) {
+    const responseHeaders = pickResponseHeaders(response.headers);
     const sentWarnings: string[] = [];
     if (response.status !== EXPECTED_INGEST_SUCCESS_STATUS) {
       sentWarnings.push(

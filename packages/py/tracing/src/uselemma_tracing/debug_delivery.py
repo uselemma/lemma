@@ -49,21 +49,11 @@ def build_config_warnings(base_url: str, project_id: str) -> list[str]:
     return warnings
 
 
-def ingest_failure_hint(status: int) -> str | None:
-    hints = {
-        401: "check LEMMA_API_KEY",
-        403: "API key doesn't own this project_id",
-        429: "ingest rate limit exceeded; retry with backoff",
-        404: "baseUrl likely wrong (not Lemma API)",
-    }
-    return hints.get(status)
-
-
 def pick_response_headers(headers: dict[str, str]) -> dict[str, str]:
+    """Keys arrive lowercased by the client's transport wrapper."""
     picked: dict[str, str] = {}
-    lowered = {key.lower(): value for key, value in headers.items()}
     for name in ("cf-ray", "server", "date"):
-        value = lowered.get(name)
+        value = headers.get(name)
         if value:
             picked[name] = value
     return picked

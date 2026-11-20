@@ -9,6 +9,29 @@ meta:
   audience: "Engineers using the Python tracing SDK"
 ---
 
+<Update label="7.14.0" description="November 19, 2026" tags={["New releases", "Improvements", "[Ingest]", "[LangChain]", "[OpenAI Agents]"]} rss={{ title: "Trace uploads retry, and flush has an async form" }}>
+
+  ## Ingest
+
+  - **Behavior change:** A failed trace upload now retries briefly before it gives up. In async code, the LangChain and OpenAI Agents integrations upload in the background, off your event loop, so a run returns without waiting for its upload, and `flush()` and `force_flush()` now wait for those uploads to finish. A trace that still can’t be sent is dropped and logged as a warning with its ID; before, it was dropped silently unless debug mode was on.
+  - **Retries:** `trace()`, `async_trace()`, and the LangChain and OpenAI Agents integrations retry a network error, a timeout, a 408, a 429, or a 5xx twice, waiting at most 2 seconds between tries. [ingest()](/tracing/instrumentation/traces) still sends once and raises.
+  - **Timeout:** The default transport gives up on a stalled connection after 10 seconds instead of waiting forever.
+  - **Waiting for uploads:** `trace()` and `async_trace()` return after the upload finishes, retries included. `async_trace()` waits on the SDK’s own threads, so its upload doesn’t block your event loop.
+  - **Cancellation:** Cancelling an `async_trace()` call while it runs, for example with a timeout, no longer waits for the trace upload. The cancellation reaches you at once, and the trace still uploads in the background. On a serverless runtime, [put the timeout inside your callback](/tracing/instrumentation/traces#python-timeouts-on-serverless-runtimes) so the trace uploads before your handler returns.
+  - **Flush limit:** `flush()` and `force_flush()` wait up to 34 seconds for traces still waiting to upload, then drop the rest with one warning. An upload already in progress continues after they return. When 1,000 traces are already waiting, a new one is dropped with a warning.
+  - **Exit limit:** Process exit drops waiting traces at the same 34-second limit. It then lets an upload already in progress finish, which can take up to 34 seconds more.
+  - **Repeated drops:** Drops in the minute after a warning are counted, and the next warning says how many. With `LEMMA_DEBUG=1`, every drop is logged.
+
+  ## LangChain
+
+  - **Async flush:** In async code, `await handler.aflush()` before a short-lived process such as a serverless handler returns. It waits like `flush()` without blocking your event loop. See [LangChain](/integrations/langchain).
+
+  ## OpenAI Agents
+
+  - **Async flush:** In async code, `await processor.aforce_flush()` before a short-lived process such as a serverless handler returns. It waits like `force_flush()` without blocking your event loop. See [OpenAI Agents](/integrations/openai-agents).
+
+</Update>
+
 <Update label="7.13.0" description="November 16, 2026" tags={["Improvements", "[OpenAI Agents]"]} rss={{ title: "OpenAI Agents traces show the model call and the reply" }}>
 
   ## OpenAI Agents
@@ -100,7 +123,7 @@ meta:
 
   ## Ingest
 
-  - **Fail open:** `trace()`, `async_trace()`, and `TraceHandle.end()` catch HTTP and network errors, log them, and do not rethrow. [ingest()](/tracing/instrumentation/traces) still raises. A delivery failure does not replace your agent’s error.
+  - **Fail open:** `trace()` and `async_trace()` catch HTTP and network errors, log them, and do not rethrow. [ingest()](/tracing/instrumentation/traces) still raises. A delivery failure does not replace your agent’s error.
 
 </Update>
 

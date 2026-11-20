@@ -60,21 +60,6 @@ export function buildConfigWarnings(
   return warnings;
 }
 
-export function ingestFailureHint(status: number): string | undefined {
-  switch (status) {
-    case 401:
-      return "check LEMMA_API_KEY";
-    case 403:
-      return "API key doesn't own this project_id";
-    case 429:
-      return "ingest rate limit exceeded; retry with backoff";
-    case 404:
-      return "baseUrl likely wrong (not Lemma API)";
-    default:
-      return undefined;
-  }
-}
-
 export function pickResponseHeaders(
   headers: Headers,
 ): Record<string, string> {
@@ -98,8 +83,4 @@ export function pickResponseHeadersFromRecord(
     if (value) picked[name] = value;
   }
   return picked;
-}
-
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -147,6 +147,8 @@ processor = openai_agents()
 processor.force_flush()
 ```
 
+In async Python code, the processor hands each finished trace to a worker pool, so retries don’t block your event loop. Await `aforce_flush()` before a short-lived process such as a serverless handler returns: it waits without blocking the loop. `aforce_flush()` and `force_flush()` wait up to 34 seconds for traces still queued, then drop the rest with one warning. Once 1,000 traces are waiting, the pool drops each new one with a warning.
+
 ## What Lemma records
 
 | OpenAI Agents event | Lemma record |

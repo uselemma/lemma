@@ -28,7 +28,7 @@ await agent.ainvoke(
 )
 ```
 
-`thread_id` / `user_id` are read from invoke metadata by default. Call `lemma_handler.flush()` in short-lived CLIs so the last ingest finishes.
+`thread_id` / `user_id` are read from invoke metadata by default. Await `lemma_handler.aflush()` in short-lived CLIs so the last ingest finishes.
 
 ## Trace shape
 
