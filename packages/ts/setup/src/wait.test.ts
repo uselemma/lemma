@@ -116,7 +116,6 @@ describe("wait", () => {
       const error = await rejection(run.wait());
       expect([EXIT_CODES.expired, EXIT_CODES.denied]).toContain(error.exitCode);
       await expect(stat(run.pendingPath)).rejects.toThrow();
-      await run.api.close();
     }
   });
 
