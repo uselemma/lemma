@@ -1,0 +1,47 @@
+{
+  "name": "@uselemma/setup",
+  "version": "0.1.0",
+  "description": "Connect an app and its coding agent to Lemma through browser approval",
+  "license": "MIT",
+  "author": "Lemma",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uselemma/lemma",
+    "directory": "packages/ts/setup"
+  },
+  "homepage": "https://github.com/uselemma/lemma/tree/main/packages/ts/setup#readme",
+  "bugs": {
+    "url": "https://github.com/uselemma/lemma/issues"
+  },
+  "keywords": [
+    "lemma",
+    "setup",
+    "observability",
+    "mcp"
+  ],
+  "type": "module",
+  "bin": {
+    "lemma-setup": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist/cli.mjs",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run type-check && pnpm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.8",
+    "esbuild": "^0.25.11",
+    "smol-toml": "^1.8.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
+    "yaml": "^2.9.0"
+  }
+}

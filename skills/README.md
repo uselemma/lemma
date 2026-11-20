@@ -6,6 +6,7 @@
 
 | Skill | Description |
 |---|---|
+| [`lemma-setup`](./lemma-setup/SKILL.md) | Set up Lemma from the dashboard's setup prompt — infer the project and agent names, ask the Approach and Scope questions, approve the connection in the browser with `npx @uselemma/setup`, instrument with `lemma-tracing`, connect the Lemma MCP server, and record the first agent context |
 | [`lemma-tracing`](./lemma-tracing/SKILL.md) | Integrate Lemma tracing into any codebase — supports the direct SDK, Vercel AI SDK v6/v7, OpenAI Agents SDK, LangChain, LangGraph, Langfuse side-by-side installs, trace handles, debug mode, and manual instrumentation |
 | [`lemma-diagnostics`](./lemma-diagnostics/SKILL.md) | Improve the quality of traces already landing in Lemma — audit local instrumentation, score received shape against live docs, and hand off apply-work to `lemma-tracing` |
 | [`lemma-mcp`](./lemma-mcp/SKILL.md) | Drive the Lemma MCP from the terminal — find and read issues, check traces and monitors, and choose the right action (lifecycle, metadata, monitor correction, or ticket) within what the user authorized |

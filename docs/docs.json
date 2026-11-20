@@ -150,6 +150,7 @@
             "pages": [
               "reference/trace-contract",
               "reference/monitor-contract",
+              "reference/setup-command",
               "reference/analytics-telemetry",
               "reference/analytics-query"
             ]

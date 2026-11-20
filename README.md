@@ -32,7 +32,9 @@
 | [`docs/`](docs)                                | Mintlify documentation source for [docs.uselemma.ai](https://docs.uselemma.ai). |
 | [`packages/ts/tracing`](packages/ts/tracing)   | TypeScript SDK package: `@uselemma/tracing`.                                    |
 | [`packages/py/tracing`](packages/py/tracing)   | Python SDK package: `uselemma-tracing`.                                         |
+| [`packages/ts/setup`](packages/ts/setup)       | Setup command package: `@uselemma/setup`. Browser approval, `.env`, and MCP config. |
 | [`skills/lemma-tracing`](skills/lemma-tracing) | Lemma tracing skill for coding agents.                                          |
+| [`skills/lemma-setup`](skills/lemma-setup)     | Lemma setup skill: the setup prompt's end-to-end flow for coding agents.        |
 | [`skills/lemma-diagnostics`](skills/lemma-diagnostics) | Lemma diagnostics skill for coding agents. |
 | [`plugins/lemma-codex`](plugins/lemma-codex)   | Local Codex lifecycle-hook tracing plugin.                                      |
 | [`plugins/lemma-hermes`](plugins/lemma-hermes) | Hermes Agent plugin with native lifecycle capture and SDK delivery.             |

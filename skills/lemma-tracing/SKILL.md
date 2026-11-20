@@ -7,7 +7,7 @@ description: >-
   Agents SDK, LangChain, LangGraph, Langfuse side-by-side installs, or
   debugging Lemma trace delivery and trace shape.
 metadata:
-  version: 1.1.1
+  version: 1.1.2
 ---
 
 # Lemma Tracing
@@ -188,7 +188,9 @@ Validation checklist before considering an integration complete:
 
 ## Handing Back
 
-End by telling the user what to set before they run the app: `LEMMA_API_KEY`, an ingest-scoped key from the **Connect your agent** step in Lemma onboarding or from **Settings → API keys** in the dashboard, and `LEMMA_PROJECT_ID`. Nothing is sent until both are set. If the user arrived here from `lemma-artifacts`, the agent name you used is the one they chose in onboarding; say so, so they can see the two line up.
+If `lemma-setup` sent you here, `npx @uselemma/setup` already wrote `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` to `.env`. Don't tell the user to fetch or set a key. Say the app reads both from `.env`, and that the deployment needs both as environment variables or secrets.
+
+Otherwise, end by telling the user what to set before they run the app: `LEMMA_API_KEY`, an ingest-scoped key from the **Connect your agent** step in Lemma onboarding or from **Settings → API keys** in the dashboard, and `LEMMA_PROJECT_ID`. Nothing is sent until both are set. If the user arrived here from `lemma-artifacts`, the agent name you used is the one they chose in onboarding; say so, so they can see the two line up.
 
 ## Skill Feedback
 

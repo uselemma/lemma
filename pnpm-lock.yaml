@@ -190,6 +190,27 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/ts/setup:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.18.8
+        version: 22.19.11
+      esbuild:
+        specifier: ^0.25.11
+        version: 0.25.12
+      smol-toml:
+        specifier: ^1.8.0
+        version: 1.8.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@22.19.11)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
+
   packages/ts/tracing:
     devDependencies:
       '@langchain/core':
