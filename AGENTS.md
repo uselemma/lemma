@@ -17,8 +17,9 @@ When a change should ship to callers, bump every affected package version in the
 Version fields:
 
 - `@uselemma/tracing` — `packages/ts/tracing/package.json` and `packages/ts/tracing/src/version.ts` (the User-Agent version; a test fails when the two differ)
+- `@uselemma/setup` — `packages/ts/setup/package.json`. The `lemma-setup` skill pins this exact version in its `npx` command; bump the pin and the skill version with it
 - `uselemma-tracing` — `packages/py/tracing/pyproject.toml` and `uv.lock`
 - Harness plugins (`@uselemma/opencode`, `@uselemma/pi`, `@uselemma/hermes`, `@uselemma/openclaw`, and the private `@uselemma/claude-code-plugin`, `@uselemma/codex-plugin`, `@uselemma/cursor-plugin`, which are not published but send their version in the User-Agent) — `plugins/lemma-<name>/package.json`, and the harness manifest where one exists: `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `.cursor-plugin/plugin.json`, `hermes-plugin/lemma/plugin.yaml` (layout tests fail when it differs)
-- Skills (`lemma-tracing`, `lemma-diagnostics`, `lemma-mcp`, `lemma-analytics`, `lemma-artifacts`) — `skills/<name>/SKILL.md` `metadata.version`
+- Skills (`lemma-tracing`, `lemma-diagnostics`, `lemma-mcp`, `lemma-analytics`, `lemma-artifacts`, `lemma-setup`) — `skills/<name>/SKILL.md` `metadata.version`
 
 A merge that leaves published package versions unchanged does not publish to npm or PyPI. Skill version bumps are for traceability only. Do not land shippable SDK, plugin, or skill changes without a SemVer bump.

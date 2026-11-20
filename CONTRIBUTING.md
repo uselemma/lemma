@@ -29,6 +29,7 @@ Changes to packages (`packages/`, `plugins/`) and skills (`skills/`) follow [Sem
 | Path | Version field |
 | --- | --- |
 | `packages/ts/tracing` | `package.json` and `src/version.ts` |
+| `packages/ts/setup` | `package.json` |
 | `packages/py/tracing` | `pyproject.toml` and `uv.lock` |
 | `plugins/lemma-*` | `package.json`, and the harness manifest where one exists (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `.cursor-plugin/plugin.json`, `hermes-plugin/lemma/plugin.yaml`) |
 | `skills/<name>` | `SKILL.md` `metadata.version` |
@@ -42,6 +43,7 @@ Do not commit generated plugin bundles. Paths differ by plugin (`runtime/`, `scr
 Package publishing is driven by package version changes on `main`.
 
 - Changes to `packages/ts/tracing/package.json` publish `@uselemma/tracing` on npm when the version is not already present.
+- Changes to `packages/ts/setup/package.json` publish `@uselemma/setup` on npm when the version is not already present.
 - Changes to `packages/py/tracing/pyproject.toml` publish `uselemma-tracing` on PyPI when the version is not already present.
 - Changes to `plugins/lemma-pi/package.json`, `plugins/lemma-hermes/package.json`, `plugins/lemma-openclaw/package.json`, or `plugins/lemma-opencode/package.json` publish `@uselemma/pi`, `@uselemma/hermes`, `@uselemma/openclaw`, or `@uselemma/opencode` on npm when the version is not already present.
 
@@ -78,6 +80,14 @@ uv build --package uselemma-tracing
 `--extra dev` installs LangChain, LangGraph, and OpenAI Agents so
 `test_*_framework.py` can `ainvoke` / `Runner.run` a real chain. The scripted
 `test_langchain.py` cases only replay callback events.
+
+Setup command:
+
+```bash
+pnpm --filter @uselemma/setup test
+pnpm --filter @uselemma/setup type-check
+pnpm --filter @uselemma/setup build
+```
 
 Plugin packages use `pnpm --filter <package> type-check`, `test`, and `build`. Examples: `@uselemma/codex-plugin`, `@uselemma/opencode`, `@uselemma/pi`. See each plugin README.
 
