@@ -275,6 +275,7 @@ def _reset() -> None:
 if hasattr(os, "register_at_fork"):
     os.register_at_fork(after_in_child=_reset)
 
+
 def _register_exit_drain() -> None:
     # concurrent.futures registers one module-level exit hook,
     # concurrent.futures.thread._python_exit, with the private
@@ -282,9 +283,8 @@ def _register_exit_drain() -> None:
     # run all queued work. Those hooks run newest first, before the interpreter
     # joins non-daemon threads, and this one registers after it, so both pools'
     # backlogs are cut to the deadline before that join. The public atexit
-    # fallback runs only after the interpreter joins non-daemon threads, so
-    # where the executor's workers are joined first, exit runs every queued
-    # delivery instead of cutting the backlog at the deadline.
+    # fallback is a defensive path for an interpreter whose concurrent.futures
+    # does not use the private hook.
     register_before_thread_join = getattr(threading, "_register_atexit", None)
     if register_before_thread_join is None:
         atexit.register(_drain_at_exit)
