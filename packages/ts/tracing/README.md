@@ -16,7 +16,6 @@ import { Lemma } from "@uselemma/tracing";
 const lemma = new Lemma({
   apiKey: process.env.LEMMA_API_KEY,
   projectId: process.env.LEMMA_PROJECT_ID,
-  release: "1.8.3", // or set LEMMA_RELEASE
 });
 
 const answer = await lemma.trace(
@@ -49,7 +48,7 @@ const answer = await lemma.trace(
 
 `trace()` creates one Lemma trace. The callback receives a context object; any child span, generation, or tool recorded through that context is attached to the trace.
 
-Pass `release` (or set `LEMMA_RELEASE`) to stamp the running app version on every ingest payload. An explicit constructor value wins. Empty or invalid values are omitted.
+Set `LEMMA_RELEASE` to the deployed version, such as the commit SHA, to stamp it on every ingest payload; that needs no code. To reuse a variable your host sets at runtime, pass it as `release`, for example Vercel's `VERCEL_GIT_COMMIT_SHA`, Render's `RENDER_GIT_COMMIT`, or Railway's `RAILWAY_GIT_COMMIT_SHA`. An explicit constructor value wins, and an unset one falls back to `LEMMA_RELEASE`. Empty or invalid values are omitted.
 
 ## One-Off Events
 
@@ -470,7 +469,7 @@ environment variables:
 ```typescript
 const lemma = new Lemma({
   apiKey: "sk_...",
-  projectId: "proj_...",
+  projectId: "12345678-1234-1234-1234-123456789012",
   baseUrl: "https://api.uselemma.ai",
 });
 ```

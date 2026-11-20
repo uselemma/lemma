@@ -251,15 +251,15 @@
     },
     {
       "source": "/tracing/wrapping-your-agent",
-      "destination": "/tracing/instrumentation/setup"
+      "destination": "/tracing/instrumentation/instrument-an-agent"
     },
     {
       "source": "/tracing/custom-instrumentation/overview",
-      "destination": "/tracing/instrumentation/setup"
+      "destination": "/tracing/instrumentation/instrument-an-agent"
     },
     {
       "source": "/tracing/custom-instrumentation/setup",
-      "destination": "/tracing/instrumentation/setup"
+      "destination": "/tracing/instrumentation/instrument-an-agent"
     },
     {
       "source": "/tracing/custom-instrumentation/trace-root-usage",
@@ -279,7 +279,7 @@
     },
     {
       "source": "/tracing/custom-instrumentation/typescript/setup",
-      "destination": "/tracing/instrumentation/setup"
+      "destination": "/tracing/instrumentation/instrument-an-agent"
     },
     {
       "source": "/tracing/custom-instrumentation/typescript/run-usage",
@@ -295,7 +295,7 @@
     },
     {
       "source": "/tracing/custom-instrumentation/python/setup",
-      "destination": "/tracing/instrumentation/setup"
+      "destination": "/tracing/instrumentation/instrument-an-agent"
     },
     {
       "source": "/tracing/custom-instrumentation/python/run-usage",
@@ -311,7 +311,7 @@
     },
     {
       "source": "/tracing/manual-instrumentation",
-      "destination": "/tracing/instrumentation/setup"
+      "destination": "/tracing/instrumentation/instrument-an-agent"
     },
     {
       "source": "/tracing/patterns/threads",

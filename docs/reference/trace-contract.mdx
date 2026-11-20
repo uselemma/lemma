@@ -40,7 +40,7 @@ Ingest accepts a name-only trace. Semantic fields are not HTTP-required, but wit
 
 ```json
 {
-  "project_id": "00000000-0000-0000-0000-000000000000",
+  "project_id": "12345678-1234-1234-1234-123456789012",
   "trace": {
     "id": "trace-id",
     "name": "support-agent",
@@ -133,7 +133,7 @@ Deliver **one complete trace** when the execution (agent turn) finishes. This is
 | `started_at` / `ended_at` / `duration_ms` | Trace timing |
 | `thread_id` | Groups multi-turn conversation traces |
 | `user_id` | Per-user slicing |
-| `release` | Optional deployed app version from the SDK client (`release` / `LEMMA_RELEASE`). Trimmed; empty, over 200 characters, or values with newlines, tabs, or carriage returns are omitted (unreleased) |
+| `release` | Optional: the deployed version, such as the commit SHA, from the SDK client (`release` / `LEMMA_RELEASE`). Trimmed; empty, over 200 characters, or values with newlines, tabs, or carriage returns are omitted (unreleased) |
 | `metadata` | Arbitrary JSON attached to the root |
 | `spans` | Child work |
 

@@ -37,7 +37,7 @@ The coding agent passes the names it inferred from the codebase. You confirm or 
 | `--harness` | Yes | The coding agent: `claude-code`, `cursor`, `codex`, `opencode`, `pi`, `hermes`, `openclaw`, or `other` for any other agent |
 | `--project-name` | Yes | The proposed project name, up to 200 characters |
 | `--agent-name` | Yes | The proposed agent name, the root trace `name`. Lemma stores it in lowercase with dashes, for example `support-bot`. `trace` isn’t allowed |
-| `--org` | No | The organization’s slug from the setup prompt, for example `acme-inc-x1y2`. The approval page selects that organization when you belong to it |
+| `--org` | No | The organization’s slug from the setup prompt, for example `acme-inc-x1y2`. The approval page selects that organization when you belong to it, and then offers no **Switch organization** link. To choose another organization, run `start` again without `--org` |
 | `--repository` | No | The repository, for example `acme/support-bot`. The command removes credentials from a URL before sending it |
 | `--framework` | No | The agent framework, for example `vercel-ai` or `langgraph` |
 | `--api-url` | No | The Lemma API. Defaults to `https://api.uselemma.ai`. The command accepts HTTP only for `localhost` |
@@ -47,7 +47,7 @@ The coding agent passes the names it inferred from the codebase. You confirm or 
 
 ## What one approval creates
 
-An owner or admin of your Lemma organization approves the request on the page `start` opens. The approval creates the project, or uses an existing project you pick, and `wait` then receives each new key once:
+An owner or admin of your Lemma organization approves the request on the page `start` opens, after choosing a plan if the organization has none. The approval creates the project, or uses an existing project you pick, and `wait` then receives each new key once:
 
 - **Ingest key**: limited to the project. It can only send traces, so a leaked copy can’t read your data or write to another project
 - **Admin key**: organization-wide, for the Lemma Model Context Protocol (MCP) server in your coding agent
@@ -116,7 +116,7 @@ The `lemma-setup` skill uses the exit code to decide the next step:
 | `3` | `wait` | The approval code expired. Run `start` again |
 | `4` | `wait` | The approver canceled, or is no longer an owner or admin. Run `start` again |
 
-While a Lemma environment doesn’t offer coding-agent setup yet, its setup endpoints answer 404. `start` and `wait` then print one line saying so and exit with `1` without writing anything. Use **Set up manually** in the dashboard instead.
+While a Lemma environment doesn’t offer coding-agent setup yet, its setup endpoints answer 404. `start` and `wait` then print one line saying so and exit with `1` without writing anything. Use [manual setup](/tracing/instrumentation/setup#set-up-manually) instead.
 
 The commands never print a key or the device code. The approval code they print is the one the browser page shows, so you can match the two.
 
@@ -136,7 +136,7 @@ The setup prompt in Lemma tells your coding agent to fetch and follow [`skills/l
 
 <CardGroup cols={2}>
   <Card title="Send your first trace" href="/tracing/instrumentation/setup">
-    Set the credentials and send a trace without the setup command.
+    Set up with the agent prompt or manually, then check the first trace.
   </Card>
   <Card title="Lemma MCP server" href="/connections/mcp">
     The MCP endpoint, its authentication, and client config.

@@ -22,16 +22,20 @@ A project analytics query returns one aggregate: a count, a percentile, a sum, o
 Use a query when one number or one breakdown answers the question. For a full [Analytics](/platform/analytics) panel, request a [preset view](#preset-views) instead.
 
 <Note>
-  You need an organization API key whose scope is read or admin, plus the project id. An ingest-only key cannot call these routes. A key limited to one project works only for that project. Create the key under **API Keys** in the [Lemma dashboard](https://platform.uselemma.ai).
+  You need an organization API key whose scope is read or admin, plus the project id. An ingest-only key cannot call these routes. A key limited to one project works only for that project. Create the key under **Developer → API keys** in your organization settings.
 </Note>
 
 ## Find events and fields in the catalog
 
 Every query reads one event, such as `trace.processed` or `tool.called`. The catalog lists each event with the fields you can filter and group by (`dimensions`), the fields you can aggregate (`measures`, each with its allowed `aggs`), and any `cost_measures`. It also lists `filter_ops`, `buckets`, and `limits`.
 
+Fetch it with your project’s ID in a `PROJECT_ID` shell variable:
+
 ```bash
+PROJECT_ID=12345678-1234-1234-1234-123456789012
+
 curl -s \
-  "https://api.uselemma.ai/projects/your_project_id/analytics/catalog" \
+  "https://api.uselemma.ai/projects/$PROJECT_ID/analytics/catalog" \
   -H "Authorization: Bearer your_organization_api_key"
 ```
 
@@ -42,8 +46,10 @@ On MCP, call `describe_project_analytics` with `project_id`. A field that isn’
 `POST` the query body to `/projects/{project_id}/analytics/query`:
 
 ```bash
+PROJECT_ID=12345678-1234-1234-1234-123456789012
+
 curl -s -X POST \
-  "https://api.uselemma.ai/projects/your_project_id/analytics/query" \
+  "https://api.uselemma.ai/projects/$PROJECT_ID/analytics/query" \
   -H "Authorization: Bearer your_organization_api_key" \
   -H "Content-Type: application/json" \
   -d @query.json

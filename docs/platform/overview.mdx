@@ -35,16 +35,18 @@ You create **projects**. A project holds traces, issues, monitors, artifacts, an
 
 ## Recommended workspace sequence
 
-1. Select or create an organization and project.
-2. Generate an API key and instrument the production agent. Keep `LEMMA_API_KEY` server-side: never commit it, and never put it in the browser. See [Quickstart](/tracing/instrumentation/setup).
-3. Verify at least one real production trace becomes **ready**. Open [Traces](/platform/traces) and confirm the execution tree and conversation look complete. If the conversation is still active, wait: extraction runs after a thread goes quiet, or immediately when there’s no thread ID.
-4. Add agent-specific [Artifacts](/platform/artifacts) context.
-5. Connect the customer Slack workspace, bind a project alert channel, and optionally enable Issue Briefs. See [Slack](/connections/slack).
-6. Configure [Linear](/connections/linear) if the team turns issues into tickets. Each member verifies their own Linear identity.
-7. Connect external MCP servers only when Lemma needs their tools. See [Lemma MCP server](/connections/mcp#connect-an-external-mcp-server).
-8. Connect the coding agent to [Lemma MCP](/connections/mcp) when it should investigate or act on Lemma evidence.
-9. Add signed [webhooks](/connections/webhooks) when another system needs issue lifecycle events.
-10. Set up the Lemma support Slack Connect channel independently if the plan includes it. It is not a product alert path.
+Lemma’s setup covers the first steps: it creates your organization, sets up your plan, offers to connect Slack, and connects your agent with tracing. With the agent prompt, setup also connects your coding agent to the Lemma MCP server and offers to record the agent’s first artifacts. To connect another project, use the agent prompt again or [set up manually](/tracing/instrumentation/setup#set-up-manually).
+
+After setup:
+
+1. Verify at least one real production trace becomes **ready**. Open [Traces](/platform/traces) and confirm the execution tree and conversation look complete. If the conversation is still active, wait: extraction runs after a thread goes quiet, or immediately when there’s no thread ID.
+2. Review the agent’s [Artifacts](/platform/artifacts) context, or add it if setup recorded none.
+3. Bind a project alert channel, and optionally enable Issue Briefs. Connect the Slack workspace first if you skipped it in setup. See [Slack](/connections/slack).
+4. Configure [Linear](/connections/linear) if the team turns issues into tickets. Each member verifies their own Linear identity.
+5. Connect external MCP servers only when Lemma needs their tools. See [Lemma MCP server](/connections/mcp#connect-an-external-mcp-server).
+6. If you set up manually, connect your coding agent to [Lemma MCP](/connections/mcp) when it should investigate or act on Lemma evidence.
+7. Add signed [webhooks](/connections/webhooks) when another system needs issue lifecycle events.
+8. Set up the Lemma support Slack Connect channel independently if the plan includes it. It is not a product alert path.
 
 ## The dashboard surfaces
 

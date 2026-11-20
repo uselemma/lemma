@@ -60,20 +60,7 @@ For per-interaction context such as feature flags or arbitrary properties, attac
 
 <Steps>
   <Step title="Install the Lemma SDK">
-    Install the SDK and set `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`. See [Quickstart](/tracing/instrumentation/setup).
-
-    <Tabs>
-      <Tab title="TypeScript">
-        ```bash
-        npm install @uselemma/tracing
-        ```
-      </Tab>
-      <Tab title="Python">
-        ```bash
-        pip install uselemma-tracing
-        ```
-      </Tab>
-    </Tabs>
+    Install the SDK and set `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`, as in [Instrument an agent](/tracing/instrumentation/instrument-an-agent#before-you-start).
   </Step>
   <Step title="Wrap each execution in a trace">
     Replace the Raindrop `begin()` / `finish()` (or `trackAi()`) that bracketed one interaction with a single `lemma.trace()` around the whole execution. Put the current user turn on `input` and let the callback return the final answer.
@@ -91,7 +78,7 @@ For per-interaction context such as feature flags or arbitrary properties, attac
 
 ## Re-instrumenting an interaction
 
-The example below is the Lemma equivalent of a Raindrop `begin()` → tool tracking → `finish()` flow: one trace, a typed tool, and a generation carrying the full message list. Install and configure the SDK first. See [Quickstart](/tracing/instrumentation/setup).
+The example below is the Lemma equivalent of a Raindrop `begin()` → tool tracking → `finish()` flow: one trace, a typed tool, and a generation carrying the full message list. Install the SDK and set `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` first, as in [Instrument an agent](/tracing/instrumentation/instrument-an-agent#before-you-start).
 
 <Tabs>
   <Tab title="TypeScript">
@@ -207,7 +194,7 @@ If your run spans streaming callbacks or helpers rather than one function, use a
 
 <CardGroup cols={2}>
   <Card title="Quickstart" href="/tracing/instrumentation/setup">
-    Install the SDK and send your first complete agent trace.
+    Set up with the agent prompt or manually, then check the first trace.
   </Card>
   <Card title="Trace contract" href="/reference/trace-contract">
     The exact shape and fields Lemma reads.

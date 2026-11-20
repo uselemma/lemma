@@ -12,7 +12,7 @@ description: >-
   issues (that is lemma-mcp) or for fixing missing telemetry (that is
   lemma-tracing and lemma-diagnostics).
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Lemma Analytics
@@ -74,15 +74,21 @@ When the docs and the catalog disagree, trust the catalog.
 
 ## Transport
 
-Use the Lemma MCP when it is connected: call the tool with `project_id` plus
-the body. Otherwise use REST against `https://api.uselemma.ai` with
-`Authorization: Bearer $LEMMA_API_KEY`. The key must be an organization API
-key with read or admin scope; an ingest-only key can't call these routes.
+Prefer the Lemma MCP. Lemma setup connects it to your coding agent as the
+`lemma` server, and the analytics tools above are among its tools: call the
+tool with `project_id` plus the body.
 
-If you have neither an MCP connection nor a key, stop and ask the user for
-one. Point them to **API Keys** in the
-[Lemma dashboard](https://platform.uselemma.ai) and the
-[MCP setup page](https://docs.uselemma.ai/connections/mcp).
+Without the MCP, use REST against `https://api.uselemma.ai` with
+`Authorization: Bearer $LEMMA_READ_API_KEY`, an organization API key with read
+or admin scope. Never use `LEMMA_API_KEY`: after Lemma setup it holds the
+app's ingest key, which these routes refuse.
+
+If you have neither an MCP connection nor `LEMMA_READ_API_KEY`, stop and ask
+the user for one. Point them to the
+[MCP setup page](https://docs.uselemma.ai/connections/mcp), or to
+**Developer → API keys** in your organization settings for a key with the
+**Read** scope, set as `LEMMA_READ_API_KEY` in the environment you run in.
+Don't ask them to paste the key into this conversation.
 
 If you don't know the project id, call `list_projects` and ask the user to
 pick one when there's more than one.
