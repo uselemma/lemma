@@ -58,6 +58,8 @@ export const lemmaExporter = lemmaMastra({
   release: process.env.LEMMA_RELEASE,
   agentName: "support-agent",
 });
+
+// In new Mastra({ observability }): exporters: [lemmaExporter]
 ```
 
 Then run your agent normally. Call `flush()` on the exporter you registered: it waits for that exporter’s pending sends, so a short-lived process sends each trace before it exits:
