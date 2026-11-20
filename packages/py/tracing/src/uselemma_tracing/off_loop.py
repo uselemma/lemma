@@ -11,6 +11,7 @@ event loop.
 from __future__ import annotations
 
 import asyncio
+import atexit
 import os
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor, wait
@@ -274,10 +275,21 @@ def _reset() -> None:
 if hasattr(os, "register_at_fork"):
     os.register_at_fork(after_in_child=_reset)
 
-# concurrent.futures registers one module-level exit hook,
-# concurrent.futures.thread._python_exit, that joins every executor's workers
-# after they run all queued work. Hooks run newest first, and this one
-# registers after it, so both pools' backlogs are cut to the deadline before
-# that join.
-if hasattr(threading, "_register_atexit"):
-    threading._register_atexit(_drain_at_exit)
+def _register_exit_drain() -> None:
+    # concurrent.futures registers one module-level exit hook,
+    # concurrent.futures.thread._python_exit, with the private
+    # threading._register_atexit; it joins every executor's workers after they
+    # run all queued work. Those hooks run newest first, before the interpreter
+    # joins non-daemon threads, and this one registers after it, so both pools'
+    # backlogs are cut to the deadline before that join. The public atexit
+    # fallback runs only after the interpreter joins non-daemon threads, so
+    # where the executor's workers are joined first, exit runs every queued
+    # delivery instead of cutting the backlog at the deadline.
+    register_before_thread_join = getattr(threading, "_register_atexit", None)
+    if register_before_thread_join is None:
+        atexit.register(_drain_at_exit)
+    else:
+        register_before_thread_join(_drain_at_exit)
+
+
+_register_exit_drain()

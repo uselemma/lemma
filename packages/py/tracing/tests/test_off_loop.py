@@ -364,6 +364,28 @@ def test_the_exit_drain_also_cuts_queued_awaited_deliveries(
     )
 
 
+def test_the_exit_drain_registers_to_run_before_the_thread_join(monkeypatch):
+    before_thread_join = []
+    at_exit = []
+    monkeypatch.setattr(threading, "_register_atexit", before_thread_join.append)
+    monkeypatch.setattr(off_loop.atexit, "register", at_exit.append)
+
+    off_loop._register_exit_drain()
+
+    assert before_thread_join == [off_loop._drain_at_exit]
+    assert at_exit == []
+
+
+def test_the_exit_drain_falls_back_to_atexit_without_the_private_hook(monkeypatch):
+    at_exit = []
+    monkeypatch.delattr(threading, "_register_atexit")
+    monkeypatch.setattr(off_loop.atexit, "register", at_exit.append)
+
+    off_loop._register_exit_drain()
+
+    assert at_exit == [off_loop._drain_at_exit]
+
+
 async def test_run_awaited_runs_on_the_awaited_pool_in_the_callers_context():
     request_id = contextvars.ContextVar("request_id")
     request_id.set("req-1")
