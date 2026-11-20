@@ -21,6 +21,7 @@ meta:
   - **Flush limit:** `flush()` and `force_flush()` wait up to 34 seconds for traces still waiting to upload, then drop the rest with one warning. An upload already in progress continues after they return. When 1,000 traces are already waiting, a new one is dropped with a warning.
   - **Exit limit:** Process exit drops waiting traces at the same 34-second limit. It then lets an upload already in progress finish, which can take up to 34 seconds more.
   - **Repeated drops:** Drops in the minute after a warning are counted, and the next warning says how many. With `LEMMA_DEBUG=1`, every drop is logged.
+  - **API from the environment:** When you don’t pass `base_url`, `Lemma()` and the LangChain and OpenAI Agents integrations send to `LEMMA_BASE_URL` when it’s set and not empty, and to `https://api.uselemma.ai` otherwise. A `base_url` you pass still wins.
 
   ## LangChain
 

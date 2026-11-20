@@ -1,11 +1,14 @@
 import { join } from "node:path";
 
+import type { LemmaApiUrl } from "./api.js";
 import type { SetupEnvironment } from "./context.js";
 import {
+  appEnvFor,
   planEnvExample,
   planEnvTarget,
   plannedEnvNote,
   plannedExampleNote,
+  type AppEnv,
   type EnvExamplePlan,
   type EnvTarget,
 } from "./env-file.js";
@@ -17,11 +20,15 @@ import {
 } from "./mcp/targets.js";
 import type { SetupPaths } from "./setup-paths.js";
 
-/** Where each file setup writes goes, decided before the one-time exchange. */
+/**
+ * Where each file setup writes goes, and what it writes for the app,
+ * decided before the one-time exchange.
+ */
 export type SetupPlan = {
   env: EnvTarget;
   example: EnvExamplePlan;
   mcp: McpTarget;
+  appEnv: AppEnv;
 };
 
 /**
@@ -34,6 +41,7 @@ export async function plan(input: {
   appDir: string;
   harness: HarnessId;
   paths: SetupPaths;
+  apiUrl: LemmaApiUrl;
 }): Promise<SetupPlan> {
   const { environment, appDir, harness, paths } = input;
   const [env, example, mcp] = await Promise.all([
@@ -48,13 +56,13 @@ export async function plan(input: {
       paths,
     }),
   ]);
-  return { env, example, mcp };
+  return { env, example, mcp, appEnv: appEnvFor(input.apiUrl) };
 }
 
 /** What setup will skip or save elsewhere, said before approval. */
 export function plannedNotes(setupPlan: SetupPlan): string[] {
   return [
-    plannedEnvNote(setupPlan.env),
+    plannedEnvNote(setupPlan.env, setupPlan.appEnv),
     plannedExampleNote(setupPlan.example),
     plannedMcpNote(setupPlan.mcp),
   ].filter((note): note is string => note !== null);

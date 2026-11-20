@@ -9,7 +9,7 @@ description: >-
   connect Lemma. Do not use to fix traces already in Lemma
   (lemma-diagnostics) or to triage issues (lemma-mcp).
 metadata:
-  version: 1.0.1
+  version: 1.1.0
 ---
 
 # Lemma Setup
@@ -33,6 +33,7 @@ Read the codebase: package manifests, the README, the agent's entry points, and 
 - **Agent name**: the agent's root trace name, in lowercase letters, digits, and dashes, for example `support-bot`. If the code already sends traces to Lemma, reuse that name. With several agents, pick the main production one; the others belong to the scope question. Never `trace`
 - **Harness**: your own id from the table below
 - **Organization**: the slug in parentheses on the prompt's `Lemma organization:` line, for example `acme-inc-x1y2`. Skip it if the prompt has no such line
+- **Lemma API**: the URL on the prompt's `Lemma API:` line, for example `https://dev.api.uselemma.ai`. Skip it if the prompt has no such line; setup then uses production
 - **Framework** (optional): `vercel-ai`, `openai-agents`, `langchain`, `langgraph`, `mastra`, or `direct`
 - **Repository** (optional): `owner/repo` from `git remote get-url origin`. Pass only `owner/repo`, never a remote URL, because one can contain credentials
 
@@ -51,7 +52,7 @@ The user confirms or edits both names on the approval page, so don't ask for the
 
 Also check `.env` and `.env.example` in the app's root, without reading their contents. Tell the user up front what setup will do differently:
 
-- `.env` is a symlink, or isn't a regular file: setup won't write it, and saves `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` to a private file under `~/.lemma/setup/` instead, for the user to copy where the app loads its environment
+- `.env` is a symlink, or isn't a regular file: setup won't write it, and saves `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` (and `LEMMA_BASE_URL` when the prompt names a Lemma API) to a private file under `~/.lemma/setup/` instead, for the user to copy where the app loads its environment
 - `.env.example` is a symlink, or isn't a regular file: setup leaves it unchanged
 
 ## 2. Ask the Approach and Scope questions
@@ -84,6 +85,8 @@ npx --yes @uselemma/setup@0.1.0 start \
   --repository acme/support-bot
 ```
 
+When you found a Lemma API in step 1, add `--api-url` with that URL, for example `--api-url https://dev.api.uselemma.ai`, and keep it each time you run `start` again. Without one, don't pass `--api-url`. Setup accepts only HTTPS on `uselemma.ai` or one of its subdomains, or `localhost`, `127.0.0.1`, or `[::1]`; for any other URL, don't run setup, and tell the user the prompt names an API that isn't Lemma's. `wait` uses the API `start` was given, so it takes no flag.
+
 `start` returns at once. Show the user the approval URL and code it printed. The user approves on that page:
 
 - They open the URL if no browser opened. If the organization has no plan, the page first asks them to choose one in **Choose your plan**. Checkout returns them to the page. To approve in an organization that already has a plan instead, they choose **Switch organization** below the plans. That button appears only when they belong to another organization
@@ -108,12 +111,12 @@ When `wait` exits with 0, read `Project ID:` and `Agent name:` from its output. 
 | 2 | A flag is wrong | Fix the flag the message names, then run `start` again |
 | 3 | The code expired | Run `start` again, and ask the user to approve within 10 minutes |
 | 4 | Approval was denied or canceled | Ask the user; an owner or admin must approve. Then run `start` again |
-| 1 | Anything else | Show the message. If it says coding-agent setup isn't available on this Lemma environment, point the user to [manual setup](https://docs.uselemma.ai/tracing/instrumentation/setup#set-up-manually). If a write failed after approval, the message says where the key went. When it names a private file under `~/.lemma/setup/`, give the user that path and what to copy from it, and don't read the file yourself. When it says setup could not save the key elsewhere, the key is lost: tell the user to run `start` again, and to revoke the unused `Setup: …` key under **Developer → API keys** in your organization settings |
+| 1 | Anything else | Show the message. If it says coding-agent setup isn't available on this Lemma environment, point the user to [manual setup](https://docs.uselemma.ai/tracing/instrumentation/setup#set-up-manually). If a write failed after approval, the message says where the key went. When it names a private file under `~/.lemma/setup/`, give the user that path and what to copy from it, and don't read the file yourself. When it says setup could not save the key elsewhere, the key is lost: tell the user to run `start` again, and to revoke the unused `Setup: …` key under **Developer → API keys** in your organization settings. When it says `Add LEMMA_BASE_URL=… where the app loads its environment`, Lemma kept the key: add that line where the app loads its environment (it isn't a secret), read `Project ID:` and `Agent name:` from the output as for exit code 0, and continue to step 4 without running `start` again |
 
 On success the command has written these:
 
-- `.env`: `LEMMA_API_KEY`, an ingest key that can only send traces to this project, and `LEMMA_PROJECT_ID`. A key already in `.env` that Lemma confirms for the approved project is kept. When `.env` is a symlink or isn't a regular file, both values go to a private file under `~/.lemma/setup/` instead
-- `.env.example`: empty `LEMMA_API_KEY=` and `LEMMA_PROJECT_ID=` placeholders, unless it is a symlink or isn't a regular file
+- `.env`: `LEMMA_API_KEY`, an ingest key that can only send traces to this project, and `LEMMA_PROJECT_ID`. With `--api-url`, also `LEMMA_BASE_URL`, which points the SDK at that API. A production setup removes a leftover `LEMMA_BASE_URL`. A key already in `.env` that Lemma confirms for the approved project is kept. When `.env` is a symlink or isn't a regular file, the values go to a private file under `~/.lemma/setup/` instead
+- `.env.example`: empty `LEMMA_API_KEY=` and `LEMMA_PROJECT_ID=` placeholders, and `LEMMA_BASE_URL=` with `--api-url`, unless it is a symlink or isn't a regular file
 - Your MCP config, as a `lemma` server: through `claude mcp add-json` for Claude Code, and in the agent's own config file for Cursor, Codex, OpenCode, Pi, Hermes, and OpenClaw. An admin key already there that Lemma confirms for the organization is kept
 - For `other`, or a config it can't edit safely, a file under `~/.lemma/setup/` that only the user can read. The output prints the entry's shape and where to add it; ask the user to add it there, and don't read the file yourself. For Claude Code, the output prints one command that reads the key from the file, replaces any `lemma` server in the project's local scope with `claude mcp add-json`, and deletes the file once that succeeds; you may run it as printed, without reading the file, once the `claude` command is installed. It changes nothing once the file is gone, so a retry is safe. Never add the entry to the project's `.mcp.json`, which is committed
 
@@ -124,7 +127,8 @@ If the output warns that git doesn't ignore `.env`, add `.env` to `.gitignore`.
 Follow the `lemma-tracing` skill with the Approach and Scope answers. If it isn't installed, fetch `https://raw.githubusercontent.com/uselemma/lemma/main/skills/lemma-tracing/SKILL.md`. These rules apply on top of it:
 
 - The root trace `name` is the agent name from step 3, exactly
-- `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` are already in `.env`. Don't ask for a key; its "Handing Back" section covers this case
+- `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` are already in `.env`, with `LEMMA_BASE_URL` when you passed `--api-url`. Don't ask for a key; its "Handing Back" section covers this case
+- Don't pass `baseUrl` / `base_url` to the SDK: it reads `LEMMA_BASE_URL` from the environment. That needs `@uselemma/tracing` or `uselemma-tracing` 7.14.0 or later; when the app pins an older version, upgrade it
 - The process that runs the agent must load `.env`. Next.js loads it; a Node.js script needs `node --env-file=.env` or `dotenv`; Python needs `python-dotenv` or the framework's loader
 
 ## 5. Send the first trace
@@ -146,7 +150,7 @@ End with a short report:
 - The project and agent names, and every file you changed
 - That the key in `.env` can only send traces to this project
 - The build and deploy steps that need attention, for example:
-  - Add `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` to the deployment's environment variables or secrets (Vercel, Railway, Fly.io, Docker, CI)
+  - Add `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`, and `LEMMA_BASE_URL` when setup wrote it, to the deployment's environment variables or secrets (Vercel, Railway, Fly.io, Docker, CI)
   - Set `LEMMA_RELEASE` to the deployed version, such as the commit SHA, during deployment
   - Serverless functions and other short-lived processes must end and send each trace before they exit; `lemma-tracing` covers how
   - A container image or build that doesn't copy `.env` needs the variables set another way

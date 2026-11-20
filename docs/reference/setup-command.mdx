@@ -40,7 +40,7 @@ The coding agent passes the names it inferred from the codebase. You confirm or 
 | `--org` | No | The organization’s slug from the setup prompt, for example `acme-inc-x1y2`. The approval page selects that organization when you belong to it, and then offers no **Switch organization** link. To choose another organization, run `start` again without `--org` |
 | `--repository` | No | The repository, for example `acme/support-bot`. The command removes credentials from a URL before sending it |
 | `--framework` | No | The agent framework, for example `vercel-ai` or `langgraph` |
-| `--api-url` | No | The Lemma API. Defaults to `https://api.uselemma.ai`. The command accepts HTTP only for `localhost` |
+| `--api-url` | No | The Lemma API. Defaults to `https://api.uselemma.ai`. The command accepts only HTTPS on `uselemma.ai` or a subdomain, or HTTP/HTTPS on `localhost`, `127.0.0.1` or `[::1]` on any port, and refuses any other URL with exit code `2` before it sends a request. For an API other than production, `wait` also writes `LEMMA_BASE_URL`, so the app sends traces to that API. `wait` uses the API `start` was given |
 | `--no-browser` | No | Print the approval URL without opening a browser |
 
 `wait` takes no flags.
@@ -58,16 +58,16 @@ Each key is named for the coding agent and the day, for example `Setup: Claude C
 
 `wait` writes two files in the directory it runs in. `start` checks both before the approval begins, and `wait` checks them again before it polls. Each says what it will skip or save elsewhere:
 
-- **`.env`**: sets `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`. A new file is readable only by you. In an existing file, other lines, `export` prefixes, and the file’s permissions stay as they are; the command warns when the file’s group or other users can read it. Setup never writes through a symlinked `.env` or replaces one that isn’t a regular file: `start` and `wait` say so, and `wait` saves both values to a file in `~/.lemma/setup/` that only you can read
-- **`.env.example`**: adds empty `LEMMA_API_KEY=` and `LEMMA_PROJECT_ID=` lines, and creates the file if it’s missing. A `.env.example` that is a symlink or isn’t a regular file stays unchanged, and `start` and `wait` say so. A failed write is reported and never fails setup
+- **`.env`**: sets `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`, and `LEMMA_BASE_URL` when `--api-url` names an API other than production. Both SDKs read `LEMMA_BASE_URL` when you don’t pass `baseUrl` / `base_url`. When Lemma keeps the key already in `.env`, `wait` still sets `LEMMA_BASE_URL`. A production setup removes a `LEMMA_BASE_URL` left in `.env`, so a production key never goes to another API. A new file is readable only by you. In an existing file, other lines, `export` prefixes, and the file’s permissions stay as they are; the command warns when the file’s group or other users can read it. Setup never writes through a symlinked `.env` or replaces one that isn’t a regular file: `start` and `wait` say so, and `wait` saves the values to a file in `~/.lemma/setup/` that only you can read
+- **`.env.example`**: adds empty `LEMMA_API_KEY=` and `LEMMA_PROJECT_ID=` lines, plus `LEMMA_BASE_URL=` for an API other than production, and creates the file if it’s missing. A `.env.example` that is a symlink or isn’t a regular file stays unchanged, and `start` and `wait` say so. A failed write is reported and never fails setup
 
 If git doesn’t ignore `.env`, the command prints a warning. Add `.env` to `.gitignore` before you commit.
 
-Lemma returns each new key once, so `wait` never drops one. When `.env` can’t take the ingest key although neither `start` nor `wait` found anything wrong before polling, `wait` saves `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` to that private file, says where, finishes the other steps, and exits with `1`. Copy both values where the app loads its environment, then delete that file.
+Lemma returns each new key once, so `wait` never drops one. When `.env` can’t take the ingest key although neither `start` nor `wait` found anything wrong before polling, `wait` saves `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`, with `LEMMA_BASE_URL` for an API other than production, to that private file, says where, finishes the other steps, and exits with `1`. Copy the values where the app loads its environment, then delete that file. When `wait` can’t set `LEMMA_BASE_URL` beside a key Lemma kept, it names the line to add and exits with `1`.
 
 ## Where the admin key goes for each coding agent
 
-The admin key goes into your coding agent’s user-level MCP config as a server named `lemma`, pointing at `https://api.uselemma.ai/mcp/`. Setup replaces an existing `lemma` entry and leaves other servers and settings as they are:
+The admin key goes into your coding agent’s user-level MCP config as a server named `lemma`, pointing at `/mcp/` on the Lemma API (`https://api.uselemma.ai/mcp/` by default). Setup replaces an existing `lemma` entry and leaves other servers and settings as they are:
 
 | Coding agent | Where setup writes the `lemma` server | How to load it |
 | --- | --- | --- |
@@ -98,7 +98,7 @@ Without the `claude` command, add the entry as `projects["<repository root>"].mc
 
 A re-run reuses a key only when Lemma confirms what it’s allowed to do. `start` asks Lemma’s `GET /auth/key` about each existing key before the approval begins:
 
-- **Ingest key in `.env`**: kept when Lemma confirms an `ingest` key limited to the project in `LEMMA_PROJECT_ID`, and you approve that same project. Any other key, including a read or admin key for that project, gets a new ingest key, and `wait` replaces both values in `.env`
+- **Ingest key in `.env`**: kept when Lemma confirms an `ingest` key limited to the project in `LEMMA_PROJECT_ID`, and you approve that same project. Any other key, including a read or admin key for that project, gets a new ingest key, and `wait` replaces both values in `.env`. For an API other than production, `wait` also sets `LEMMA_BASE_URL`, beside a kept key too
 - **Admin key in the MCP config**: kept when Lemma confirms an admin key that isn’t limited to one project, and you approve in that key’s organization. Otherwise Lemma creates a new admin key, and `wait` replaces the `lemma` entry
 
 A key Lemma rejects, or an answer that doesn’t arrive, counts as unconfirmed.
@@ -111,7 +111,7 @@ The `lemma-setup` skill uses the exit code to decide the next step:
 | --- | --- | --- |
 | `0` | `start`, `wait` | `start`: the approval started. `wait`: approved, and each key is written, kept, or saved to a private file that `start`, or `wait` before it polled, announced; the output names that file and includes `Project ID:` and `Agent name:` |
 | `5` | `wait` | The approval is still pending. Run `wait` again |
-| `1` | `start`, `wait` | Setup failed. The message says why, for example no pending setup in this directory, or no coding-agent setup on this Lemma environment. After approval, `wait` also exits with `1` when a key went to a private file because a write failed, or no key was saved; it finishes every other step first |
+| `1` | `start`, `wait` | Setup failed. The message says why, for example no pending setup in this directory, or no coding-agent setup on this Lemma environment. After approval, `wait` also exits with `1` when a key went to a private file because a write failed, no key was saved, or `LEMMA_BASE_URL` couldn’t be set beside a kept key (the output names the line to add); it finishes every other step first |
 | `2` | `start`, `wait` | A command or flag is missing or invalid |
 | `3` | `wait` | The approval code expired. Run `start` again |
 | `4` | `wait` | The approver canceled, or is no longer an owner or admin. Run `start` again |
@@ -124,9 +124,9 @@ The commands never print a key or the device code. The approval code they print 
 
 The setup prompt in Lemma tells your coding agent to fetch and follow [`skills/lemma-setup/SKILL.md`](https://github.com/uselemma/lemma/blob/main/skills/lemma-setup/SKILL.md). The skill runs these steps in order:
 
-1. Infer the project name, agent name, framework, and repository from the codebase, and read the organization slug from the prompt
+1. Infer the project name, agent name, framework, and repository from the codebase, and read the organization slug and, when the prompt has one, the `Lemma API:` URL from the prompt
 2. Ask the Approach question (which integration path) and the Scope question (which agent paths), before any code changes
-3. Run `start`, show you the approval URL and code, then run `wait` until it exits with `0`
+3. Run `start`, with `--api-url` set to the prompt’s `Lemma API:` URL when it has one, show you the approval URL and code, then run `wait` until it exits with `0`
 4. Instrument the agent with the `lemma-tracing` skill, using the approved agent name as the root trace `name`
 5. Send a first trace, after you agree to run the agent
 6. Load the Lemma MCP server and record the agent’s context with the `lemma-artifacts` skill

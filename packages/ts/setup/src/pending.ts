@@ -1,5 +1,6 @@
 import { unlink } from "node:fs/promises";
 
+import { isLemmaApiUrl, type LemmaApiUrl } from "./api.js";
 import { failureReason, SetupError } from "./errors.js";
 import { readRegularFile, writePrivateFile } from "./files.js";
 import { isHarnessId, type HarnessId } from "./harness.js";
@@ -11,7 +12,7 @@ const PENDING_SCHEMA_VERSION = 1;
 export type PendingSetup = {
   version: typeof PENDING_SCHEMA_VERSION;
   appDir: string;
-  apiUrl: string;
+  apiUrl: LemmaApiUrl;
   harness: HarnessId;
   /** The command's only proof of the handshake, hence the owner-only file. */
   deviceCode: string;
@@ -49,6 +50,7 @@ function isPendingSetup(value: unknown): value is PendingSetup {
     value.version === PENDING_SCHEMA_VERSION &&
     typeof value.appDir === "string" &&
     typeof value.apiUrl === "string" &&
+    isLemmaApiUrl(value.apiUrl) &&
     typeof value.harness === "string" &&
     isHarnessId(value.harness) &&
     typeof value.deviceCode === "string" &&

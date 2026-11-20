@@ -18,27 +18,97 @@ const SETUP_NOT_FOUND_CODE = "setup_authorization_not_found";
 
 const USER_AGENT = `${packageJson.name}/${packageJson.version}`;
 
+/** This machine, as `URL` spells its hostname. */
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
 function isLoopbackHost(hostname: string): boolean {
+  return LOOPBACK_HOSTS.has(hostname);
+}
+
+/**
+ * The only domain, with its subdomains, setup accepts as a Lemma API over
+ * HTTPS. The API usually comes from a line of a pasted prompt, and `start`
+ * sends the keys it finds to that API before anyone approves, so a lookalike
+ * prompt must not be able to name another host.
+ */
+const LEMMA_API_DOMAIN = "uselemma.ai";
+
+function isLemmaHost(hostname: string): boolean {
   return (
-    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]"
+    hostname === LEMMA_API_DOMAIN || hostname.endsWith(`.${LEMMA_API_DOMAIN}`)
   );
 }
 
-/** `value` without a trailing slash; HTTPS, or HTTP only on this machine. */
-export function normalizedHttpUrl(value: string, label: string): string {
+/**
+ * The one rule for which API setup talks to: HTTPS on `uselemma.ai` or a
+ * subdomain, or this machine over HTTP or HTTPS on any port, with no
+ * credentials in the URL.
+ */
+function isAllowedApi(url: URL): boolean {
+  return (
+    !url.username &&
+    !url.password &&
+    ((url.protocol === "https:" && isLemmaHost(url.hostname)) ||
+      ((url.protocol === "http:" || url.protocol === "https:") &&
+        isLoopbackHost(url.hostname)))
+  );
+}
+
+/** HTTPS anywhere, or HTTP only on this machine. */
+function isApprovalUrl(url: URL): boolean {
+  return (
+    url.protocol === "https:" ||
+    (url.protocol === "http:" && isLoopbackHost(url.hostname))
+  );
+}
+
+/**
+ * A URL that passed `isAllowedApi`. Every request setup makes, and every URL
+ * it writes beside a key (`LEMMA_BASE_URL`, the MCP server), takes one, so
+ * an unchecked URL cannot reach either.
+ */
+export type LemmaApiUrl = string & { readonly __brand: "LemmaApiUrl" };
+
+/** `value` without a trailing slash, once `allowed` accepts it. */
+function checkedUrl(
+  value: string,
+  label: string,
+  allowed: (url: URL) => boolean,
+  requirement: string,
+): string {
   let url: URL;
   try {
     url = new URL(value);
   } catch {
     throw new SetupError(`${label} is not a valid URL: ${value}`);
   }
-  if (
-    url.protocol !== "https:" &&
-    !(url.protocol === "http:" && isLoopbackHost(url.hostname))
-  ) {
-    throw new SetupError(`${label} must use HTTPS (or HTTP on localhost)`);
-  }
+  if (!allowed(url)) throw new SetupError(`${label} must ${requirement}`);
   return url.toString().replace(/\/+$/, "");
+}
+
+/** `value` as an API setup may talk to, or a refusal. */
+export function lemmaApiUrl(value: string, label: string): LemmaApiUrl {
+  return checkedUrl(
+    value,
+    label,
+    isAllowedApi,
+    `be a Lemma API: HTTPS on ${LEMMA_API_DOMAIN} or a subdomain, or HTTP/HTTPS on localhost, 127.0.0.1 or [::1]`,
+  ) as LemmaApiUrl;
+}
+
+/** Whether setup may talk to `value`, for a URL read back from its own files. */
+export function isLemmaApiUrl(value: string): value is LemmaApiUrl {
+  return URL.canParse(value) && isAllowedApi(new URL(value));
+}
+
+/** The approval page's URL, which the browser opens, or a refusal. */
+function approvalUrl(value: string, label: string): string {
+  return checkedUrl(
+    value,
+    label,
+    isApprovalUrl,
+    "use HTTPS (or HTTP on localhost)",
+  );
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -95,7 +165,7 @@ type SetupAuthorization = {
 };
 
 export async function startSetupAuthorization(
-  apiUrl: string,
+  apiUrl: LemmaApiUrl,
   request: StartRequest,
   fetchImplementation: Fetch,
 ): Promise<SetupAuthorization> {
@@ -134,7 +204,7 @@ export async function startSetupAuthorization(
   return {
     deviceCode: body.device_code,
     userCode: body.user_code,
-    verificationUriComplete: normalizedHttpUrl(
+    verificationUriComplete: approvalUrl(
       body.verification_uri_complete,
       "Lemma approval URL",
     ),
@@ -198,7 +268,7 @@ function approvedPoll(body: Record<string, unknown>): TokenPoll {
 }
 
 export async function pollSetupAuthorization(
-  apiUrl: string,
+  apiUrl: LemmaApiUrl,
   deviceCode: string,
   fetchImplementation: Fetch,
 ): Promise<TokenPoll> {
@@ -271,7 +341,7 @@ type ApiKeyDescription = {
  * a new one.
  */
 export async function describeApiKey(
-  apiUrl: string,
+  apiUrl: LemmaApiUrl,
   apiKey: string,
   fetchImplementation: Fetch,
 ): Promise<ApiKeyDescription | null> {

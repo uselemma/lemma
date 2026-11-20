@@ -76,6 +76,67 @@ describe("wait", () => {
       expect(printed(run)).not.toContain(secret);
   });
 
+  it("writes LEMMA_BASE_URL with the new key, and its placeholder, when the API isn't production", async () => {
+    const run = await setUp({ api: { polls: [approvedWithKeys] } });
+    await run.start({ apiUrl: run.api.url });
+    await expect(run.wait()).resolves.toEqual({ status: "approved" });
+
+    expect(await readFile(join(run.app, ".env"), "utf8")).toBe(
+      `LEMMA_API_KEY=${INGEST_KEY}\nLEMMA_PROJECT_ID=${PROJECT_ID}\nLEMMA_BASE_URL=${run.api.url}\n`,
+    );
+    expect(await readFile(join(run.app, ".env.example"), "utf8")).toBe(
+      "LEMMA_API_KEY=\nLEMMA_PROJECT_ID=\nLEMMA_BASE_URL=\n",
+    );
+    expect(run.lines).toContain(
+      "Before you deploy, add LEMMA_API_KEY, LEMMA_PROJECT_ID, and LEMMA_BASE_URL to your deployment's environment variables or secrets.",
+    );
+    expect(run.lines).toContain("Lemma setup finished.");
+  });
+
+  it("removes a leftover LEMMA_BASE_URL on a production setup", async () => {
+    const run = await setUp({
+      api: { polls: [approvedWithKeys] },
+      prepare: async (app) => {
+        await writeFile(
+          join(app, ".env"),
+          "LEMMA_BASE_URL=https://dev.api.uselemma.ai\n",
+          { mode: 0o600 },
+        );
+      },
+    });
+    await run.start();
+    await expect(run.wait()).resolves.toEqual({ status: "approved" });
+    expect(await readFile(join(run.app, ".env"), "utf8")).toBe(
+      `LEMMA_API_KEY=${INGEST_KEY}\nLEMMA_PROJECT_ID=${PROJECT_ID}\n`,
+    );
+    expect(run.lines).toContain(
+      ".env: removed LEMMA_BASE_URL, so the app sends traces to production.",
+    );
+  });
+
+  it("refuses a pending setup whose API setup may not talk to, before any request", async () => {
+    const run = await setUp({ api: { polls: [approvedWithKeys] } });
+    await run.start();
+    const saved = JSON.parse(await readFile(run.pendingPath, "utf8"));
+    await writeFile(
+      run.pendingPath,
+      JSON.stringify({ ...saved, apiUrl: "https://uselemma.ai.evil.com" }),
+    );
+    const requested: string[] = [];
+    const error = await rejection(
+      runWait({
+        ...run.environment,
+        fetch: async (input) => {
+          requested.push(String(input));
+          throw new Error("no request expected");
+        },
+      }),
+    );
+    expect(error.message).toContain("is unreadable. Run `start` again.");
+    expect(requested).toEqual([]);
+    await expect(stat(join(run.app, ".env"))).rejects.toThrow();
+  });
+
   it("returns pending within its budget, keeps the pace, and finishes on a later run", async () => {
     const polls = Array.from({ length: 40 }, () => pending);
     const run = await setUp({ api: { polls: [...polls, approvedWithKeys] } });

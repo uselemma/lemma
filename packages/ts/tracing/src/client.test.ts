@@ -1478,4 +1478,66 @@ describe("Lemma", () => {
       expect(jsonBody(fetchMock.mock.calls[0]).trace.release).toBe("1.8.3");
     });
   });
+
+  describe("baseUrl", () => {
+    const previousBaseUrl = process.env.LEMMA_BASE_URL;
+
+    afterEach(() => {
+      if (previousBaseUrl === undefined) {
+        delete process.env.LEMMA_BASE_URL;
+      } else {
+        process.env.LEMMA_BASE_URL = previousBaseUrl;
+      }
+    });
+
+    async function sendTrace(
+      options: ConstructorParameters<typeof Lemma>[0] = {},
+    ) {
+      const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+      const lemma = new Lemma({
+        apiKey: "key",
+        projectId: "10000000-0000-0000-0000-000000000001",
+        fetch: fetchMock as typeof fetch,
+        ...options,
+      });
+      await lemma.trace({ name: "support-agent" }, async () => "ok");
+      return fetchMock;
+    }
+
+    it("sends to production when neither baseUrl nor LEMMA_BASE_URL is set", async () => {
+      delete process.env.LEMMA_BASE_URL;
+      expect(await sendTrace()).toHaveBeenCalledWith(
+        "https://api.uselemma.ai/traces/ingest",
+        expect.anything(),
+      );
+    });
+
+    it("uses LEMMA_BASE_URL when the constructor omits baseUrl", async () => {
+      process.env.LEMMA_BASE_URL = "https://dev.api.example.test/";
+      expect(await sendTrace()).toHaveBeenCalledWith(
+        "https://dev.api.example.test/traces/ingest",
+        expect.anything(),
+      );
+    });
+
+    it("lets an explicit baseUrl win over LEMMA_BASE_URL", async () => {
+      process.env.LEMMA_BASE_URL = "https://dev.api.example.test";
+      expect(
+        await sendTrace({ baseUrl: "https://api.example.test" }),
+      ).toHaveBeenCalledWith(
+        "https://api.example.test/traces/ingest",
+        expect.anything(),
+      );
+    });
+
+    it("sends to production when LEMMA_BASE_URL is empty", async () => {
+      for (const value of ["", "   "]) {
+        process.env.LEMMA_BASE_URL = value;
+        expect(await sendTrace()).toHaveBeenCalledWith(
+          "https://api.uselemma.ai/traces/ingest",
+          expect.anything(),
+        );
+      }
+    });
+  });
 });

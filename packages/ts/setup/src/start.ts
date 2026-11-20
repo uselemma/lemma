@@ -1,4 +1,8 @@
-import { startSetupAuthorization, type StartRequest } from "./api.js";
+import {
+  startSetupAuthorization,
+  type LemmaApiUrl,
+  type StartRequest,
+} from "./api.js";
 import {
   appDirectory,
   SETUP_COMMAND,
@@ -21,7 +25,7 @@ export type StartOptions = {
   projectName: string;
   agentName: string;
   openBrowser: boolean;
-  apiUrl: string;
+  apiUrl: LemmaApiUrl;
   repository?: string;
   framework?: string;
   org?: string;
@@ -62,7 +66,7 @@ export async function runStart(
   const { apiUrl, harness } = options;
   const appDir = await appDirectory(environment);
   const paths = setupPaths(environment.homeDir, appDir);
-  const setupPlan = await plan({ environment, appDir, harness, paths });
+  const setupPlan = await plan({ environment, appDir, harness, paths, apiUrl });
 
   const [ingest, mcp] = await Promise.all([
     checkIngestKey({

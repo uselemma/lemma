@@ -1182,3 +1182,9 @@ async def test_openai_agents_handed_off_delivery_sees_the_callers_context_vars()
     processor.force_flush()
 
     assert seen == ["req-1"]
+
+
+def test_openai_agents_reads_lemma_base_url_when_no_base_url_is_given(monkeypatch):
+    monkeypatch.setenv("LEMMA_BASE_URL", "https://dev.api.example.test")
+    processor = openai_agents(api_key="key", project_id=PROJECT_ID)
+    assert processor.lemma.base_url == "https://dev.api.example.test"

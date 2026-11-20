@@ -10,6 +10,7 @@ import {
   isSuccessfulIngestStatus,
   parseIngestStatus,
   pickResponseHeaders,
+  PRODUCTION_BASE_URL,
 } from "./debug-delivery";
 import {
   isDebugModeEnabled,
@@ -57,6 +58,10 @@ export type JsonValue =
 export type LemmaClientOptions = {
   apiKey?: string;
   projectId?: string;
+  /**
+   * The Lemma API. Defaults to `LEMMA_BASE_URL` when it is set and not empty,
+   * otherwise `https://api.uselemma.ai`.
+   */
   baseUrl?: string;
   /**
    * Sends every request. Each call carries `userAgent` as `User-Agent` in
@@ -1033,10 +1038,10 @@ export class Lemma {
       options.projectId ?? process.env.LEMMA_PROJECT_ID,
       "LEMMA_PROJECT_ID",
     );
-    this.baseUrl = (options.baseUrl ?? "https://api.uselemma.ai").replace(
-      /\/+$/,
-      "",
-    );
+    this.baseUrl = (
+      options.baseUrl ??
+      (process.env.LEMMA_BASE_URL?.trim() || PRODUCTION_BASE_URL)
+    ).replace(/\/+$/, "");
     this.fetchImpl = options.fetch ?? fetch;
     this.baseHeaders = {
       "User-Agent": options.userAgent ?? SDK_USER_AGENT,

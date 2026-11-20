@@ -28,6 +28,7 @@ from .debug_delivery import (
     INGEST_STATUS_PATH,
     INGEST_STATUS_POLL_INTERVAL_SECONDS,
     INGEST_STATUS_POLL_TIMEOUT_SECONDS,
+    PRODUCTION_BASE_URL,
     api_key_suffix,
     build_config_warnings,
     is_successful_ingest_status,
@@ -1045,7 +1046,7 @@ class Lemma:
         api_key: str | None = None,
         project_id: str | None = None,
         release: str | None = None,
-        base_url: str = "https://api.uselemma.ai",
+        base_url: str | None = None,
         transport: (
             Callable[
                 [str, dict[str, str], bytes],
@@ -1068,6 +1069,10 @@ class Lemma:
         self.release = normalize_release(
             release if release is not None else os.environ.get("LEMMA_RELEASE")
         )
+        if base_url is None:
+            base_url = (
+                os.environ.get("LEMMA_BASE_URL", "").strip() or PRODUCTION_BASE_URL
+            )
         self.base_url = base_url.rstrip("/")
         self.before_send = before_send
         self.max_payload_bytes = max_payload_bytes

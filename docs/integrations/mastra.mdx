@@ -54,7 +54,6 @@ import { mastra as lemmaMastra } from "@uselemma/tracing";
 export const lemmaExporter = lemmaMastra({
   apiKey: process.env.LEMMA_API_KEY,
   projectId: process.env.LEMMA_PROJECT_ID,
-  baseUrl: process.env.LEMMA_BASE_URL,
   release: process.env.LEMMA_RELEASE,
   agentName: "support-agent",
 });

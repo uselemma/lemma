@@ -36,7 +36,6 @@ addTraceProcessor(
   openAIAgents({
     apiKey: process.env.LEMMA_API_KEY,
     projectId: process.env.LEMMA_PROJECT_ID,
-    baseUrl: process.env.LEMMA_BASE_URL,
     release: process.env.LEMMA_RELEASE,
     metadata: { service: "support" },
     threadIdKey: "threadId",
@@ -92,7 +91,6 @@ from uselemma_tracing import instrument_openai_agents
 instrument_openai_agents(
     api_key=os.environ["LEMMA_API_KEY"],
     project_id=os.environ["LEMMA_PROJECT_ID"],
-    base_url=os.getenv("LEMMA_BASE_URL", "https://api.uselemma.ai"),
     metadata={"service": "support"},
     thread_id_key="thread_id",
     user_id_key="user_id",

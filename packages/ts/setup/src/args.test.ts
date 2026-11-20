@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { lemmaApiUrl } from "./api.js";
 import { parseCommand, repositoryWithoutCredentials } from "./args.js";
 import { EXIT_CODES, SetupError } from "./errors.js";
 import { startRequest } from "./start.js";
@@ -73,7 +74,7 @@ describe("command-line input", () => {
           projectName: "Support bot",
           agentName: "support-bot",
           openBrowser: true,
-          apiUrl: "https://api.uselemma.ai",
+          apiUrl: lemmaApiUrl("https://api.uselemma.ai", "--api-url"),
           org: "acme-inc-x1y2",
         },
         {
@@ -176,13 +177,57 @@ describe("command-line input", () => {
     );
   });
 
-  it("rejects a bad --api-url with exit 2 and the usage", () => {
-    expect(
-      usageErrorOf(startArgv("--api-url", "http://api.example.com")).message,
-    ).toContain("--api-url must use HTTPS");
-    expect(usageErrorOf(startArgv("--api-url", "not a url")).message).toContain(
-      "--api-url is not a valid URL",
-    );
+  describe("--api-url", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    const apiUrlOf = (value: string) => {
+      const command = parseCommand(startArgv("--api-url", value));
+      return command.kind === "start" ? command.options.apiUrl : null;
+    };
+
+    it.each([
+      ["production", "https://api.uselemma.ai", "https://api.uselemma.ai"],
+      ["dev", "https://dev.api.uselemma.ai/", "https://dev.api.uselemma.ai"],
+      ["the bare domain", "https://uselemma.ai", "https://uselemma.ai"],
+      [
+        "a cased host",
+        "HTTPS://Dev.API.uselemma.ai",
+        "https://dev.api.uselemma.ai",
+      ],
+      ["localhost", "http://localhost:8000/", "http://localhost:8000"],
+      ["localhost without a port", "http://localhost", "http://localhost"],
+      ["127.0.0.1", "http://127.0.0.1:9", "http://127.0.0.1:9"],
+      ["[::1]", "http://[::1]:8000", "http://[::1]:8000"],
+      ["HTTPS on loopback", "https://localhost:8443", "https://localhost:8443"],
+    ])("accepts %s", (_case, value, normalized) => {
+      expect(apiUrlOf(value)).toBe(normalized);
+    });
+
+    it.each([
+      ["a lookalike suffix", "https://uselemma.ai.evil.com"],
+      ["a lookalike prefix", "https://eviluselemma.ai"],
+      ["a trailing-dot host", "https://api.uselemma.ai."],
+      ["plain HTTP off this machine", "http://api.uselemma.ai"],
+      ["another host", "https://api.example.com"],
+      ["userinfo naming Lemma", "https://uselemma.ai@evil.com"],
+      ["credentials on a Lemma host", "https://user:pass@api.uselemma.ai"],
+      ["a loopback lookalike", "http://localhost.evil.com"],
+      ["another scheme", "ftp://localhost"],
+    ])("refuses %s with exit 2, before any request", (_case, value) => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+      expect(usageErrorOf(startArgv("--api-url", value)).message).toContain(
+        "--api-url must be a Lemma API: HTTPS on uselemma.ai or a subdomain, or HTTP/HTTPS on localhost, 127.0.0.1 or [::1]",
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("refuses a value that is not a URL", () => {
+      expect(
+        usageErrorOf(startArgv("--api-url", "not a url")).message,
+      ).toContain("--api-url is not a valid URL");
+    });
   });
 
   it("strips credentials from a repository URL", () => {

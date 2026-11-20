@@ -66,8 +66,8 @@ If no traces are arriving, start with [No traces in Lemma](#no-traces-in-lemma) 
 
 - Look for a `dropped trace <id>` warning in your app’s logs. It names the status Lemma returned or the network error, such as `ingest returned 401 (check LEMMA_API_KEY)`. After a warning, drops in the next minute are counted, and the next warning says how many were dropped since the last one.
 - Confirm `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` come from the same project.
-- Confirm your runtime can reach `https://api.uselemma.ai`.
-- Pass `baseUrl` / `base_url` only when using a self-hosted or staging endpoint.
+- Confirm your runtime can reach `https://api.uselemma.ai`, or the API in `LEMMA_BASE_URL` when it’s set.
+- Set `LEMMA_BASE_URL`, or pass `baseUrl` / `base_url`, only when using a self-hosted or staging endpoint. When you pass `baseUrl` / `base_url`, the SDK ignores `LEMMA_BASE_URL`.
 
 **Debug with Debug mode:** enable `LEMMA_DEBUG=1` and run the smoke test again. If you do not see SDK logs, the traced code path is not running in that process. If you see an ingest failure, check the status code, credentials, project ID, and `baseUrl`.
 

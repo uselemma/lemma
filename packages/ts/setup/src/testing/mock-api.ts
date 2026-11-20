@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
+import { lemmaApiUrl, type LemmaApiUrl } from "../api.js";
+
 export type RecordedRequest = {
   method: string;
   path: string;
@@ -81,7 +83,8 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
 /** A local stand-in for the Lemma API endpoints setup calls. */
 export class MockApi {
   readonly requests: RecordedRequest[] = [];
-  url = "";
+  /** Loopback, so setup accepts it as a Lemma API; the port is set by `listen`. */
+  url: LemmaApiUrl = lemmaApiUrl("http://127.0.0.1", "mock API");
   private server: Server | null = null;
   private pollIndex = 0;
 
@@ -108,7 +111,7 @@ export class MockApi {
       this.server?.listen(0, "127.0.0.1", resolvePromise),
     );
     const { port } = this.server.address() as AddressInfo;
-    this.url = `http://127.0.0.1:${port}`;
+    this.url = lemmaApiUrl(`http://127.0.0.1:${port}`, "mock API");
     return this;
   }
 

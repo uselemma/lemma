@@ -54,7 +54,7 @@ LEMMA_API_KEY=...
 LEMMA_PROJECT_ID=...
 ```
 
-The SDK sends to `https://api.uselemma.ai/traces/ingest` by default. Use `baseUrl` / `base_url` only for staging or self-hosted deployments.
+The SDK sends to `https://api.uselemma.ai/traces/ingest` by default, or to `LEMMA_BASE_URL` when it is set. Set `LEMMA_BASE_URL`, or pass `baseUrl` / `base_url` (which wins over it), only for staging or self-hosted deployments.
 
 ## Callback Trace
 

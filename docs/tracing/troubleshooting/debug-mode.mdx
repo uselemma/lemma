@@ -176,7 +176,7 @@ Start with the smoke test. If it logs `trace sent`, credentials and networking a
 If it logs `trace ingest failed`, check:
 
 - `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` are from the same project.
-- `baseUrl` / `base_url` points at a server that implements `POST /traces/ingest`.
+- `baseUrl` / `base_url`, or `LEMMA_BASE_URL` when you pass neither, points at a server that implements `POST /traces/ingest`.
 - Your runtime can make outbound HTTPS requests.
 - The `hint` field on `trace ingest failed` (401 → API key, 403 → project mismatch, 429 → rate limit, 404 → wrong host).
 

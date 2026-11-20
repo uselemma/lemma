@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { CODING_AGENTS } from "../agents.js";
+import type { LemmaApiUrl } from "../api.js";
 import type { RunCommand } from "../command.js";
 import { failureReason } from "../errors.js";
 import {
@@ -79,7 +80,7 @@ export type McpTarget =
 export type PlaceableMcpTarget = Exclude<McpTarget, PrivateTarget>;
 
 /** The Lemma MCP server's URL for a Lemma API URL. */
-export function mcpServerUrl(apiUrl: string): string {
+export function mcpServerUrl(apiUrl: LemmaApiUrl): string {
   return `${apiUrl}/mcp/`;
 }
 

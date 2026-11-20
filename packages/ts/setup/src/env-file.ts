@@ -1,3 +1,4 @@
+import { DEFAULT_API_URL, type LemmaApiUrl } from "./api.js";
 import type { RunCommand } from "./command.js";
 import { failureReason } from "./errors.js";
 import {
@@ -11,11 +12,58 @@ import {
 } from "./files.js";
 import { isGitIgnored } from "./git.js";
 import type { Placement, PrivateSave, PrivateTarget } from "./placement.js";
-import { isUuid, lineEnding } from "./shared.js";
+import { isUuid, lineEnding, listed } from "./shared.js";
 
 export const API_KEY_VARIABLE = "LEMMA_API_KEY";
 export const PROJECT_ID_VARIABLE = "LEMMA_PROJECT_ID";
-const SETUP_VARIABLES = [API_KEY_VARIABLE, PROJECT_ID_VARIABLE] as const;
+export const BASE_URL_VARIABLE = "LEMMA_BASE_URL";
+
+/** Variables to set in an env file; null removes the variable. */
+type EnvValues = Readonly<Record<string, string | null>>;
+
+/** What setup writes for the app, decided once from the API it runs against. */
+export type AppEnv = {
+  /**
+   * The value that points the app at that API: `LEMMA_BASE_URL` for an API
+   * other than production, and null for production, which both SDKs default
+   * to. Null removes a leftover `LEMMA_BASE_URL`, so a production key never
+   * goes to another API.
+   */
+  apiValues: EnvValues;
+  /** Every variable setup writes for the app, in file order. */
+  variables: readonly string[];
+};
+
+export function appEnvFor(apiUrl: LemmaApiUrl): AppEnv {
+  const baseUrl = apiUrl === DEFAULT_API_URL ? null : apiUrl;
+  return {
+    apiValues: { [BASE_URL_VARIABLE]: baseUrl },
+    variables:
+      baseUrl === null
+        ? [API_KEY_VARIABLE, PROJECT_ID_VARIABLE]
+        : [API_KEY_VARIABLE, PROJECT_ID_VARIABLE, BASE_URL_VARIABLE],
+  };
+}
+
+/** The variables `values` sets, as opposed to removes. */
+function setEntries(values: EnvValues): [string, string][] {
+  return Object.entries(values).flatMap(([name, value]) =>
+    value === null ? [] : [[name, value]],
+  );
+}
+
+/** Everything setup writes for the app with a new ingest key. */
+function newKeyValues(input: {
+  apiKey: string;
+  projectId: string;
+  appEnv: AppEnv;
+}): EnvValues {
+  return {
+    [API_KEY_VARIABLE]: input.apiKey,
+    [PROJECT_ID_VARIABLE]: input.projectId,
+    ...input.appEnv.apiValues,
+  };
+}
 
 /** `.env.example` holds placeholders only and is meant to be committed. */
 const NEW_EXAMPLE_FILE_MODE = 0o644;
@@ -61,25 +109,24 @@ export function singleValue(
 
 /**
  * Sets each variable in place, keeping every other line, its `export`
- * prefix, and the file's line endings; appends the variables it lacks.
+ * prefix, and the file's line endings; appends the variables it lacks and
+ * drops every assignment of a variable whose value is null.
  */
-export function upsertEnvContents(
-  contents: string,
-  values: Readonly<Record<string, string>>,
-): string {
+export function upsertEnvContents(contents: string, values: EnvValues): string {
   const eol = lineEnding(contents);
   const seen = new Set<string>();
   const lines = contents === "" ? [] : contents.split(/\r?\n/);
   if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  const updated = lines.map((line) => {
+  const updated = lines.flatMap((line) => {
     const match = ASSIGNMENT.exec(line);
-    if (!match) return line;
+    if (!match) return [line];
     const [, indent, exported = "", name] = match;
-    if (!(name in values)) return line;
+    if (!(name in values)) return [line];
     seen.add(name);
-    return `${indent}${exported}${name}=${values[name]}`;
+    const value = values[name];
+    return value === null ? [] : [`${indent}${exported}${name}=${value}`];
   });
-  for (const [name, value] of Object.entries(values)) {
+  for (const [name, value] of setEntries(values)) {
     if (!seen.has(name)) updated.push(`${name}=${value}`);
   }
   return `${updated.join(eol)}${eol}`;
@@ -182,9 +229,12 @@ export async function planEnvTarget(
 }
 
 /** The line announcing, before approval, that the key will go to its private file. */
-export function plannedEnvNote(target: EnvTarget): string | null {
+export function plannedEnvNote(
+  target: EnvTarget,
+  appEnv: AppEnv,
+): string | null {
   return target.kind === "private"
-    ? `.env: ${target.reason}. After approval, setup saves ${API_KEY_VARIABLE} and ${PROJECT_ID_VARIABLE} to ${target.fallbackPath} (readable only by you) instead.`
+    ? `.env: ${target.reason}. After approval, setup saves ${listed(appEnv.variables)} to ${target.fallbackPath} (readable only by you) instead.`
     : null;
 }
 
@@ -199,83 +249,176 @@ async function gitIgnoreWarning(
     : [];
 }
 
+/** The outcome of setting variables in `.env`. */
+type EnvWrite =
+  | {
+      written: true;
+      result: "created" | "updated" | "unchanged";
+      /** The null-valued variables the file had, now removed. */
+      removed: string[];
+      mode: number | null;
+    }
+  | { written: false; reason: string };
+
 /**
- * Writes the new ingest key and its project to `.env`, owner-only when the
- * file is new, with a warning when others can read the file or git does not
- * ignore it.
+ * The one writer of `.env`: sets and removes `values` in place, owner-only
+ * when it creates the file. A file that already matches is left as it is.
  */
-export async function placeIngestKey(input: {
-  target: PlaceableEnvTarget;
-  projectId: string;
-  apiKey: string;
-  run: RunCommand;
-}): Promise<Placement> {
-  const { path } = input.target;
+async function upsertEnvFile(
+  path: string,
+  values: EnvValues,
+): Promise<EnvWrite> {
   try {
     const file = await readEnvFile(path);
     if (file.kind === "not-editable") {
-      return { placed: false, reason: notWrittenReason(path, file.why) };
+      return { written: false, reason: notWrittenReason(path, file.why) };
+    }
+    const assignments = parseEnvAssignments(file.contents ?? "");
+    const removed = Object.keys(values).filter(
+      (name) => values[name] === null && assignments.has(name),
+    );
+    const changed =
+      removed.length > 0 ||
+      setEntries(values).some(
+        ([name, value]) => singleValue(assignments, name) !== value,
+      );
+    if (!changed) {
+      return { written: true, result: "unchanged", removed, mode: file.mode };
     }
     await writeFileAtomic(
       path,
-      upsertEnvContents(file.contents ?? "", {
-        [API_KEY_VARIABLE]: input.apiKey,
-        [PROJECT_ID_VARIABLE]: input.projectId,
-      }),
+      upsertEnvContents(file.contents ?? "", values),
       file.mode ?? PRIVATE_FILE_MODE,
     );
     return {
-      placed: true,
-      lines: [
-        file.contents === null
-          ? `.env: created with ${API_KEY_VARIABLE} and ${PROJECT_ID_VARIABLE}, readable only by you.`
-          : `.env: set ${API_KEY_VARIABLE} and ${PROJECT_ID_VARIABLE}.`,
-        ...(file.mode !== null && othersCanRead(file.mode)
-          ? [othersCanReadWarning(path, file.mode, "the ingest key")]
-          : []),
-        ...(await gitIgnoreWarning(path, input.run)),
-      ],
+      written: true,
+      result: file.contents === null ? "created" : "updated",
+      removed,
+      mode: file.mode,
     };
   } catch (error) {
     return {
-      placed: false,
+      written: false,
       reason: `setup could not write ${path} (${failureReason(error)})`,
     };
   }
 }
 
-/** The lines for a key the server kept: the key stays in `.env`. */
-export async function keptIngestLines(
+/**
+ * Writes the new ingest key, its project, and the app's API values to `.env`
+ * in one write, with a warning when others can read the file or git does
+ * not ignore it.
+ */
+export async function placeIngestKey(input: {
+  target: PlaceableEnvTarget;
+  projectId: string;
+  apiKey: string;
+  appEnv: AppEnv;
+  run: RunCommand;
+}): Promise<Placement> {
+  const { path } = input.target;
+  const write = await upsertEnvFile(path, newKeyValues(input));
+  if (!write.written) return { placed: false, reason: write.reason };
+  const variables = listed(input.appEnv.variables);
+  return {
+    placed: true,
+    lines: [
+      write.result === "created"
+        ? `.env: created with ${variables}, readable only by you.`
+        : `.env: set ${variables}.`,
+      ...removedLines(write.removed),
+      ...(write.mode !== null && othersCanRead(write.mode)
+        ? [othersCanReadWarning(path, write.mode, "the ingest key")]
+        : []),
+      ...(await gitIgnoreWarning(path, input.run)),
+    ],
+  };
+}
+
+/** The line saying which leftover variables setup removed from `.env`. */
+function removedLines(removed: readonly string[]): string[] {
+  return removed.length === 0
+    ? []
+    : [
+        `.env: removed ${listed(removed)}, so the app sends traces to production.`,
+      ];
+}
+
+/**
+ * Writes the app's API values beside a kept key. Incomplete when a value the
+ * app needs could not be written; the line then names what to add. A
+ * removal setup cannot make leaves a file it does not edit as it is.
+ */
+async function writeKeptApiValues(
   target: EnvTarget,
-  run: RunCommand,
-): Promise<string[]> {
-  return [
-    `.env: kept ${API_KEY_VARIABLE} and ${PROJECT_ID_VARIABLE}; the key is already limited to this project.`,
-    ...(target.kind === "env-file"
-      ? await gitIgnoreWarning(target.path, run)
-      : []),
-  ];
+  appEnv: AppEnv,
+): Promise<{ complete: boolean; lines: string[] }> {
+  const needed = setEntries(appEnv.apiValues);
+  const write: EnvWrite =
+    target.kind === "private"
+      ? { written: false, reason: target.reason }
+      : await upsertEnvFile(target.path, appEnv.apiValues);
+  if (!write.written) {
+    if (needed.length === 0) return { complete: true, lines: [] };
+    const assignments = needed.map(([name, value]) => `${name}=${value}`);
+    return {
+      complete: false,
+      lines: [
+        `.env: ${write.reason}. Add ${listed(assignments)} where the app loads its environment, so the kept key reaches the API it belongs to.`,
+      ],
+    };
+  }
+  return {
+    complete: true,
+    lines: [
+      ...(write.result !== "unchanged" && needed.length > 0
+        ? [`.env: set ${listed(needed.map(([name]) => name))}.`]
+        : []),
+      ...removedLines(write.removed),
+    ],
+  };
+}
+
+/**
+ * Keeps the key `.env` holds and sets the app's API values beside it, since
+ * that key belongs to the API setup ran against.
+ */
+export async function keepIngestKey(input: {
+  target: EnvTarget;
+  appEnv: AppEnv;
+  run: RunCommand;
+}): Promise<{ complete: boolean; lines: string[] }> {
+  const { target, appEnv, run } = input;
+  const api = await writeKeptApiValues(target, appEnv);
+  return {
+    complete: api.complete,
+    lines: [
+      `.env: kept ${API_KEY_VARIABLE} and ${PROJECT_ID_VARIABLE}; the key is already limited to this project.`,
+      ...api.lines,
+      ...(target.kind === "env-file"
+        ? await gitIgnoreWarning(target.path, run)
+        : []),
+    ],
+  };
 }
 
 export function missingIngestLine(projectId: string): string {
   return `.env: Lemma approved project ${projectId} but returned no ingest key for it, and .env holds no key for that project. Run \`start\` again.`;
 }
 
-/** Saves the key and its project where only the user can read them. */
+/** Saves the key, its project, and the app's API values where only the user can read them. */
 export async function saveIngestKeyPrivately(input: {
   fallbackPath: string;
   projectId: string;
   apiKey: string;
+  appEnv: AppEnv;
   reason: string;
 }): Promise<PrivateSave> {
   const { reason } = input;
   try {
     await writePrivateFile(
       input.fallbackPath,
-      upsertEnvContents("", {
-        [API_KEY_VARIABLE]: input.apiKey,
-        [PROJECT_ID_VARIABLE]: input.projectId,
-      }),
+      upsertEnvContents("", newKeyValues(input)),
     );
   } catch (error) {
     return {
@@ -288,7 +431,7 @@ export async function saveIngestKeyPrivately(input: {
   return {
     saved: true,
     lines: [
-      `.env: ${reason}. ${API_KEY_VARIABLE} and ${PROJECT_ID_VARIABLE} are in ${input.fallbackPath} (readable only by you); copy them where the app loads its environment, then delete that file.`,
+      `.env: ${reason}. ${listed(input.appEnv.variables)} are in ${input.fallbackPath} (readable only by you); copy them where the app loads its environment, then delete that file.`,
     ],
   };
 }
@@ -323,7 +466,10 @@ export function plannedExampleNote(plan: EnvExamplePlan): string | null {
  * a failed write is reported and nothing else. A planned skip returns no
  * line, since `start` and `wait` print it with the plan.
  */
-export async function writeEnvExample(plan: EnvExamplePlan): Promise<string[]> {
+export async function writeEnvExample(
+  plan: EnvExamplePlan,
+  appEnv: AppEnv,
+): Promise<string[]> {
   if (plan.kind === "skip") return [];
   try {
     const state = await inspectFile(plan.path);
@@ -333,7 +479,7 @@ export async function writeEnvExample(plan: EnvExamplePlan): Promise<string[]> {
     const existing = state.kind === "file" ? state : null;
     const { contents, added } = addPlaceholders(
       existing?.contents ?? "",
-      SETUP_VARIABLES,
+      appEnv.variables,
     );
     if (added.length === 0) return [];
     await writeFileAtomic(
@@ -342,7 +488,7 @@ export async function writeEnvExample(plan: EnvExamplePlan): Promise<string[]> {
       existing?.mode ?? NEW_EXAMPLE_FILE_MODE,
     );
     return [
-      `.env.example: ${existing ? "added" : "created with"} ${added.map((name) => `${name}=`).join(" and ")}.`,
+      `.env.example: ${existing ? "added" : "created with"} ${listed(added.map((name) => `${name}=`))}.`,
     ];
   } catch (error) {
     return [
