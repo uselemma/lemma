@@ -19,7 +19,7 @@ Open **Traces** in a project in the [Lemma dashboard](https://platform.uselemma.
 
 Each row is one **ready** agent execution, meaning one conversation turn. Columns include time, agent, duration, span count, an input preview, and separate marks for errors and issues. Traces stay on this list for 14 days before they age out.
 
-Agent, release, user, and thread aren’t separate dashboards; they’re attributes on the trace that come from your SDK context. Filter or search on those fields directly, and see [Threads and context](/tracing/instrumentation/context) for how to set them. SDK `metadata` and `attributes` both land as searchable span attributes after ingest.
+Agent, release, user, and thread aren’t separate dashboards; they’re attributes on the trace that come from your SDK context. Filter or search on those fields directly. [Threads and context](/tracing/instrumentation/context) shows how to set the agent, user, and thread, and [Set the release](/tracing/instrumentation/instrument-an-agent#set-the-release) shows how to set the release. SDK `metadata` and `attributes` both land as searchable span attributes after ingest.
 
 ## Search and filters
 
@@ -33,7 +33,7 @@ You can combine several filters at once:
 
 Live updates can pause while you work a snapshot; refresh the page to pull in newly arrived traces. Batch **export** and **delete** apply to your current selection. Delete only removes the trace from the dashboard; it doesn’t un-send the original payload your agent already sent.
 
-An empty list usually means no ready traces exist in this project and window. Confirm ingest through the project get-started flow, or check ingest status for a specific trace ID, before assuming the dashboard is wrong. An API key or SDK install alone is not a ready trace.
+An empty list usually means no ready traces exist in this project and window. Confirm delivery with [Debug mode](/tracing/troubleshooting/debug-mode), or check ingest status for a specific trace ID, before assuming the dashboard is wrong. An API key or SDK install alone is not a ready trace.
 
 ## Opening a trace
 

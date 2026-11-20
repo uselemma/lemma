@@ -9,7 +9,7 @@ description: >-
   connect Lemma. Do not use to fix traces already in Lemma
   (lemma-diagnostics) or to triage issues (lemma-mcp).
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Lemma Setup
@@ -70,7 +70,7 @@ Restate both answers in one or two lines, then continue.
 
 ## 3. Approve the connection
 
-Run both commands from the app's root, the directory whose `.env` the app loads. `npx` needs Node.js 20 or later; if it's missing, ask the user to install it, or to choose **Set up manually** in Lemma. Both commands need network access, and `start` opens a browser; if your sandbox blocks either, ask the user to allow it.
+Run both commands from the app's root, the directory whose `.env` the app loads. `npx` needs Node.js 20 or later; if it's missing, ask the user to install it, or to follow [manual setup](https://docs.uselemma.ai/tracing/instrumentation/setup#set-up-manually). Both commands need network access, and `start` opens a browser; if your sandbox blocks either, ask the user to allow it.
 
 First, start the approval:
 
@@ -84,7 +84,12 @@ npx --yes @uselemma/setup@0.1.0 start \
   --repository acme/support-bot
 ```
 
-`start` returns at once. Show the user the approval URL and code it printed. They open the URL if no browser opened, check that the page shows the same code, confirm the names, and choose **Approve and create project**. Only an owner or admin of the Lemma organization can approve.
+`start` returns at once. Show the user the approval URL and code it printed. The user approves on that page:
+
+- They open the URL if no browser opened. If the organization has no plan, the page first asks them to choose one in **Choose your plan**. Checkout returns them to the page. To approve in an organization that already has a plan instead, they choose **Switch organization** below the plans. That button appears only when they belong to another organization
+- They check that the page shows the same code and the organization they mean. If the organization is wrong, they choose **Switch organization** next to its name
+- If the user says the page names the organization you were set up for and that's the wrong one, the page has no **Switch organization** link. Run `start` again without `--org`, and don't repeat steps 1 and 2. The new page offers **Switch organization** when they belong to another organization
+- They confirm the names and choose **Approve and create project** for a new project, or **Approve** for an existing one. Only an owner or admin of the Lemma organization can approve
 
 Then wait for the approval:
 
@@ -103,7 +108,7 @@ When `wait` exits with 0, read `Project ID:` and `Agent name:` from its output. 
 | 2 | A flag is wrong | Fix the flag the message names, then run `start` again |
 | 3 | The code expired | Run `start` again, and ask the user to approve within 10 minutes |
 | 4 | Approval was denied or canceled | Ask the user; an owner or admin must approve. Then run `start` again |
-| 1 | Anything else | Show the message. If it says coding-agent setup isn't available on this Lemma environment, tell the user to choose **Set up manually** in Lemma. If a write failed after approval, the message says where the key went. When it names a private file under `~/.lemma/setup/`, give the user that path and what to copy from it, and don't read the file yourself. When it says setup could not save the key elsewhere, the key is lost: tell the user to run `start` again, and to revoke the unused `Setup: …` key under **Developer → API keys** in your organization settings |
+| 1 | Anything else | Show the message. If it says coding-agent setup isn't available on this Lemma environment, point the user to [manual setup](https://docs.uselemma.ai/tracing/instrumentation/setup#set-up-manually). If a write failed after approval, the message says where the key went. When it names a private file under `~/.lemma/setup/`, give the user that path and what to copy from it, and don't read the file yourself. When it says setup could not save the key elsewhere, the key is lost: tell the user to run `start` again, and to revoke the unused `Setup: …` key under **Developer → API keys** in your organization settings |
 
 On success the command has written these:
 
@@ -124,9 +129,9 @@ Follow the `lemma-tracing` skill with the Approach and Scope answers. If it isn'
 
 ## 5. Send the first trace
 
-Ask the user before you run their agent. With `LEMMA_DEBUG=1` set, run it once through a path in scope (a test, a script, or a local request), and confirm the debug log shows `trace sent`. The Lemma setup page then checks that first trace.
+Ask the user before you run their agent. With `LEMMA_DEBUG=1` set, run it once through a path in scope (a test, a script, or a local request), and confirm the debug log shows `trace sent`. In a new organization, Lemma's setup modal then checks that first trace.
 
-If the user would rather not run it now, tell them that setup finishes when the first trace arrives.
+If the user would rather not run it now, tell them the first trace appears under **Traces** in Lemma once the agent runs. In a new organization, Lemma's setup modal waits for that trace before it opens the dashboard.
 
 ## 6. Connect the MCP server and record the agent's context
 
@@ -142,6 +147,7 @@ End with a short report:
 - That the key in `.env` can only send traces to this project
 - The build and deploy steps that need attention, for example:
   - Add `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` to the deployment's environment variables or secrets (Vercel, Railway, Fly.io, Docker, CI)
+  - Set `LEMMA_RELEASE` to the deployed version, such as the commit SHA, during deployment
   - Serverless functions and other short-lived processes must end and send each trace before they exit; `lemma-tracing` covers how
   - A container image or build that doesn't copy `.env` needs the variables set another way
 - Any path in scope you didn't instrument, and why

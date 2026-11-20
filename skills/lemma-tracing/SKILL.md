@@ -7,7 +7,7 @@ description: >-
   Agents SDK, LangChain, LangGraph, Langfuse side-by-side installs, or
   debugging Lemma trace delivery and trace shape.
 metadata:
-  version: 1.1.2
+  version: 1.1.3
 ---
 
 # Lemma Tracing
@@ -64,7 +64,6 @@ Use docs in this order:
 
 1. Fetch `https://docs.uselemma.ai/llms.txt` when live docs are needed.
 2. Read the relevant current page before editing:
-   - Quickstart: `https://docs.uselemma.ai/tracing/instrumentation/setup.md`
    - Step-by-step agent instrumentation: `https://docs.uselemma.ai/tracing/instrumentation/instrument-an-agent.md`
    - Traces and handles: `https://docs.uselemma.ai/tracing/instrumentation/traces.md`
    - Cross-process turns: `https://docs.uselemma.ai/tracing/instrumentation/cross-process-turns.md`
@@ -188,9 +187,9 @@ Validation checklist before considering an integration complete:
 
 ## Handing Back
 
-If `lemma-setup` sent you here, `npx @uselemma/setup` already wrote `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` to `.env`. Don't tell the user to fetch or set a key. Say the app reads both from `.env`, and that the deployment needs both as environment variables or secrets.
+If `lemma-setup` sent you here, `npx @uselemma/setup` already wrote `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` to `.env`. Don't tell the user to fetch or set a key. Say the app reads both from `.env`, and leave deployment to the `lemma-setup` hand-back.
 
-Otherwise, end by telling the user what to set before they run the app: `LEMMA_API_KEY`, an ingest-scoped key from the **Connect your agent** step in Lemma onboarding or from **Settings → API keys** in the dashboard, and `LEMMA_PROJECT_ID`. Nothing is sent until both are set. If the user arrived here from `lemma-artifacts`, the agent name you used is the one they chose in onboarding; say so, so they can see the two line up.
+Otherwise, end by telling the user what to set before they run the app: `LEMMA_API_KEY`, an ingest-scoped key, and `LEMMA_PROJECT_ID`. [Set up manually](https://docs.uselemma.ai/tracing/instrumentation/setup#set-up-manually) shows where both come from. Nothing is sent until both are set. For deployment, also set `LEMMA_RELEASE` to the deployed version, such as the commit SHA. If the user arrived here from `lemma-artifacts`, the agent name you used is the one they chose in onboarding; say so, so they can see the two line up.
 
 ## Skill Feedback
 

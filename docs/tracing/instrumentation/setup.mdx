@@ -1,203 +1,125 @@
 ---
 title: "Send your first trace"
 sidebarTitle: "Quickstart"
-description: "Install the Lemma SDK and send your first complete agent trace"
+description: "Connect your app to Lemma with one coding agent prompt or by hand, then check the first complete agent trace"
 meta:
   contentType: "Tutorial"
-  goal: "Send one complete agent trace to Lemma"
-  audience: "Engineers instrumenting an agent for the first time"
+  goal: "Connect an app to Lemma and send one complete agent trace"
+  audience: "Engineers connecting an agent to Lemma for the first time"
 ---
 
-Send one complete agent trace to Lemma. The software development kit (SDK) sends JSON to the Lemma API.
+Connect your app to Lemma and send one complete agent trace. The agent prompt is the recommended path; set up manually when you can’t run `npx`, or you’d rather add tracing yourself. Both paths work in a new organization and in one that’s already set up.
 
-One agent execution is one [trace](/tracing/instrumentation/concepts). Record model calls, tool calls, retrieval, and app logic inside that trace.
+One agent execution is one [trace](/tracing/instrumentation/concepts). It records the model calls, tool calls, retrieval, and app logic of that execution. The software development kit (SDK) sends each trace to the Lemma API.
 
-## Set credentials
+## Before you start
 
-Find these in [Lemma project settings](https://platform.uselemma.ai), or in the project get-started flow.
+Both paths need:
 
-```bash
-export LEMMA_API_KEY="lma_your_api_key_here"
-export LEMMA_PROJECT_ID="proj_your_project_id_here"
-export LEMMA_RELEASE="1.8.3" # optional
-```
+- **Role**: owner or admin of your Lemma organization, since only they can approve the agent’s setup or create an API key
+- **Repository**: the code of the app that runs your agent, on your machine
 
-Keep `LEMMA_API_KEY` **server-side**. Never commit it. Never put it in browser or client-side code. The SDK sends to `https://api.uselemma.ai` by default. Pass `baseUrl` / `base_url` only for a custom endpoint.
+The agent prompt also needs:
 
-## What a ready trace is
+- **Coding agent**: one that can run commands, such as Claude Code, Cursor, Codex, or OpenCode
+- **Node.js 20 or later**: the setup command runs with `npx`, in Python apps too
 
-Creating an API key, adding an SDK dependency, or seeing an ingest attempt is not proof of observability. Observability is proven when a real production-like path produces a **ready** trace you can open in the dashboard: inspectable, with a root, nested work, and input and output you recognize.
+## Set up with the agent prompt
 
-A key, an SDK install, or a failed or empty ingest is not a ready trace.
+The prompt contains no key: Lemma creates the keys when you approve. You copy the prompt, paste it into your coding agent, approve in the browser, and let the agent finish.
 
-## What you are building
+<Steps>
+  <Step title="Copy the prompt">
+    In a new organization, the setup modal opens when you first sign in to [Lemma](https://platform.uselemma.ai). Copy the prompt from its **Connect your agent** step, which adds a `Lemma organization:` line naming your organization. If your organization is already set up, copy the prompt from here:
 
-You send one support-agent trace with a nested generation and tool call.
+    ```text
+    Set up Lemma monitoring for this app.
 
-```text
-support-agent              <- trace root (input, output)
-├── draft-reply            <- generation (model, content)
-└── search_docs            <- tool call (args, result)
-```
+    Fetch and follow this skill end to end:
+    https://raw.githubusercontent.com/uselemma/lemma/main/skills/lemma-setup/SKILL.md
+    ```
+  </Step>
+  <Step title="Paste it into your coding agent">
+    Open your coding agent in the app’s repository and paste the prompt. The agent reads the codebase, proposes a project name and an agent name, and asks you two questions before it changes any code:
 
-## Instrument the agent
+    - **Approach**: how the app sends traces, through a framework integration, the direct SDK, or next to existing tracing such as Langfuse
+    - **Scope**: which agent paths to trace first
+  </Step>
+  <Step title="Approve in the browser">
+    Your browser opens the approval page, and the agent shows you an approval code. If your organization has no plan yet, the page first asks you to choose one in **Choose your plan**. Checkout brings you back to the page.
 
-Pick one path. Framework adapters live on the integration pages: [Vercel AI SDK](/integrations/vercel-ai), [OpenAI Agents](/integrations/openai-agents), [LangChain](/integrations/langchain), and [LangGraph](/integrations/langgraph).
+    Check that the page shows the same code and the organization you mean. To approve in another organization, such as one that already has a plan, choose **Switch organization** below the plans or next to the organization name. It appears only when you belong to another organization.
 
-<Tabs>
-  <Tab title="Coding agent">
-    Use a coding agent to instrument the production agent.
+    When the page labels the organization as the one your agent was set up for, it has no **Switch organization** link. If that organization is wrong, ask the agent to start the approval again without naming one, then switch on the new page.
 
-    <Steps>
-      <Step title="Open the project get-started flow">
-        In the [Lemma dashboard](https://platform.uselemma.ai), select or create the organization and project, then open that project’s get-started flow.
-      </Step>
-      <Step title="Install the tracing skill">
-        ```bash
-        npx skills add uselemma/lemma --skill "lemma-tracing"
-        ```
+    Confirm or edit the agent name, pick the project, and approve:
 
-        Ask the coding agent to use that skill to instrument the production agent.
-      </Step>
-      <Step title="Exercise a real path">
-        Run a production-like request through the instrumented agent.
-      </Step>
-    </Steps>
-  </Tab>
-  <Tab title="Direct SDK">
-    Install the SDK and record one generation and one tool call inside a trace callback.
+    - **New project**: confirm or edit the project name, then choose **Approve and create project**
+    - **An existing project**: pick it under **Project**, which hides the project name field, then choose **Approve**
 
-    <Steps>
-      <Step title="Install the SDK">
-        <Tabs>
-          <Tab title="TypeScript">
-            ```bash
-            npm install @uselemma/tracing
-            ```
-          </Tab>
-          <Tab title="Python">
-            ```bash
-            pip install uselemma-tracing
-            ```
-          </Tab>
-        </Tabs>
-      </Step>
-      <Step title="Trace one agent execution">
-        Create a client, open a trace, then record one generation and one tool call inside the trace callback.
+    The **Project** list appears only when your organization has projects already. The code expires 10 minutes after the agent starts the approval.
+  </Step>
+  <Step title="Let the agent finish">
+    After you approve, the setup command saves the ingest key to `.env` and the admin key to your coding agent’s Model Context Protocol (MCP) config. A key goes to a private file under `~/.lemma/setup/` instead when `.env` or the config can’t take it, or when your coding agent isn’t one that setup configures. The agent gives you the path of each such file:
 
-        <Tabs>
-          <Tab title="TypeScript">
-            ```typescript
-            import { Lemma } from "@uselemma/tracing";
+    - **`LEMMA_API_KEY` and `LEMMA_PROJECT_ID`**: copy them wherever your app loads its environment, then delete the file
+    - **The `lemma` MCP entry**: copy it into your coding agent’s MCP config, then delete the file. For Claude Code, add it the way the message says, either with its command or in `~/.claude.json`; both keep it in the project’s local scope. Never paste it into the committed `.mcp.json`
 
-            const lemma = new Lemma();
+    [Setup command and skill](/reference/setup-command) lists each file and step.
 
-            const answer = await lemma.trace(
-              {
-                name: "support-agent",
-                input: userMessage,
-                threadId: conversationId,
-                userId: user.id,
-              },
-              async (trace) => {
-                const docs = await searchDocs(userMessage);
-                trace.recordTool({
-                  name: "search_docs",
-                  input: { query: userMessage },
-                  output: docs,
-                });
+    The agent then adds tracing, and asks before it runs your app to send a first trace. Then it asks you to reload its MCP servers. It proposes [artifact](/platform/artifacts) claims about what your agent is for, and you approve each one.
+  </Step>
+</Steps>
 
-                const response = await callModel(userMessage, docs);
-                trace.recordGeneration({
-                  name: "draft-reply",
-                  input: response.messages,
-                  output: response.text,
-                  model: "gpt-4o",
-                });
+## Set up manually
 
-                return response.text;
-              },
-            );
-            ```
-          </Tab>
-          <Tab title="Python">
-            ```python
-            from uselemma_tracing import Lemma
+Manual setup takes two steps: a project and its key, then the integration.
 
-            lemma = Lemma()
+<Steps>
+  <Step title="Get a project and key">
+    Where the key comes from depends on your organization:
 
-            def run(trace):
-                docs = search_docs(user_message)
-                trace.record_tool(
-                    name="search_docs",
-                    input={"query": user_message},
-                    output=docs,
-                )
+    - **New organization**: in the setup modal, on **Connect your agent**, choose **Set up manually**. Enter a **Project name** and an **Agent name**, then choose **Create project and key**. **Your project is ready** shows a `.env` block with both values
+    - **Organization already set up**: create the project with **Create project** in the project switcher, then choose **Generate API key** under **Get started with Lemma** on its dashboard. You can also create a key under **Developer → API keys** in your organization settings, with the project and the **Ingest** scope; the project ID is the identifier after `/projects/` in the project’s dashboard URL
 
-                response = call_model(user_message, docs)
-                trace.record_generation(
-                    name="draft-reply",
-                    input=response.messages,
-                    output=response.text,
-                    model="gpt-4o",
-                )
+    Copy the key now: Lemma shows it only once. Add both to the `.env` file your app loads:
 
-                return response.text
+    ```bash
+    LEMMA_API_KEY=sk_your_api_key_here
+    LEMMA_PROJECT_ID=12345678-1234-1234-1234-123456789012
+    ```
 
-            answer = lemma.trace(
-                "support-agent",
-                run,
-                input=user_message,
-                thread_id=conversation_id,
-                user_id=user.id,
-            )
-            ```
-          </Tab>
-        </Tabs>
-      </Step>
-    </Steps>
-  </Tab>
-</Tabs>
+    An ingest key can only send traces. Keep it server-side: never commit it, and never put it in browser code.
+
+    The process that runs your agent must load `.env`: Next.js loads it, a Node.js script needs `node --env-file=.env`, and Python needs `python-dotenv`.
+  </Step>
+  <Step title="Add the integration">
+    The setup modal shows tabs under the key with the install, client setup, and instrumentation steps for each framework and language. The project’s **Get started with Lemma** screen shows the same tabs under **Install manually instead**. Each integration page has the full setup: [Vercel AI SDK](/integrations/vercel-ai), [OpenAI Agents](/integrations/openai-agents), [LangChain](/integrations/langchain), [LangGraph](/integrations/langgraph), and [Mastra](/integrations/mastra). Without a framework, [Instrument an agent](/tracing/instrumentation/instrument-an-agent) adds the direct SDK one piece at a time.
+  </Step>
+</Steps>
 
 ## Verify a ready trace
 
-Open **[Traces](/platform/traces)** in the [Lemma dashboard](https://platform.uselemma.ai). You should see:
+A key, an SDK install, or an ingest attempt doesn’t prove that Lemma sees your agent. A **ready** trace from a production-like path does.
 
-- One trace for the whole execution
-- The root trace with input and output
-- A nested generation with model metadata
-- A nested tool call with arguments and result
+Run a production-like request through your agent. In the setup modal, Lemma checks the first trace when it arrives. If a check fails, the modal gives you a prompt to paste into your coding agent, then checks the next trace. Choose **Go to dashboard** when you’re ready. Outside the setup modal, open **[Traces](/platform/traces)** in the [Lemma dashboard](https://platform.uselemma.ai). You should see:
 
-After the trace looks complete, see [Overview](/platform/overview) for issues, Inspect, and workflow connections.
+- One trace for the whole agent execution
+- A root with input and output you recognize
+- The agent’s work nested under the root
 
-## Stamp a release
+If no trace arrives, set `LEMMA_DEBUG=1` and run the agent again; [Debug mode](/tracing/troubleshooting/debug-mode) explains the log. After the trace looks complete, see [Overview](/platform/overview) for issues, Inspect, and workflow connections.
 
-Tag every ingest payload with the stable identifier your deployment process assigns to the running app, such as an app version, commit SHA, or container tag. Change it with each deployment.
+## Before you deploy
 
-Pass `release` on the client, or set `LEMMA_RELEASE`. Most continuous integration systems expose the current commit SHA as an environment variable. Set `LEMMA_RELEASE` to that value during deployment.
+Your deployed app reads the same settings from its own environment:
 
-An explicit constructor value wins over the environment variable. Lemma omits empty, whitespace-only, longer-than-200-character, or newline, tab, or carriage-return values. It does not guess a git SHA.
-
-Adapters (`vercelAI`, `openAIAgents`, `langChain`, `langGraph`, `mastra`) accept the same `release` field and forward it to the client they construct.
-
-<Tabs>
-  <Tab title="TypeScript">
-    ```typescript
-    const lemma = new Lemma({
-      release: "1.8.3",
-    });
-    ```
-  </Tab>
-  <Tab title="Python">
-    ```python
-    lemma = Lemma(release="1.8.3")
-    ```
-  </Tab>
-</Tabs>
+- **Ingest key and project ID**: add `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` to your deployment’s environment variables or secrets
+- **Release**: set `LEMMA_RELEASE` to the deployed version, such as the commit SHA, so each trace records it. To read it from a variable your host sets, see [Set the release](/tracing/instrumentation/instrument-an-agent#set-the-release)
 
 ## Next steps
 
-Use these pages after the first ready trace lands.
+Use these pages after the first ready trace arrives.
 
 <CardGroup cols={2}>
   <Card title="Instrument an agent" href="/tracing/instrumentation/instrument-an-agent">

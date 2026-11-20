@@ -13,7 +13,7 @@ pip install uselemma-tracing
 ```python
 from uselemma_tracing import Lemma
 
-lemma = Lemma(release="1.8.3")  # or set LEMMA_RELEASE
+lemma = Lemma()
 
 def run(trace):
     docs = search_docs(user_message)
@@ -48,9 +48,12 @@ answer = lemma.trace(
 `lemma.trace()` measures the trace from callback start to completion. Use
 `async_trace()` for async callbacks.
 
-Pass `release` (or set `LEMMA_RELEASE`) to stamp the running app version on
-every ingest payload. An explicit constructor value wins. Empty or invalid
-values are omitted.
+Set `LEMMA_RELEASE` to the deployed version, such as the commit SHA, to stamp
+it on every ingest payload; that needs no code. To reuse a variable your host
+sets at runtime, pass it as `release`, for example Vercel's
+`VERCEL_GIT_COMMIT_SHA`, Render's `RENDER_GIT_COMMIT`, or Railway's
+`RAILWAY_GIT_COMMIT_SHA`. An explicit constructor value wins, and an unset one
+falls back to `LEMMA_RELEASE`. Empty or invalid values are omitted.
 
 ## Live Spans
 
@@ -392,7 +395,7 @@ environment variables:
 ```python
 lemma = Lemma(
     api_key="sk_...",
-    project_id="proj_...",
+    project_id="12345678-1234-1234-1234-123456789012",
     base_url="https://api.uselemma.ai",
 )
 ```

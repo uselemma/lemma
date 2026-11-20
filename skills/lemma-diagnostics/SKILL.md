@@ -8,7 +8,7 @@ description: >-
   high-quality traces guide. Do not use for first-time setup or missing
   delivery — that is lemma-tracing.
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Lemma Diagnostics
@@ -55,14 +55,14 @@ notes or into this skill.
 5. `https://docs.uselemma.ai/tracing/instrumentation/cross-process-turns.md`
 6. `https://docs.uselemma.ai/tracing/troubleshooting/common-issues.md`
    (shape and quality symptoms only)
-7. The matching first-wave integration page, plus setup / traces /
+7. The matching first-wave integration page, plus instrumentation / traces /
    generations / tool-calls / spans / context as needed:
    - Vercel AI SDK: `https://docs.uselemma.ai/integrations/vercel-ai.md`
    - OpenAI Agents SDK: `https://docs.uselemma.ai/integrations/openai-agents.md`
    - LangChain: `https://docs.uselemma.ai/integrations/langchain.md`
    - LangGraph: `https://docs.uselemma.ai/integrations/langgraph.md`
    - Mastra: `https://docs.uselemma.ai/integrations/mastra.md`
-   - Setup: `https://docs.uselemma.ai/tracing/instrumentation/setup.md`
+   - Instrument an agent: `https://docs.uselemma.ai/tracing/instrumentation/instrument-an-agent.md`
    - Traces: `https://docs.uselemma.ai/tracing/instrumentation/traces.md`
    - Generations: `https://docs.uselemma.ai/tracing/instrumentation/generations.md`
    - Tool calls: `https://docs.uselemma.ai/tracing/instrumentation/tool-calls.md`

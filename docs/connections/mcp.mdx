@@ -19,14 +19,19 @@ The endpoint is `https://api.uselemma.ai/mcp/` (trailing-slash variants work the
 ## Prerequisites
 
 - A Lemma organization with at least one project that has, or will have, traces
-- An organization API key from **API Keys** or the project get-started flow. Copy it immediately; Lemma won’t show it again. Keep it server-side in your coding tool’s MCP config, never in a public repo
 - An MCP client that supports Streamable HTTP, such as Cursor, Claude Desktop, or Claude Code
 
 ## Connect your coding agent
 
+Add a `lemma` server to your coding agent’s MCP config, authenticated with an organization API key.
+
+<Note>
+  If you set up Lemma with the [agent prompt](/tracing/instrumentation/setup#set-up-with-the-agent-prompt), the setup command already added the `lemma` server to your coding agent’s MCP config. When it couldn’t edit that config, or when your coding agent isn’t one that setup configures, it saved the entry to a private file instead. [Where the admin key goes](/reference/setup-command#where-the-admin-key-goes-for-each-coding-agent) lists each config file and how to load it.
+</Note>
+
 <Steps>
   <Step title="Get an organization API key">
-    Create an organization API key in the [Lemma dashboard](https://platform.uselemma.ai).
+    Create an organization API key with the **Admin** scope under **Developer → API keys** in your organization settings. Keep it in your coding tool’s MCP config, never in a file you commit.
 
     <Warning>
       Copy your key immediately after creating it. You won’t be able to see it again.

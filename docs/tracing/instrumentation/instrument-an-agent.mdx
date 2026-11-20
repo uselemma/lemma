@@ -4,10 +4,10 @@ description: "Build a complete Lemma trace one piece at a time"
 meta:
   contentType: "Tutorial"
   goal: "Add each SDK primitive to an untraced agent until the full shape is recorded"
-  audience: "Engineers who finished the quickstart and need the full shape"
+  audience: "Engineers with a Lemma project and key who need the full trace shape"
 ---
 
-This page starts from an untraced support agent and adds Lemma software development kit (SDK) calls one piece at a time. Complete the [Quickstart](/tracing/instrumentation/setup) first so the SDK is installed and a Lemma client can read your credentials.
+This page starts from an untraced support agent and adds Lemma software development kit (SDK) calls one piece at a time.
 
 The per-primitive pages go deeper on each piece: [Agent traces](/tracing/instrumentation/traces), [Generations](/tracing/instrumentation/generations), [Tool calls](/tracing/instrumentation/tool-calls), [Spans](/tracing/instrumentation/spans), and [Threads and context](/tracing/instrumentation/context).
 
@@ -25,7 +25,22 @@ support-agent                  <- trace root (input, output, agent name, thread,
 
 ## Before you start
 
-The examples assume you already have an agent shaped like this:
+Set `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` in your app’s environment. [Set up manually](/tracing/instrumentation/setup#set-up-manually) shows where both come from. Then install the SDK:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```bash
+    npm install @uselemma/tracing
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```bash
+    pip install uselemma-tracing
+    ```
+  </Tab>
+</Tabs>
+
+The client reads both variables from the environment. The examples assume you already have an agent shaped like this:
 
 <Tabs>
   <Tab title="TypeScript">
@@ -315,6 +330,29 @@ The examples assume you already have an agent shaped like this:
     </Tabs>
   </Step>
 </Steps>
+
+## Set the release
+
+Each trace records its release: the deployed version, such as the commit SHA. The client reads it from `LEMMA_RELEASE`, so exporting that variable in your deployment needs no code. To reuse a variable your host sets at runtime, such as Vercel’s `VERCEL_GIT_COMMIT_SHA`, Render’s `RENDER_GIT_COMMIT`, or Railway’s `RAILWAY_GIT_COMMIT_SHA`, pass it as `release`:
+
+<Tabs>
+  <Tab title="TypeScript">
+    ```typescript
+    const lemma = new Lemma({
+      release: process.env.VERCEL_GIT_COMMIT_SHA,
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import os
+
+    lemma = Lemma(release=os.environ.get("VERCEL_GIT_COMMIT_SHA"))
+    ```
+  </Tab>
+</Tabs>
+
+An explicit constructor value wins over the environment variable; when the host variable is unset, the client falls back to `LEMMA_RELEASE`. The `release` row of the [trace record](/reference/trace-contract#trace-record) lists the values Lemma omits. Adapters (`vercelAI`, `openAIAgents`, `langChain`, `langGraph`, `mastra`) accept the same `release` field and forward it to the client they construct.
 
 ## Go deeper
 
