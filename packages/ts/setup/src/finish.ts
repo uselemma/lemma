@@ -1,4 +1,5 @@
-import type { Approval, ApprovedKey } from "./api.js";
+import type { Approval } from "./api.js";
+import type { RunCommand } from "./command.js";
 import type { SetupEnvironment } from "./context.js";
 import {
   API_KEY_VARIABLE,
@@ -8,7 +9,7 @@ import {
   PROJECT_ID_VARIABLE,
   saveIngestKeyPrivately,
   writeEnvExample,
-  type PlaceableEnvTarget,
+  type EnvTarget,
 } from "./env-file.js";
 import {
   keptMcpLines,
@@ -16,7 +17,7 @@ import {
   missingMcpLine,
   placeMcpKey,
   saveMcpEntryPrivately,
-  type PlaceableMcpTarget,
+  type McpTarget,
 } from "./mcp/targets.js";
 import type { PendingSetup } from "./pending.js";
 import type { SetupPlan } from "./plan.js";
@@ -25,42 +26,82 @@ import {
   type KeyOutcome,
   type Placement,
   type PrivateSave,
-  type PrivateTarget,
 } from "./placement.js";
 
 /**
- * One key's outcome. A key the server kept is reported as kept when the
- * client reported it, and as missing otherwise. A new key goes where the
- * plan says, or to its private file; it is planned there when the plan's
- * target is the private file.
+ * The outcome of saving a new key to its private file. `planned` is whether
+ * the plan's target was that file, as opposed to a failed write falling back
+ * to it.
  */
-async function keyOutcome<Placeable extends { kind: string }>(input: {
-  approved: ApprovedKey;
-  reported: boolean;
-  target: Placeable | PrivateTarget;
-  kept: () => Promise<string[]>;
-  missing: string;
-  place: (target: Placeable, apiKey: string) => Promise<Placement>;
-  savePrivately: (apiKey: string, reason: string) => Promise<PrivateSave>;
+function privateSaveOutcome(saved: PrivateSave, planned: boolean): KeyOutcome {
+  return saved.saved
+    ? { kind: "saved-privately", planned, lines: saved.lines }
+    : { kind: "nothing-saved", lines: saved.lines };
+}
+
+/**
+ * The ingest key's outcome. A key the server kept is reported as kept when
+ * the client reported a key for the approved project, and as missing
+ * otherwise. A new key goes to `.env`, or to its private file when the plan
+ * says so or the write fails.
+ */
+async function finishIngestKey(input: {
+  approval: Approval;
+  pending: PendingSetup;
+  target: EnvTarget;
+  run: RunCommand;
 }): Promise<KeyOutcome> {
-  const { approved, target } = input;
-  if (approved.kind === "kept") {
-    return input.reported
-      ? { kind: "kept", lines: await input.kept() }
-      : { kind: "nothing-saved", lines: [input.missing] };
+  const { approval, pending, target, run } = input;
+  const { projectId, ingest } = approval;
+  if (ingest.kind === "kept") {
+    return projectId === pending.existingIngestProjectId
+      ? { kind: "kept", lines: await keptIngestLines(target, run) }
+      : { kind: "nothing-saved", lines: [missingIngestLine(projectId)] };
   }
   const placement: Placement = isPrivateTarget(target)
     ? { placed: false, reason: target.reason }
-    : await input.place(target, approved.key);
+    : await placeIngestKey({ target, projectId, apiKey: ingest.key, run });
   if (placement.placed) return { kind: "written", lines: placement.lines };
-  const saved = await input.savePrivately(approved.key, placement.reason);
-  return saved.saved
-    ? {
-        kind: "saved-privately",
-        planned: isPrivateTarget(target),
-        lines: saved.lines,
-      }
-    : { kind: "nothing-saved", lines: saved.lines };
+  const saved = await saveIngestKeyPrivately({
+    fallbackPath: target.fallbackPath,
+    projectId,
+    apiKey: ingest.key,
+    reason: placement.reason,
+  });
+  return privateSaveOutcome(saved, isPrivateTarget(target));
+}
+
+/**
+ * The admin key's outcome. A key the server kept is reported as kept when
+ * the client reported a key, and as missing otherwise. A new key goes to the
+ * coding agent's MCP config, or to its private file when the plan says so
+ * or the write fails.
+ */
+async function finishMcpKey(input: {
+  approval: Approval;
+  pending: PendingSetup;
+  target: McpTarget;
+  run: RunCommand;
+}): Promise<KeyOutcome> {
+  const { approval, pending, target, run } = input;
+  const { mcp } = approval;
+  if (mcp.kind === "kept") {
+    return pending.existingMcpTenantId !== null
+      ? { kind: "kept", lines: keptMcpLines(target) }
+      : { kind: "nothing-saved", lines: [missingMcpLine(target)] };
+  }
+  const url = mcpServerUrl(pending.apiUrl);
+  const placement: Placement = isPrivateTarget(target)
+    ? { placed: false, reason: target.reason }
+    : await placeMcpKey({ target, url, apiKey: mcp.key, run });
+  if (placement.placed) return { kind: "written", lines: placement.lines };
+  const saved = await saveMcpEntryPrivately({
+    target,
+    url,
+    apiKey: mcp.key,
+    reason: placement.reason,
+  });
+  return privateSaveOutcome(saved, isPrivateTarget(target));
 }
 
 /**
@@ -92,8 +133,7 @@ export async function finishSetup(input: {
   approval: Approval;
 }): Promise<{ failed: boolean }> {
   const { environment, pending, setupPlan, approval } = input;
-  const { env, mcp: mcpTarget } = setupPlan;
-  const mcpUrl = mcpServerUrl(pending.apiUrl);
+  const { run } = environment;
   const print = (lines: readonly string[]) => {
     for (const line of lines) environment.output(line);
   };
@@ -104,50 +144,20 @@ export async function finishSetup(input: {
     `Agent name: ${approval.agentName}`,
   ]);
 
-  const ingest = await keyOutcome<PlaceableEnvTarget>({
-    approved: approval.ingest,
-    reported: approval.projectId === pending.existingIngestProjectId,
-    target: env,
-    kept: () => keptIngestLines(env, environment.run),
-    missing: missingIngestLine(approval.projectId),
-    place: (target, apiKey) =>
-      placeIngestKey({
-        target,
-        projectId: approval.projectId,
-        apiKey,
-        run: environment.run,
-      }),
-    savePrivately: (apiKey, reason) =>
-      saveIngestKeyPrivately({
-        fallbackPath: env.fallbackPath,
-        projectId: approval.projectId,
-        apiKey,
-        reason,
-      }),
+  const ingest = await finishIngestKey({
+    approval,
+    pending,
+    target: setupPlan.env,
+    run,
   });
   print(ingest.lines);
   print(await writeEnvExample(setupPlan.example));
 
-  const mcp = await keyOutcome<PlaceableMcpTarget>({
-    approved: approval.mcp,
-    reported: pending.existingMcpTenantId !== null,
-    target: mcpTarget,
-    kept: async () => keptMcpLines(mcpTarget),
-    missing: missingMcpLine(mcpTarget),
-    place: (target, apiKey) =>
-      placeMcpKey({
-        target,
-        url: mcpUrl,
-        apiKey,
-        run: environment.run,
-      }),
-    savePrivately: (apiKey, reason) =>
-      saveMcpEntryPrivately({
-        target: mcpTarget,
-        url: mcpUrl,
-        apiKey,
-        reason,
-      }),
+  const mcp = await finishMcpKey({
+    approval,
+    pending,
+    target: setupPlan.mcp,
+    run,
   });
   print(mcp.lines);
 
