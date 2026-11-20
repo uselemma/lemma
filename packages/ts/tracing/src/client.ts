@@ -59,10 +59,15 @@ export type LemmaClientOptions = {
   projectId?: string;
   baseUrl?: string;
   /**
-   * Sends every request. Each call carries `User-Agent: @uselemma/tracing/<version>`
-   * in `init.headers`; a fetch that sets its own User-Agent replaces it.
+   * Sends every request. Each call carries `userAgent` as `User-Agent` in
+   * `init.headers`; a fetch that sets its own User-Agent replaces it.
    */
   fetch?: typeof fetch;
+  /**
+   * `User-Agent` on every request, for a library built on this client to send
+   * its own name and version. Defaults to `@uselemma/tracing/<version>`.
+   */
+  userAgent?: string;
   /** Deployed app version stamped on every ingest payload. */
   release?: string;
 };
@@ -1034,7 +1039,7 @@ export class Lemma {
     );
     this.fetchImpl = options.fetch ?? fetch;
     this.baseHeaders = {
-      "User-Agent": SDK_USER_AGENT,
+      "User-Agent": options.userAgent ?? SDK_USER_AGENT,
       Authorization: `Bearer ${this.apiKey}`,
     };
     this.release = normalizeRelease(

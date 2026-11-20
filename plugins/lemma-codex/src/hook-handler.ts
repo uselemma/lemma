@@ -26,7 +26,7 @@ import {
   withSessionLock,
   writeTurn,
 } from "./storage.js";
-import { withPluginUserAgent } from "./user-agent.js";
+import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 type HookEventName = "UserPromptSubmit" | "PreToolUse" | "PostToolUse";
 type TurnCompleteEventName = "AgentTurnComplete";
@@ -301,7 +301,7 @@ async function defaultSendTrace(input: {
     apiKey: input.accessToken,
     projectId: input.projectId,
     baseUrl: input.apiUrl,
-    fetch: withPluginUserAgent(fetch),
+    userAgent: PLUGIN_USER_AGENT,
   });
   const trace = codingAgentTurnTrace(input.turn);
   await lemma.ingest(trace.context, {

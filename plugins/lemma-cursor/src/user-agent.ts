@@ -1,9 +1,9 @@
 import packageJson from "../package.json" with { type: "json" };
 
-const PLUGIN_USER_AGENT = `${packageJson.name}/${packageJson.version}`;
+export const PLUGIN_USER_AGENT = `${packageJson.name}/${packageJson.version}`;
 
-// The tracing SDK takes no User-Agent option, matching the Python SDK, so the
-// plugin relabels its own requests here.
+// For requests that bypass the tracing SDK's Lemma client, which sends
+// PLUGIN_USER_AGENT through its userAgent option.
 export function withPluginUserAgent(
   fetchImplementation: typeof fetch,
 ): typeof fetch {

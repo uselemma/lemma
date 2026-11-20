@@ -27,7 +27,7 @@ import {
   type LemmaPiCredentials,
 } from "./credentials.js";
 import { sanitizeValue } from "./sanitize.js";
-import { withPluginUserAgent } from "./user-agent.js";
+import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 type ExtensionDependencies = {
   now?: () => Date;
@@ -74,7 +74,7 @@ async function defaultSendTrace(
     apiKey: credentials.accessToken,
     projectId: credentials.projectId,
     baseUrl: credentials.apiUrl,
-    fetch: withPluginUserAgent(fetch),
+    userAgent: PLUGIN_USER_AGENT,
   }).ingest(trace.context, {
     startedAt: new Date(trace.startedAt),
     endedAt: new Date(trace.endedAt),

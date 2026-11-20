@@ -18,7 +18,7 @@ import {
   type StorageOptions,
 } from "./credentials.js";
 import type { HermesTurn, PendingHermesTurn } from "./types.js";
-import { withPluginUserAgent } from "./user-agent.js";
+import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 const FLUSH_LOCK_STALE_MS = 30_000;
 
@@ -160,7 +160,8 @@ export async function flushPendingTurns(options: FlushOptions = {}): Promise<num
           apiKey: credentials.accessToken,
           projectId: credentials.projectId,
           baseUrl: credentials.apiUrl,
-          fetch: withPluginUserAgent(options.fetch ?? fetch),
+          fetch: options.fetch,
+          userAgent: PLUGIN_USER_AGENT,
         }).ingest(trace.context, {
           startedAt: new Date(trace.startedAt),
           endedAt: new Date(trace.endedAt),

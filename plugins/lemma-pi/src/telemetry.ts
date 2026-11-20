@@ -21,7 +21,7 @@ import {
   type LemmaPiCredentials,
 } from "./credentials.js";
 import { sanitizeRecord } from "./sanitize.js";
-import { withPluginUserAgent } from "./user-agent.js";
+import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 type TelemetryEvent = {
   name: string;
@@ -235,7 +235,8 @@ class LemmaTelemetryContext implements TelemetryContext {
       apiKey: credentials.accessToken,
       projectId: credentials.projectId,
       baseUrl: credentials.apiUrl,
-      fetch: withPluginUserAgent(options.fetch ?? fetch),
+      fetch: options.fetch,
+      userAgent: PLUGIN_USER_AGENT,
     };
     this.client = new Lemma(clientOptions);
     this.now = options.now ?? (() => new Date());
