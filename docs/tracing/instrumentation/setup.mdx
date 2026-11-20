@@ -195,18 +195,6 @@ Adapters (`vercelAI`, `openAIAgents`, `langChain`, `langGraph`, `mastra`) accept
   </Tab>
 </Tabs>
 
-## Identify a library built on the SDK
-
-Every request from the TypeScript SDK sends `User-Agent: @uselemma/tracing/<version>`. A library or plugin that creates its own client can pass `userAgent` so Lemma sees that library’s name and version instead.
-
-```typescript
-const lemma = new Lemma({
-  userAgent: "your_library_name/1.2.0",
-});
-```
-
-The client sends `userAgent` on every request, including through a `fetch` you pass to `new Lemma()`. A `fetch` that sets its own `User-Agent` replaces it. In Python, a custom `transport` can set its own `User-Agent`.
-
 ## Next steps
 
 Use these pages after the first ready trace lands.
