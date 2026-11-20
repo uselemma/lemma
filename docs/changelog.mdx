@@ -9,6 +9,35 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="November 19, 2026" tags={["Improvements", "Bug fixes", "[Slack]", "[Issues]", "[Billing]", "[API]"]} rss={{ title: "Slack channel search loads later pages, and See conversation keeps the occurrence" }}>
+
+  ## Slack
+
+  - **Later pages:** The [Slack](/connections/slack) alert channel list keeps loading channels after the first page. Channels already loaded stay searchable while you type.
+  - **Loading:** The list says “Loading more channels…” while another page is in flight. A failed page says “Couldn’t load more channels.” and offers **Try again**.
+  - **Public channels:** A public channel appears even when the Lemma app is not a member of it.
+  - **Private channels:** A private channel appears only after you invite the Lemma app. The field says “For private channels, invite the Lemma app to the channel.”
+
+  ## Issues
+
+  - **See conversation:** **See conversation** keeps that occurrence on its exchange in the conversation view. [Open an occurrence](/platform/issues#open-an-occurrence) describes the span it selects.
+
+  ## Billing
+
+  - **Trial price:** The Pro trial card says “Then $350/mo billed annually when the trial ends. Downgrade to Lemma Jr. or cancel anytime.” The monthly period says “$365/mo billed monthly.”
+  - **Checkout period:** A Pro checkout that omits the period bills annually.
+
+  ## API
+
+  - **SDK versions:** `GET /projects/{project_id}/sdk-versions` lists each SDK name and version seen on ingest, with `first_seen_at` and `last_seen_at`. `last_seen_at` refreshes periodically. The route is REST only.
+  - **Unknown agent:** An unrecognized User-Agent is recorded as `sdk_name` `unknown` with `sdk_version` null.
+  - **Other projects:** A project in another organization returns HTTP 404.
+  - **Issue writes:** Assignee, pin, tag, and fix-link writes, and review, resolve, dismiss, and reopen, return HTTP 400 when the body includes `idempotency_key`, on REST and MCP. Omit the field.
+  - **Suggestion decisions:** A monitor suggestion decision returns HTTP 400 when the body includes `idempotency_key`. Omit the field.
+  - **Required keys:** `POST /issues/batch`, Linear ticket creation, and monitor corrections still require `idempotency_key`.
+
+</Update>
+
 <Update label="November 9, 2026" tags={["Improvements", "Bug fixes", "[Issues]", "[Slack]", "[Dashboard]", "[API keys]", "[Artifacts]"]} rss={{ title: "Issues open on Open, and Slack pages yellow once and red once" }}>
 
   ## Issues
