@@ -69,6 +69,11 @@ describe("OpenClaw setup", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
       harness: "openclaw",
     });
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(new Headers(init?.headers).get("user-agent")).toMatch(
+        /^@uselemma\/openclaw\/\d+\.\d+\.\d+$/,
+      );
+    }
     expect(installPlugin).toHaveBeenCalledWith(
       "/package/openclaw",
       stateDir,

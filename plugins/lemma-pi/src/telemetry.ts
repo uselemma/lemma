@@ -20,8 +20,8 @@ import {
   type CredentialOptions,
   type LemmaPiCredentials,
 } from "./credentials.js";
-import { createDeliveryFetch } from "./delivery.js";
 import { sanitizeRecord } from "./sanitize.js";
+import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 type TelemetryEvent = {
   name: string;
@@ -235,7 +235,8 @@ class LemmaTelemetryContext implements TelemetryContext {
       apiKey: credentials.accessToken,
       projectId: credentials.projectId,
       baseUrl: credentials.apiUrl,
-      fetch: createDeliveryFetch(options.fetch),
+      fetch: options.fetch,
+      userAgent: PLUGIN_USER_AGENT,
     };
     this.client = new Lemma(clientOptions);
     this.now = options.now ?? (() => new Date());

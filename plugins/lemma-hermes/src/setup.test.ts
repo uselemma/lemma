@@ -78,6 +78,11 @@ describe("Hermes setup", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
       harness: "hermes",
     });
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(new Headers(init?.headers).get("user-agent")).toMatch(
+        /^@uselemma\/hermes\/\d+\.\d+\.\d+$/,
+      );
+    }
     expect(installPlugin).toHaveBeenCalledOnce();
     expect(enablePlugin).toHaveBeenCalledWith(join(dataDir, ".hermes"));
     expect(installPlugin.mock.invocationCallOrder[0]).toBeLessThan(

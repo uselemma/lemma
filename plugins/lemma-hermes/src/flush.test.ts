@@ -114,7 +114,7 @@ describe("Hermes turn mapping", () => {
   it("serializes concurrent pending delivery flushes", async () => {
     const dataDir = await temporaryDataDir();
     let releaseRequest: (() => void) | undefined;
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       () =>
         new Promise<Response>((resolve) => {
           releaseRequest = () => resolve(new Response("{}", { status: 201 }));
@@ -129,6 +129,9 @@ describe("Hermes turn mapping", () => {
     expect(await firstFlush).toBe(1);
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(await readdir(join(dataDir, "pending"))).toEqual([]);
+    expect(
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("user-agent"),
+    ).toMatch(/^@uselemma\/hermes\/\d+\.\d+\.\d+$/);
   });
 
   it("retains failed traces without logging credentials or response bodies", async () => {

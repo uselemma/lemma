@@ -105,21 +105,20 @@ describe("OpenCode pending delivery", () => {
     expect(await readdir(join(dataDir, "pending"))).toHaveLength(1);
     expect(warnings.join("\n")).not.toContain("private-body");
 
-    const successfulFetch = vi.fn(async () =>
+    const successfulFetch = vi.fn<typeof fetch>(async () =>
       Response.json({}, { status: 201 }),
     );
     expect(await flushPendingTurns({ dataDir, fetch: successfulFetch })).toBe(
       1,
     );
     expect(await readdir(join(dataDir, "pending"))).toEqual([]);
-    expect(successfulFetch).toHaveBeenCalledWith(
-      "https://dev.api.uselemma.ai/traces/ingest",
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({
-          Authorization: "Bearer lemma_ci_scoped-secret",
-        }),
-      }),
+    const [url, init] = successfulFetch.mock.calls[0]!;
+    expect(url).toBe("https://dev.api.uselemma.ai/traces/ingest");
+    expect(init?.method).toBe("POST");
+    const headers = new Headers(init?.headers);
+    expect(headers.get("authorization")).toBe("Bearer lemma_ci_scoped-secret");
+    expect(headers.get("user-agent")).toMatch(
+      /^@uselemma\/opencode\/\d+\.\d+\.\d+$/,
     );
   });
 
@@ -203,16 +202,15 @@ describe("OpenCode pending delivery", () => {
       },
       { dataDir },
     );
-    const fetchMock = vi.fn(async () => Response.json({}, { status: 201 }));
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({}, { status: 201 }),
+    );
 
     expect(await flushPendingTurns({ dataDir, fetch: fetchMock })).toBe(1);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://dev.api.uselemma.ai/traces/ingest",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer lemma_ci_scoped-secret-new",
-        }),
-      }),
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://dev.api.uselemma.ai/traces/ingest");
+    expect(new Headers(init?.headers).get("authorization")).toBe(
+      "Bearer lemma_ci_scoped-secret-new",
     );
     expect(await readdir(join(dataDir, "pending"))).toEqual([]);
   });

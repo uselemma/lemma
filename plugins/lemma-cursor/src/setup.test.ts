@@ -105,6 +105,11 @@ describe("Cursor setup", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
       harness: "cursor",
     });
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(new Headers(init?.headers).get("user-agent")).toMatch(
+        /^@uselemma\/cursor-plugin\/\d+\.\d+\.\d+$/,
+      );
+    }
     expect(credentials).toEqual({
       version: 1,
       apiUrl: "https://dev.api.uselemma.ai",

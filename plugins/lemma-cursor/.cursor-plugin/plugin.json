@@ -1,7 +1,7 @@
 {
   "name": "lemma-cursor",
   "displayName": "Lemma tracing",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Capture each completed Cursor prompt as a Lemma trace without MCP.",
   "author": {
     "name": "Lemma",

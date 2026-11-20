@@ -20,7 +20,6 @@ import {
   type CompletedCodingAgentTurn,
 } from "../../../packages/ts/tracing/src/index.js";
 
-import { createDeliveryFetch } from "./delivery.js";
 import {
   LEMMA_OPENCLAW_CREDENTIALS_HELP,
   readCredentials,
@@ -28,6 +27,7 @@ import {
   type StorageOptions,
 } from "./storage.js";
 import type { OpenClawTurn, PendingOpenClawTurn } from "./types.js";
+import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 const FLUSH_LOCK_STALE_MS = 30_000;
 const FLUSH_LOCK_OWNER_FILE = "owner.json";
@@ -225,7 +225,8 @@ export async function flushPendingTurns(
             apiKey: credentials.accessToken,
             projectId: credentials.projectId,
             baseUrl: credentials.apiUrl,
-            fetch: createDeliveryFetch(options.fetch),
+            fetch: options.fetch,
+            userAgent: PLUGIN_USER_AGENT,
           }).ingest(trace.context, {
             startedAt: new Date(trace.startedAt),
             endedAt: new Date(trace.endedAt),

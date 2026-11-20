@@ -1,6 +1,6 @@
 {
   "name": "lemma-codex",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Capture each completed Codex turn as a Lemma trace without MCP.",
   "author": {
     "name": "Lemma",

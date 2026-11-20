@@ -13,7 +13,7 @@ import { join } from "node:path";
 
 import { codingAgentTurnTrace, Lemma } from "@uselemma/tracing";
 
-import { createDeliveryFetch, DELIVERY_TIMEOUT_MS } from "./delivery.js";
+import { createDeliveryFetch } from "./delivery.js";
 import { isPendingOpenCodeTurn } from "./pending.js";
 import {
   LEMMA_OPENCODE_CREDENTIALS_HELP,
@@ -21,6 +21,7 @@ import {
   resolveDataDir,
   type StorageOptions,
 } from "./storage.js";
+import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 const FLUSH_LOCK_STALE_MS = 30_000;
 const FLUSH_LOCK_OWNER_FILE = "owner.json";
@@ -173,9 +174,10 @@ export async function flushPendingTurns(
             projectId: credentials.projectId,
             baseUrl: credentials.apiUrl,
             fetch: createDeliveryFetch(
-              options.fetch,
-              Math.min(DELIVERY_TIMEOUT_MS, remainingMilliseconds),
+              options.fetch ?? fetch,
+              remainingMilliseconds,
             ),
+            userAgent: PLUGIN_USER_AGENT,
           }).ingest(trace.context, {
             startedAt: new Date(trace.startedAt),
             endedAt: new Date(trace.endedAt),

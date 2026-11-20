@@ -54,4 +54,12 @@ describe("Codex plugin layout", () => {
       ],
     });
   });
+
+  it("pins the plugin manifest version to package.json", async () => {
+    const [manifest, packageJson] = await Promise.all([
+      json(resolve(pluginRoot, ".codex-plugin", "plugin.json")),
+      json(resolve(pluginRoot, "package.json")),
+    ]);
+    expect(manifest.version).toBe(packageJson.version);
+  });
 });

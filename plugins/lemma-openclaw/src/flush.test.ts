@@ -115,7 +115,7 @@ describe("OpenClaw turn mapping", () => {
   it("serializes concurrent pending delivery flushes", async () => {
     const dataDir = await temporaryDataDir();
     let releaseRequest: (() => void) | undefined;
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       () =>
         new Promise<Response>((resolveResponse) => {
           releaseRequest = () =>
@@ -130,6 +130,9 @@ describe("OpenClaw turn mapping", () => {
 
     expect(await firstFlush).toBe(1);
     expect(await readdir(join(dataDir, "pending"))).toEqual([]);
+    expect(
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("user-agent"),
+    ).toMatch(/^@uselemma\/openclaw\/\d+\.\d+\.\d+$/);
   });
 
   it("drains turns queued while another delivery is active", async () => {

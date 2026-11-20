@@ -455,11 +455,12 @@ Pass the `trace` or span handle into helpers that need to record child work. The
 
 ## Configuration
 
-| Option      | Environment variable | Default                   |
-| ----------- | -------------------- | ------------------------- |
-| `apiKey`    | `LEMMA_API_KEY`      | Required                  |
-| `projectId` | `LEMMA_PROJECT_ID`   | Required                  |
-| `baseUrl`   | none                 | `https://api.uselemma.ai` |
+| Option      | Environment variable | Default                       |
+| ----------- | -------------------- | ----------------------------- |
+| `apiKey`    | `LEMMA_API_KEY`      | Required                      |
+| `projectId` | `LEMMA_PROJECT_ID`   | Required                      |
+| `baseUrl`   | none                 | `https://api.uselemma.ai`     |
+| `userAgent` | none                 | `@uselemma/tracing/<version>` |
 
 The SDK sends to `${baseUrl}/traces/ingest`.
 

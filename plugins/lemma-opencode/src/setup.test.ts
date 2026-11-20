@@ -107,6 +107,11 @@ describe("OpenCode setup", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
       harness: "opencode",
     });
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(new Headers(init?.headers).get("user-agent")).toMatch(
+        /^@uselemma\/opencode\/\d+\.\d+\.\d+$/,
+      );
+    }
     expect(installPlugin).toHaveBeenCalledWith("/package/runtime", configDir);
     expect(credentials).toMatchObject({
       projectId: "10000000-0000-0000-0000-000000000001",

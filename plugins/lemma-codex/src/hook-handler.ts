@@ -26,6 +26,7 @@ import {
   withSessionLock,
   writeTurn,
 } from "./storage.js";
+import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 type HookEventName = "UserPromptSubmit" | "PreToolUse" | "PostToolUse";
 type TurnCompleteEventName = "AgentTurnComplete";
@@ -296,25 +297,17 @@ async function defaultSendTrace(input: {
   accessToken: string;
   turn: Parameters<typeof codingAgentTurnTrace>[0];
 }): Promise<void> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
-  const fetchWithTimeout: typeof fetch = async (request, init) =>
-    fetch(request, { ...init, signal: controller.signal });
   const lemma = new Lemma({
     apiKey: input.accessToken,
     projectId: input.projectId,
     baseUrl: input.apiUrl,
-    fetch: fetchWithTimeout,
+    userAgent: PLUGIN_USER_AGENT,
   });
   const trace = codingAgentTurnTrace(input.turn);
-  try {
-    await lemma.ingest(trace.context, {
-      startedAt: new Date(trace.startedAt),
-      endedAt: new Date(trace.endedAt),
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  await lemma.ingest(trace.context, {
+    startedAt: new Date(trace.startedAt),
+    endedAt: new Date(trace.endedAt),
+  });
 }
 
 export async function flushPendingTurns(

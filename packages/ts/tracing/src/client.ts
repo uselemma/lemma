@@ -37,6 +37,7 @@ import {
   type TokenUsage,
   type WireTokenUsage,
 } from "./usage";
+import { SDK_USER_AGENT } from "./version";
 
 export type { OperationUsageResult, TokenUsage, WireTokenUsage } from "./usage";
 export {
@@ -57,7 +58,16 @@ export type LemmaClientOptions = {
   apiKey?: string;
   projectId?: string;
   baseUrl?: string;
+  /**
+   * Sends every request. Each call carries `userAgent` as `User-Agent` in
+   * `init.headers`; a fetch that sets its own User-Agent replaces it.
+   */
   fetch?: typeof fetch;
+  /**
+   * `User-Agent` on every request, for a library built on this client to send
+   * its own name and version. Defaults to `@uselemma/tracing/<version>`.
+   */
+  userAgent?: string;
   /** Deployed app version stamped on every ingest payload. */
   release?: string;
 };
@@ -1008,6 +1018,8 @@ export class Lemma {
   private readonly projectId: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  /** Identity and credentials on every request; spread last so nothing overrides them. */
+  private readonly baseHeaders: Readonly<Record<string, string>>;
   private readonly release?: string;
   private readonly traces = new Map<string, TraceHandle>();
   private configLogged = false;
@@ -1026,6 +1038,10 @@ export class Lemma {
       "",
     );
     this.fetchImpl = options.fetch ?? fetch;
+    this.baseHeaders = {
+      "User-Agent": options.userAgent ?? SDK_USER_AGENT,
+      Authorization: `Bearer ${this.apiKey}`,
+    };
     this.release = normalizeRelease(
       options.release ?? process.env.LEMMA_RELEASE,
     );
@@ -1419,7 +1435,7 @@ export class Lemma {
     try {
       return await withIngestTimeout(async (signal) => {
         const response = await this.fetchImpl(url, {
-          headers: { Authorization: `Bearer ${this.apiKey}` },
+          headers: { ...this.baseHeaders },
           signal,
         });
         if (!response.ok) return null;
@@ -1566,10 +1582,7 @@ export class Lemma {
   private postIngest(body: string, signal: AbortSignal): Promise<Response> {
     return this.fetchImpl(`${this.baseUrl}${INGEST_PATH}`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json", ...this.baseHeaders },
       body,
       signal,
     });

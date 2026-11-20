@@ -24,4 +24,14 @@ describe("Hermes package layout", () => {
     });
     expect(manifest).not.toHaveProperty("private", true);
   });
+
+  it("pins the Hermes plugin manifest version to package.json", async () => {
+    const [manifest, packageJson] = await Promise.all([
+      readFile(resolve(pluginRoot, "hermes-plugin/lemma/plugin.yaml"), "utf8"),
+      readFile(resolve(pluginRoot, "package.json"), "utf8"),
+    ]);
+    expect(manifest.match(/^version: "([^"]+)"$/m)?.[1]).toBe(
+      (JSON.parse(packageJson) as { version: string }).version,
+    );
+  });
 });

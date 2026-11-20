@@ -28,9 +28,9 @@ Changes to packages (`packages/`, `plugins/`) and skills (`skills/`) follow [Sem
 
 | Path | Version field |
 | --- | --- |
-| `packages/ts/tracing` | `package.json` |
+| `packages/ts/tracing` | `package.json` and `src/version.ts` |
 | `packages/py/tracing` | `pyproject.toml` and `uv.lock` |
-| `plugins/lemma-*` | `package.json` |
+| `plugins/lemma-*` | `package.json`, and the harness manifest where one exists (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `.cursor-plugin/plugin.json`, `hermes-plugin/lemma/plugin.yaml`) |
 | `skills/<name>` | `SKILL.md` `metadata.version` |
 
 npm and PyPI publish only when a published package's version field changes on `main`. Skill `metadata.version` is for traceability; skills are not published.

@@ -101,6 +101,11 @@ describe("Lemma Codex setup", () => {
     expect(fetchMock.mock.calls[1][0]).toBe(
       "https://dev.api.uselemma.ai/coding-harness/device-authorizations/token",
     );
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(new Headers(init?.headers).get("user-agent")).toMatch(
+        /^@uselemma\/codex-plugin\/\d+\.\d+\.\d+$/,
+      );
+    }
     expect(credentials).toEqual({
       version: 1,
       apiUrl: "https://dev.api.uselemma.ai",
