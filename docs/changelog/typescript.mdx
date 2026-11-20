@@ -19,6 +19,7 @@ meta:
   - **Repeated drops:** Drops in the minute after a warning are counted, and the next warning says how many. With `LEMMA_DEBUG=1`, every drop is logged.
   - **SDK version:** Every request sends `User-Agent: @uselemma/tracing/<version>`, including through a `fetch` you pass to `new Lemma()`, so Lemma can tell which SDK version your project runs. A `fetch` that sets its own `User-Agent` replaces it.
   - **Custom User-Agent:** A library built on the SDK can pass `userAgent` to `new Lemma()` to send its own name and version instead. See [Identify a library built on the SDK](/tracing/instrumentation/traces#identify-a-library-built-on-the-sdk).
+  - **API from the environment:** When you don’t pass `baseUrl`, `new Lemma()` and every integration send to `LEMMA_BASE_URL` when it’s set and not empty, and to `https://api.uselemma.ai` otherwise. A `baseUrl` you pass still wins.
 
 </Update>
 

@@ -382,12 +382,12 @@ Use `attributes` for raw attributes that do not yet have a native SDK keyword.
 | --------------------------- | -------------------- | ------------------------- |
 | `api_key`                   | `LEMMA_API_KEY`      | Required                  |
 | `project_id`                | `LEMMA_PROJECT_ID`   | Required                  |
-| `base_url`                  | none                 | `https://api.uselemma.ai` |
+| `base_url`                  | `LEMMA_BASE_URL`     | `https://api.uselemma.ai` |
 | `before_send`               | none                 | none                      |
 | `max_payload_bytes`         | none                 | none (no cap)             |
 | `deduplicate_span_content`  | none                 | `False`                   |
 
-The SDK sends to `{base_url}/traces/ingest`.
+The SDK sends to `{base_url}/traces/ingest`. A `base_url` you pass wins over `LEMMA_BASE_URL`; an empty `LEMMA_BASE_URL` counts as unset.
 
 You can pass configuration directly to the constructor instead of using
 environment variables:

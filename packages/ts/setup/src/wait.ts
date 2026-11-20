@@ -35,6 +35,7 @@ export async function runWait(
     appDir,
     harness: pending.harness,
     paths,
+    apiUrl: pending.apiUrl,
   });
   const deleteSpentPendingFile = async () => {
     for (const line of await deletePendingSetup(paths.pending)) {

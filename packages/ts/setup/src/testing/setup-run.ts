@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { afterEach, expect } from "vitest";
 
+import { DEFAULT_API_URL, lemmaApiUrl, type Fetch } from "../api.js";
 import type { RunCommand } from "../command.js";
 import type { SetupEnvironment } from "../context.js";
 import { SetupError } from "../errors.js";
@@ -46,9 +47,28 @@ export type SetupRunInput = {
 };
 
 /**
+ * Sends requests for the production API to the mock instead, so a run can
+ * use the production URL, as customers do, and still reach the mock.
+ */
+function productionToMock(mockUrl: string): Fetch {
+  return (input, init) => {
+    const url = input instanceof Request ? input.url : input.toString();
+    const target = url.startsWith(`${DEFAULT_API_URL}/`)
+      ? `${mockUrl}${url.slice(DEFAULT_API_URL.length)}`
+      : url;
+    return fetch(
+      input instanceof Request ? new Request(target, input) : target,
+      init,
+    );
+  };
+}
+
+/**
  * `start` and `wait` runs against a local mock API, each in its own app and
- * home directories, on a clock only `sleep` advances. The mock APIs and
- * directories are removed after each test of the calling file.
+ * home directories, on a clock only `sleep` advances. `start` uses the
+ * production URL unless a test passes the mock's own `api.url`, which setup
+ * treats as a non-production API. The mock APIs and directories are removed
+ * after each test of the calling file.
  */
 export function setupRuns(): {
   setUp: (input: SetupRunInput) => Promise<SetupRun>;
@@ -84,7 +104,7 @@ export function setupRuns(): {
       cwd: app,
       homeDir: home,
       env: {},
-      fetch,
+      fetch: productionToMock(api.url),
       launchBrowser: async (url) => {
         opened.push(url);
       },
@@ -110,7 +130,7 @@ export function setupRuns(): {
             projectName: "Support bot",
             agentName: "support-bot",
             openBrowser: true,
-            apiUrl: api.url,
+            apiUrl: lemmaApiUrl(DEFAULT_API_URL, "--api-url"),
             ...options,
           },
           environment,

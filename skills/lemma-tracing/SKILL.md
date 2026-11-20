@@ -7,7 +7,7 @@ description: >-
   Agents SDK, LangChain, LangGraph, Langfuse side-by-side installs, or
   debugging Lemma trace delivery and trace shape.
 metadata:
-  version: 1.1.3
+  version: 1.1.4
 ---
 
 # Lemma Tracing
@@ -105,7 +105,7 @@ Ask one focused clarification question only when the agent boundary or finalizat
 ## Implementation Rules
 
 - Create one shared `Lemma` client on the server side.
-- Use `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`. The default endpoint is `https://api.uselemma.ai`; pass `baseUrl` / `base_url` only for staging or self-hosted deployments.
+- Use `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`. The SDK sends to `LEMMA_BASE_URL` when it is set, otherwise to `https://api.uselemma.ai`. Set `LEMMA_BASE_URL`, or pass `baseUrl` / `base_url` (which wins over it), only for staging or self-hosted deployments.
 - Never expose `LEMMA_API_KEY` in browser code or `NEXT_PUBLIC_*` variables.
 - Never write the value of `LEMMA_API_KEY` into any file, tracked or not, and do not ask the user to paste it into the conversation. A placeholder line such as `LEMMA_API_KEY=` in an env example is fine. `LEMMA_PROJECT_ID` is not a secret; fill it in when you know it.
 - Use callback traces when one function owns the whole run.
@@ -187,7 +187,7 @@ Validation checklist before considering an integration complete:
 
 ## Handing Back
 
-If `lemma-setup` sent you here, `npx @uselemma/setup` already wrote `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` to `.env`. Don't tell the user to fetch or set a key. Say the app reads both from `.env`, and leave deployment to the `lemma-setup` hand-back.
+If `lemma-setup` sent you here, `npx @uselemma/setup` already wrote `LEMMA_API_KEY` and `LEMMA_PROJECT_ID` to `.env`, and `LEMMA_BASE_URL` when setup ran against a Lemma API other than production. Don't tell the user to fetch or set a key. Say the app reads them from `.env`, and leave deployment to the `lemma-setup` hand-back.
 
 Otherwise, end by telling the user what to set before they run the app: `LEMMA_API_KEY`, an ingest-scoped key, and `LEMMA_PROJECT_ID`. [Set up manually](https://docs.uselemma.ai/tracing/instrumentation/setup#set-up-manually) shows where both come from. Nothing is sent until both are set. For deployment, also set `LEMMA_RELEASE` to the deployed version, such as the commit SHA. If the user arrived here from `lemma-artifacts`, the agent name you used is the one they chose in onboarding; say so, so they can see the two line up.
 

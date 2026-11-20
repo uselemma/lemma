@@ -2,13 +2,12 @@ import type { Approval } from "./api.js";
 import type { RunCommand } from "./command.js";
 import type { SetupEnvironment } from "./context.js";
 import {
-  API_KEY_VARIABLE,
-  keptIngestLines,
+  keepIngestKey,
   missingIngestLine,
   placeIngestKey,
-  PROJECT_ID_VARIABLE,
   saveIngestKeyPrivately,
   writeEnvExample,
+  type AppEnv,
   type EnvTarget,
 } from "./env-file.js";
 import {
@@ -27,6 +26,7 @@ import {
   type Placement,
   type PrivateSave,
 } from "./placement.js";
+import { listed } from "./shared.js";
 
 /**
  * The outcome of saving a new key to its private file. `planned` is whether
@@ -41,31 +41,45 @@ function privateSaveOutcome(saved: PrivateSave, planned: boolean): KeyOutcome {
 
 /**
  * The ingest key's outcome. A key the server kept is reported as kept when
- * the client reported a key for the approved project, and as missing
- * otherwise. A new key goes to `.env`, or to its private file when the plan
- * says so or the write fails.
+ * the client reported a key for the approved project, with the app's API
+ * values set beside it, and as missing otherwise. A new key goes to `.env`
+ * with those values, or to its private file when the plan says so or the
+ * write fails.
  */
 async function finishIngestKey(input: {
   approval: Approval;
   pending: PendingSetup;
   target: EnvTarget;
+  appEnv: AppEnv;
   run: RunCommand;
 }): Promise<KeyOutcome> {
-  const { approval, pending, target, run } = input;
+  const { approval, pending, target, appEnv, run } = input;
   const { projectId, ingest } = approval;
   if (ingest.kind === "kept") {
-    return projectId === pending.existingIngestProjectId
-      ? { kind: "kept", lines: await keptIngestLines(target, run) }
-      : { kind: "nothing-saved", lines: [missingIngestLine(projectId)] };
+    if (projectId !== pending.existingIngestProjectId) {
+      return { kind: "nothing-saved", lines: [missingIngestLine(projectId)] };
+    }
+    const kept = await keepIngestKey({ target, appEnv, run });
+    return {
+      kind: kept.complete ? "kept" : "kept-incomplete",
+      lines: kept.lines,
+    };
   }
   const placement: Placement = isPrivateTarget(target)
     ? { placed: false, reason: target.reason }
-    : await placeIngestKey({ target, projectId, apiKey: ingest.key, run });
+    : await placeIngestKey({
+        target,
+        projectId,
+        apiKey: ingest.key,
+        appEnv,
+        run,
+      });
   if (placement.placed) return { kind: "written", lines: placement.lines };
   const saved = await saveIngestKeyPrivately({
     fallbackPath: target.fallbackPath,
     projectId,
     apiKey: ingest.key,
+    appEnv,
     reason: placement.reason,
   });
   return privateSaveOutcome(saved, isPrivateTarget(target));
@@ -116,6 +130,7 @@ function failsRun(outcome: KeyOutcome): boolean {
       return false;
     case "saved-privately":
       return !outcome.planned;
+    case "kept-incomplete":
     case "nothing-saved":
       return true;
   }
@@ -148,10 +163,11 @@ export async function finishSetup(input: {
     approval,
     pending,
     target: setupPlan.env,
+    appEnv: setupPlan.appEnv,
     run,
   });
   print(ingest.lines);
-  print(await writeEnvExample(setupPlan.example));
+  print(await writeEnvExample(setupPlan.example, setupPlan.appEnv));
 
   const mcp = await finishMcpKey({
     approval,
@@ -165,7 +181,7 @@ export async function finishSetup(input: {
     print(["The new ingest key can only send traces to this project."]);
   }
   print([
-    `Before you deploy, add ${API_KEY_VARIABLE} and ${PROJECT_ID_VARIABLE} to your deployment's environment variables or secrets.`,
+    `Before you deploy, add ${listed(setupPlan.appEnv.variables)} to your deployment's environment variables or secrets.`,
   ]);
   const failed = failsRun(ingest) || failsRun(mcp);
   if (!failed) print(["Lemma setup finished."]);

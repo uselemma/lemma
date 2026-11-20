@@ -23,8 +23,10 @@ export type PrivateSave = { saved: boolean; lines: string[] };
 export type KeyOutcome =
   /** In `.env` or the coding agent's MCP config. */
   | { kind: "written"; lines: string[] }
-  /** The client's existing key stays; nothing was written. */
+  /** The client's existing key stays, with what the app needs beside it. */
   | { kind: "kept"; lines: string[] }
+  /** The client's existing key stays, but setup could not set or remove what the app needs beside it. */
+  | { kind: "kept-incomplete"; lines: string[] }
   /**
    * In a file only the user can read, for the user to copy. `planned` when
    * setup announced that file before approval; otherwise a write failed.

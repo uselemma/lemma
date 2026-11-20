@@ -1,8 +1,9 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { EXIT_CODES } from "./errors.js";
 import { cursorConfigPath } from "./mcp/paths.js";
 import {
   approved,
@@ -17,8 +18,11 @@ import {
   MCP_KEY,
   printed,
   PROJECT_ID,
+  rejection,
+  runsAsRoot,
   setupRuns,
 } from "./testing/setup-run.js";
+import { posix } from "./testing/temp.js";
 
 const OTHER_PROJECT_ID = "9b1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e5f";
 const TENANT_ID = "5c6d7e8f-9a0b-4c1d-8e2f-3a4b5c6d7e8f";
@@ -63,6 +67,91 @@ describe("existing keys", () => {
     expect(printed(run)).not.toContain("can only send traces");
     expect(printed(run)).not.toContain(EXISTING_KEY);
   });
+
+  it("sets LEMMA_BASE_URL beside a kept ingest key when the API isn't production", async () => {
+    const run = await withEnv(envWithKey, {
+      keys: { [EXISTING_KEY]: keyDescription(TENANT_ID, PROJECT_ID, "ingest") },
+      polls: [
+        approved({
+          project_id: PROJECT_ID,
+          agent_name: "support-bot",
+          mcp_key: MCP_KEY,
+        }),
+      ],
+    });
+    await run.start({ apiUrl: run.api.url });
+    await expect(run.wait()).resolves.toEqual({ status: "approved" });
+    expect(await readFile(join(run.app, ".env"), "utf8")).toBe(
+      `${envWithKey}LEMMA_BASE_URL=${run.api.url}\n`,
+    );
+    expect(run.lines).toContain(".env: set LEMMA_BASE_URL.");
+    expect(printed(run)).not.toContain(EXISTING_KEY);
+  });
+
+  it.skipIf(!posix || runsAsRoot)(
+    "exits 1 naming the value when LEMMA_BASE_URL cannot be set beside a kept key",
+    async () => {
+      const run = await withEnv(envWithKey, {
+        keys: {
+          [EXISTING_KEY]: keyDescription(TENANT_ID, PROJECT_ID, "ingest"),
+        },
+        polls: [
+          approved({
+            project_id: PROJECT_ID,
+            agent_name: "support-bot",
+            mcp_key: MCP_KEY,
+          }),
+        ],
+      });
+      await run.start({ apiUrl: run.api.url });
+      await chmod(run.app, 0o500);
+      const error = await rejection(run.wait()).finally(() =>
+        chmod(run.app, 0o700),
+      );
+      expect(error.exitCode).toBe(EXIT_CODES.failure);
+      expect(await readFile(join(run.app, ".env"), "utf8")).toBe(envWithKey);
+      expect(printed(run)).toContain(
+        `Add LEMMA_BASE_URL=${run.api.url} where the app loads its environment`,
+      );
+      expect((await cursorEntry(run.home)).headers.Authorization).toBe(
+        `Bearer ${MCP_KEY}`,
+      );
+      expect(printed(run)).not.toContain("Lemma setup finished.");
+    },
+  );
+
+  it.skipIf(!posix || runsAsRoot)(
+    "exits 1 saying to remove a leftover LEMMA_BASE_URL a production setup cannot remove beside a kept key",
+    async () => {
+      const withLeftover = `${envWithKey}LEMMA_BASE_URL=https://dev.api.uselemma.ai\n`;
+      const run = await withEnv(withLeftover, {
+        keys: {
+          [EXISTING_KEY]: keyDescription(TENANT_ID, PROJECT_ID, "ingest"),
+        },
+        polls: [
+          approved({
+            project_id: PROJECT_ID,
+            agent_name: "support-bot",
+            mcp_key: MCP_KEY,
+          }),
+        ],
+      });
+      await run.start();
+      await chmod(run.app, 0o500);
+      const error = await rejection(run.wait()).finally(() =>
+        chmod(run.app, 0o700),
+      );
+      expect(error.exitCode).toBe(EXIT_CODES.failure);
+      expect(await readFile(join(run.app, ".env"), "utf8")).toBe(withLeftover);
+      expect(printed(run)).toContain(
+        "Remove LEMMA_BASE_URL from .env, so the kept key reaches the API it belongs to.",
+      );
+      expect((await cursorEntry(run.home)).headers.Authorization).toBe(
+        `Bearer ${MCP_KEY}`,
+      );
+      expect(printed(run)).not.toContain("Lemma setup finished.");
+    },
+  );
 
   it.each([
     ["Lemma rejects the key", undefined],

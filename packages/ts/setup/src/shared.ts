@@ -16,3 +16,10 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function lineEnding(contents: string): string {
   return contents.includes("\r\n") ? "\r\n" : "\n";
 }
+
+/** `A and B`, or `A, B, and C`. */
+export function listed(items: readonly string[]): string {
+  return items.length <= 2
+    ? items.join(" and ")
+    : `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}

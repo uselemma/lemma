@@ -1467,3 +1467,8 @@ async def test_langchain_aflush_sends_open_traces_once_off_the_loop():
     assert len(send_threads) == 1
     assert send_threads[0] != threading.get_ident()
 
+
+def test_langchain_reads_lemma_base_url_when_no_base_url_is_given(monkeypatch):
+    monkeypatch.setenv("LEMMA_BASE_URL", "https://dev.api.example.test")
+    handler = langchain(api_key="key", project_id=PROJECT_ID)
+    assert handler.lemma.base_url == "https://dev.api.example.test"

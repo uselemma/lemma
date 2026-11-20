@@ -1,4 +1,4 @@
-import { describeApiKey, type Fetch } from "./api.js";
+import { describeApiKey, type Fetch, type LemmaApiUrl } from "./api.js";
 import {
   API_KEY_VARIABLE,
   PROJECT_ID_VARIABLE,
@@ -16,7 +16,7 @@ type KeyCheck = { verified: string | null; note?: string };
  */
 export async function checkIngestKey(input: {
   existing: ExistingIngestKey;
-  apiUrl: string;
+  apiUrl: LemmaApiUrl;
   fetch: Fetch;
 }): Promise<KeyCheck> {
   switch (input.existing.kind) {
@@ -52,7 +52,7 @@ export async function checkIngestKey(input: {
 export async function checkMcpKey(input: {
   existing: ExistingMcpKey;
   codingAgentName: string;
-  apiUrl: string;
+  apiUrl: LemmaApiUrl;
   fetch: Fetch;
 }): Promise<KeyCheck> {
   const replaced = `MCP: Lemma did not confirm the key in ${input.codingAgentName}'s \`lemma\` server as an organization admin key. Setup replaces it after approval.`;

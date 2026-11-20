@@ -976,6 +976,52 @@ def test_release_is_trimmed_from_constructor_and_env(monkeypatch):
     assert env_calls[0]["trace"]["release"] == "env-1.0.0"
 
 
+def _ingest_urls(urls):
+    def transport(url, _headers, _body):
+        urls.append(url)
+        return 201, "{}"
+
+    return transport
+
+
+def test_sends_to_production_without_base_url_or_env(monkeypatch):
+    monkeypatch.delenv("LEMMA_BASE_URL", raising=False)
+    urls = []
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=_ingest_urls(urls))
+    lemma.trace("support-agent", lambda _trace: "ok")
+    assert urls == ["https://api.uselemma.ai/traces/ingest"]
+
+
+def test_lemma_base_url_env_used_when_constructor_omits_base_url(monkeypatch):
+    monkeypatch.setenv("LEMMA_BASE_URL", "https://dev.api.example.test/")
+    urls = []
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=_ingest_urls(urls))
+    lemma.trace("support-agent", lambda _trace: "ok")
+    assert urls == ["https://dev.api.example.test/traces/ingest"]
+
+
+def test_constructor_base_url_wins_over_env(monkeypatch):
+    monkeypatch.setenv("LEMMA_BASE_URL", "https://dev.api.example.test")
+    urls = []
+    lemma = Lemma(
+        api_key="key",
+        project_id=PROJECT_ID,
+        base_url="https://api.example.test",
+        transport=_ingest_urls(urls),
+    )
+    lemma.trace("support-agent", lambda _trace: "ok")
+    assert urls == ["https://api.example.test/traces/ingest"]
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_empty_lemma_base_url_env_sends_to_production(monkeypatch, value):
+    monkeypatch.setenv("LEMMA_BASE_URL", value)
+    urls = []
+    lemma = Lemma(api_key="key", project_id=PROJECT_ID, transport=_ingest_urls(urls))
+    lemma.trace("support-agent", lambda _trace: "ok")
+    assert urls == ["https://api.uselemma.ai/traces/ingest"]
+
+
 def test_ingest_stamps_client_release():
     calls = []
     lemma = Lemma(

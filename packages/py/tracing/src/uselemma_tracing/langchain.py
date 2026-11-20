@@ -657,7 +657,7 @@ class LemmaLangChainCallbackHandler(_CallbackHandlerBase):
         api_key: str | None = None,
         project_id: str | None = None,
         release: str | None = None,
-        base_url: str = "https://api.uselemma.ai",
+        base_url: str | None = None,
         transport: Any = None,
         before_send: BeforeSend | None = None,
         max_payload_bytes: int | None = None,

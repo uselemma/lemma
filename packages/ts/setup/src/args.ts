@@ -1,6 +1,6 @@
 import { parseArgs, type ParseArgsOptionsConfig } from "node:util";
 
-import { DEFAULT_API_URL, normalizedHttpUrl } from "./api.js";
+import { DEFAULT_API_URL, lemmaApiUrl, type LemmaApiUrl } from "./api.js";
 import { EXIT_CODES, failureReason, SetupError } from "./errors.js";
 import { HARNESS_IDS, isHarnessId } from "./harness.js";
 import { WAIT_BUDGET_SECONDS } from "./poll.js";
@@ -14,8 +14,9 @@ export const USAGE = [
   "Connects this app and its coding agent to Lemma. `start` begins a browser",
   "approval and returns at once. `wait` checks for the approval for up to",
   `${WAIT_BUDGET_SECONDS} seconds; run it again while it exits with 5. Once approved, it`,
-  "writes LEMMA_API_KEY and LEMMA_PROJECT_ID to ./.env and the Lemma MCP server",
-  "to the coding agent's config. Run both in the app's directory.",
+  "writes LEMMA_API_KEY and LEMMA_PROJECT_ID to ./.env, with LEMMA_BASE_URL when",
+  "--api-url isn't production, and the Lemma MCP server to the coding agent's",
+  "config. Run both in the app's directory.",
   "",
   "start, required:",
   `  --harness <id>          The coding agent running setup: ${HARNESS_IDS.join(", ")}`,
@@ -26,7 +27,9 @@ export const USAGE = [
   "  --org <slug>            The Lemma organization to approve in, e.g. acme-inc-x1y2",
   "  --repository <repo>     The repository, e.g. acme/support-bot",
   "  --framework <name>      The agent framework, e.g. vercel-ai, langgraph",
-  "  --api-url <url>         The Lemma API (default https://api.uselemma.ai)",
+  "  --api-url <url>         The Lemma API (default https://api.uselemma.ai): HTTPS on",
+  "                          uselemma.ai or a subdomain, or HTTP/HTTPS on localhost,",
+  "                          127.0.0.1 or [::1]",
   "  --no-browser            Print the approval URL without opening a browser",
   "",
   "  --help                  Show this help",
@@ -160,9 +163,9 @@ export function parseCommand(argv: string[]): ParsedCommand {
     );
   }
   const repository = optionalValue("--repository", values.repository);
-  let apiUrl: string;
+  let apiUrl: LemmaApiUrl;
   try {
-    apiUrl = normalizedHttpUrl(
+    apiUrl = lemmaApiUrl(
       values["api-url"]?.trim() || DEFAULT_API_URL,
       "--api-url",
     );

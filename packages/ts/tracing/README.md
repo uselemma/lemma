@@ -458,10 +458,10 @@ Pass the `trace` or span handle into helpers that need to record child work. The
 | ----------- | -------------------- | ----------------------------- |
 | `apiKey`    | `LEMMA_API_KEY`      | Required                      |
 | `projectId` | `LEMMA_PROJECT_ID`   | Required                      |
-| `baseUrl`   | none                 | `https://api.uselemma.ai`     |
+| `baseUrl`   | `LEMMA_BASE_URL`     | `https://api.uselemma.ai`     |
 | `userAgent` | none                 | `@uselemma/tracing/<version>` |
 
-The SDK sends to `${baseUrl}/traces/ingest`.
+The SDK sends to `${baseUrl}/traces/ingest`. A `baseUrl` you pass wins over `LEMMA_BASE_URL`; an empty `LEMMA_BASE_URL` counts as unset.
 
 You can pass configuration directly to the constructor instead of using
 environment variables:
