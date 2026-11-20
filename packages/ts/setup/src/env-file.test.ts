@@ -157,6 +157,7 @@ describe("planning the ingest key", () => {
         kind: "private",
         reason: `${join(directory, ".env")} is a symlink, so setup does not write it`,
         existing: { kind: "none" },
+        assignments: new Map(),
         fallbackPath: fallbackPath(directory),
       });
       expect(plannedEnvNote(target, PRODUCTION)).toBe(
@@ -272,6 +273,7 @@ describe("placing the ingest key", () => {
         kind: "private",
         reason: "x",
         existing: { kind: "none" },
+        assignments: new Map(),
         fallbackPath: fallbackPath(directory),
       },
       appEnv: PRODUCTION,
@@ -280,30 +282,6 @@ describe("placing the ingest key", () => {
     expect(kept).toMatchObject({ complete: true });
     expect(kept.lines).toHaveLength(1);
   });
-
-  it.skipIf(!posix)(
-    "keeps a key in production when .env can no longer be edited, without touching it",
-    async () => {
-      const directory = await tempDir();
-      const target = await envFileTarget(directory);
-      await writeFile(join(directory, "elsewhere"), "UNTOUCHED=1\n");
-      await symlink(join(directory, "elsewhere"), join(directory, ".env"));
-      const kept = await keepIngestKey({
-        target,
-        appEnv: PRODUCTION,
-        run: gitAnswering(0),
-      });
-      expect(kept).toEqual({
-        complete: true,
-        lines: [
-          ".env: kept LEMMA_API_KEY and LEMMA_PROJECT_ID; the key is already limited to this project.",
-        ],
-      });
-      expect(await readFile(join(directory, "elsewhere"), "utf8")).toBe(
-        "UNTOUCHED=1\n",
-      );
-    },
-  );
 });
 
 describe("the API the app sends to", () => {
@@ -364,6 +342,7 @@ describe("the API the app sends to", () => {
             kind: "private",
             reason: "x",
             existing: { kind: "none" },
+            assignments: new Map(),
             fallbackPath: fallbackPath(directory),
           },
           DEV,
@@ -443,6 +422,111 @@ describe("the API the app sends to", () => {
   });
 
   it.skipIf(!posix)(
+    "keeps a key in production when .env, with nothing to remove, can no longer be edited, without touching it",
+    async () => {
+      const directory = await tempDir();
+      const env = join(directory, ".env");
+      await writeFile(
+        env,
+        `LEMMA_API_KEY=lemma_sk_old\nLEMMA_PROJECT_ID=${PROJECT_ID}\n`,
+      );
+      const target = await envFileTarget(directory);
+      await rm(env);
+      await writeFile(join(directory, "elsewhere"), "UNTOUCHED=1\n");
+      await symlink(join(directory, "elsewhere"), env);
+      const kept = await keepIngestKey({
+        target,
+        appEnv: PRODUCTION,
+        run: gitAnswering(0),
+      });
+      expect(kept).toEqual({
+        complete: true,
+        lines: [
+          ".env: kept LEMMA_API_KEY and LEMMA_PROJECT_ID; the key is already limited to this project.",
+        ],
+      });
+      expect(await readFile(join(directory, "elsewhere"), "utf8")).toBe(
+        "UNTOUCHED=1\n",
+      );
+    },
+  );
+
+  it.skipIf(!posix)(
+    "is incomplete in production when a leftover LEMMA_BASE_URL can no longer be removed, and says to remove it",
+    async () => {
+      const directory = await tempDir();
+      const env = join(directory, ".env");
+      const contents = `LEMMA_API_KEY=lemma_sk_old\nLEMMA_PROJECT_ID=${PROJECT_ID}\nLEMMA_BASE_URL=${DEV_API}\n`;
+      await writeFile(env, contents);
+      const target = await envFileTarget(directory);
+      await rm(env);
+      await writeFile(join(directory, "elsewhere"), contents);
+      await symlink(join(directory, "elsewhere"), env);
+      const kept = await keepIngestKey({
+        target,
+        appEnv: PRODUCTION,
+        run: gitAnswering(0),
+      });
+      expect(kept).toEqual({
+        complete: false,
+        lines: [
+          ".env: kept LEMMA_API_KEY and LEMMA_PROJECT_ID; the key is already limited to this project.",
+          `.env: ${env} is a symlink, so setup does not write it. Remove LEMMA_BASE_URL from .env, so the kept key reaches the API it belongs to.`,
+        ],
+      });
+      expect(await readFile(join(directory, "elsewhere"), "utf8")).toBe(
+        contents,
+      );
+    },
+  );
+
+  it("stays empty when a production setup writes a new key beside it", async () => {
+    const directory = await tempDir();
+    const env = join(directory, ".env");
+    await writeFile(env, "LEMMA_BASE_URL=\nOTHER=1\n");
+    const placement = await placeIngestKey({
+      target: await envFileTarget(directory),
+      projectId: PROJECT_ID,
+      apiKey: KEY,
+      appEnv: PRODUCTION,
+      run: gitAnswering(0),
+    });
+    expect(placement.placed && placement.lines[0]).toBe(
+      ".env: set LEMMA_API_KEY and LEMMA_PROJECT_ID.",
+    );
+    expect(placement.placed && placement.lines).not.toContain(
+      ".env: removed LEMMA_BASE_URL, so the app sends traces to production.",
+    );
+    expect(await readFile(env, "utf8")).toBe(
+      `LEMMA_BASE_URL=\nOTHER=1\nLEMMA_API_KEY=${KEY}\nLEMMA_PROJECT_ID=${PROJECT_ID}\n`,
+    );
+  });
+
+  it("is not a leftover when it is empty, since both SDKs treat that as unset", async () => {
+    const directory = await tempDir();
+    const env = join(directory, ".env");
+    const contents = `LEMMA_API_KEY=lemma_sk_old\nLEMMA_PROJECT_ID=${PROJECT_ID}\nLEMMA_BASE_URL=\n`;
+    await writeFile(env, contents);
+    const target = await envFileTarget(directory);
+    await expect(
+      keepIngestKey({ target, appEnv: PRODUCTION, run: gitAnswering(0) }),
+    ).resolves.toEqual({
+      complete: true,
+      lines: [
+        ".env: kept LEMMA_API_KEY and LEMMA_PROJECT_ID; the key is already limited to this project.",
+      ],
+    });
+    expect(await readFile(env, "utf8")).toBe(contents);
+    await expect(
+      keepIngestKey({
+        target: { ...target, kind: "private", reason: "x" },
+        appEnv: PRODUCTION,
+        run: gitAnswering(0),
+      }),
+    ).resolves.toMatchObject({ complete: true });
+  });
+
+  it.skipIf(!posix)(
     "is not set beside a kept key through a symlink or for a private target",
     async () => {
       const directory = await tempDir();
@@ -471,6 +555,7 @@ describe("the API the app sends to", () => {
             kind: "private",
             reason: "x",
             existing: { kind: "none" },
+            assignments: new Map(),
             fallbackPath: fallbackPath(directory),
           },
           appEnv: DEV,

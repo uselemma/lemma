@@ -120,6 +120,39 @@ describe("existing keys", () => {
     },
   );
 
+  it.skipIf(!posix || runsAsRoot)(
+    "exits 1 saying to remove a leftover LEMMA_BASE_URL a production setup cannot remove beside a kept key",
+    async () => {
+      const withLeftover = `${envWithKey}LEMMA_BASE_URL=https://dev.api.uselemma.ai\n`;
+      const run = await withEnv(withLeftover, {
+        keys: {
+          [EXISTING_KEY]: keyDescription(TENANT_ID, PROJECT_ID, "ingest"),
+        },
+        polls: [
+          approved({
+            project_id: PROJECT_ID,
+            agent_name: "support-bot",
+            mcp_key: MCP_KEY,
+          }),
+        ],
+      });
+      await run.start();
+      await chmod(run.app, 0o500);
+      const error = await rejection(run.wait()).finally(() =>
+        chmod(run.app, 0o700),
+      );
+      expect(error.exitCode).toBe(EXIT_CODES.failure);
+      expect(await readFile(join(run.app, ".env"), "utf8")).toBe(withLeftover);
+      expect(printed(run)).toContain(
+        "Remove LEMMA_BASE_URL from .env, so the kept key reaches the API it belongs to.",
+      );
+      expect((await cursorEntry(run.home)).headers.Authorization).toBe(
+        `Bearer ${MCP_KEY}`,
+      );
+      expect(printed(run)).not.toContain("Lemma setup finished.");
+    },
+  );
+
   it.each([
     ["Lemma rejects the key", undefined],
     [

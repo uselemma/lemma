@@ -63,7 +63,7 @@ Each key is named for the coding agent and the day, for example `Setup: Claude C
 
 If git doesn’t ignore `.env`, the command prints a warning. Add `.env` to `.gitignore` before you commit.
 
-Lemma returns each new key once, so `wait` never drops one. When `.env` can’t take the ingest key although neither `start` nor `wait` found anything wrong before polling, `wait` saves `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`, with `LEMMA_BASE_URL` for an API other than production, to that private file, says where, finishes the other steps, and exits with `1`. Copy the values where the app loads its environment, then delete that file. When `wait` can’t set `LEMMA_BASE_URL` beside a key Lemma kept, it names the line to add and exits with `1`.
+Lemma returns each new key once, so `wait` never drops one. When `.env` can’t take the ingest key although neither `start` nor `wait` found anything wrong before polling, `wait` saves `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`, with `LEMMA_BASE_URL` for an API other than production, to that private file, says where, finishes the other steps, and exits with `1`. Copy the values where the app loads its environment, then delete that file. When `wait` can’t set `LEMMA_BASE_URL` beside a key Lemma kept, or can’t remove a leftover one on a production setup, it says what to change by hand and exits with `1`.
 
 ## Where the admin key goes for each coding agent
 
@@ -111,7 +111,7 @@ The `lemma-setup` skill uses the exit code to decide the next step:
 | --- | --- | --- |
 | `0` | `start`, `wait` | `start`: the approval started. `wait`: approved, and each key is written, kept, or saved to a private file that `start`, or `wait` before it polled, announced; the output names that file and includes `Project ID:` and `Agent name:` |
 | `5` | `wait` | The approval is still pending. Run `wait` again |
-| `1` | `start`, `wait` | Setup failed. The message says why, for example no pending setup in this directory, or no coding-agent setup on this Lemma environment. After approval, `wait` also exits with `1` when a key went to a private file because a write failed, no key was saved, or `LEMMA_BASE_URL` couldn’t be set beside a kept key (the output names the line to add); it finishes every other step first |
+| `1` | `start`, `wait` | Setup failed. The message says why, for example no pending setup in this directory, or no coding-agent setup on this Lemma environment. After approval, `wait` also exits with `1` when a key went to a private file because a write failed, no key was saved, or `LEMMA_BASE_URL` couldn’t be set or removed beside a kept key (the output says what to change); it finishes every other step first |
 | `2` | `start`, `wait` | A command or flag is missing or invalid |
 | `3` | `wait` | The approval code expired. Run `start` again |
 | `4` | `wait` | The approver canceled, or is no longer an owner or admin. Run `start` again |

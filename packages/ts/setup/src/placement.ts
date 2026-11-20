@@ -25,7 +25,7 @@ export type KeyOutcome =
   | { kind: "written"; lines: string[] }
   /** The client's existing key stays, with what the app needs beside it. */
   | { kind: "kept"; lines: string[] }
-  /** The client's existing key stays, but setup could not write what the app needs beside it. */
+  /** The client's existing key stays, but setup could not set or remove what the app needs beside it. */
   | { kind: "kept-incomplete"; lines: string[] }
   /**
    * In a file only the user can read, for the user to copy. `planned` when

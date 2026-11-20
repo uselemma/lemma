@@ -52,6 +52,22 @@ function setEntries(values: EnvValues): [string, string][] {
   );
 }
 
+/**
+ * The variables `values` removes that `assignments` gives a value. An empty
+ * assignment doesn't count: both SDKs treat it as unset, so setup neither
+ * removes nor reports it.
+ */
+function leftovers(
+  values: EnvValues,
+  assignments: ReadonlyMap<string, readonly string[]>,
+): string[] {
+  return Object.keys(values).filter(
+    (name) =>
+      values[name] === null &&
+      (assignments.get(name) ?? []).some((value) => value.trim() !== ""),
+  );
+}
+
 /** Everything setup writes for the app with a new ingest key. */
 function newKeyValues(input: {
   apiKey: string;
@@ -98,7 +114,7 @@ export function parseEnvAssignments(contents: string): Map<string, string[]> {
  * or assigned conflicting values (dotenv loaders disagree on which wins).
  */
 export function singleValue(
-  assignments: Map<string, string[]>,
+  assignments: ReadonlyMap<string, readonly string[]>,
   name: string,
 ): string | null {
   const distinct = new Set(assignments.get(name) ?? []);
@@ -156,9 +172,9 @@ export type ExistingIngestKey =
   | { kind: "unusable" }
   | { kind: "key"; apiKey: string; projectId: string };
 
-function existingIngestKey(contents: string | null): ExistingIngestKey {
-  if (contents === null) return { kind: "none" };
-  const assignments = parseEnvAssignments(contents);
+function existingIngestKey(
+  assignments: ReadonlyMap<string, readonly string[]>,
+): ExistingIngestKey {
   const apiKey = singleValue(assignments, API_KEY_VARIABLE);
   if (!apiKey) return { kind: "none" };
   const projectId = singleValue(assignments, PROJECT_ID_VARIABLE);
@@ -194,7 +210,15 @@ function notWrittenReason(path: string, why: NotEditableWhy): string {
  * at planning, and the private file the key goes to, which is the plan for
  * a private target and the fallback otherwise.
  */
-type EnvTargetBase = { existing: ExistingIngestKey; fallbackPath: string };
+type EnvTargetBase = {
+  existing: ExistingIngestKey;
+  fallbackPath: string;
+  /**
+   * What `.env` assigned when setup planned, so a removal that cannot be
+   * written later is still reported. Empty for a private target.
+   */
+  assignments: ReadonlyMap<string, readonly string[]>;
+};
 
 type EnvFileTarget = EnvTargetBase & { kind: "env-file"; path: string };
 
@@ -213,19 +237,23 @@ export async function planEnvTarget(
   fallbackPath: string,
 ): Promise<EnvTarget> {
   const file = await readEnvFile(path);
-  return file.kind === "not-editable"
-    ? {
-        kind: "private",
-        reason: notWrittenReason(path, file.why),
-        existing: { kind: "none" },
-        fallbackPath,
-      }
-    : {
-        kind: "env-file",
-        path,
-        existing: existingIngestKey(file.contents),
-        fallbackPath,
-      };
+  if (file.kind === "not-editable") {
+    return {
+      kind: "private",
+      reason: notWrittenReason(path, file.why),
+      existing: { kind: "none" },
+      assignments: new Map(),
+      fallbackPath,
+    };
+  }
+  const assignments = parseEnvAssignments(file.contents ?? "");
+  return {
+    kind: "env-file",
+    path,
+    existing: existingIngestKey(assignments),
+    assignments,
+    fallbackPath,
+  };
 }
 
 /** The line announcing, before approval, that the key will go to its private file. */
@@ -254,7 +282,7 @@ type EnvWrite =
   | {
       written: true;
       result: "created" | "updated" | "unchanged";
-      /** The null-valued variables the file had, now removed. */
+      /** The leftovers the file had, now removed. */
       removed: string[];
       mode: number | null;
     }
@@ -274,20 +302,22 @@ async function upsertEnvFile(
       return { written: false, reason: notWrittenReason(path, file.why) };
     }
     const assignments = parseEnvAssignments(file.contents ?? "");
-    const removed = Object.keys(values).filter(
-      (name) => values[name] === null && assignments.has(name),
-    );
+    const removed = leftovers(values, assignments);
+    const sets = setEntries(values);
     const changed =
       removed.length > 0 ||
-      setEntries(values).some(
-        ([name, value]) => singleValue(assignments, name) !== value,
-      );
+      sets.some(([name, value]) => singleValue(assignments, name) !== value);
     if (!changed) {
       return { written: true, result: "unchanged", removed, mode: file.mode };
     }
+    // Only the leftovers are removed, so an empty assignment stays as it is.
+    const applied: EnvValues = Object.fromEntries([
+      ...sets,
+      ...removed.map((name) => [name, null] as const),
+    ]);
     await writeFileAtomic(
       path,
-      upsertEnvContents(file.contents ?? "", values),
+      upsertEnvContents(file.contents ?? "", applied),
       file.mode ?? PRIVATE_FILE_MODE,
     );
     return {
@@ -346,8 +376,10 @@ function removedLines(removed: readonly string[]): string[] {
 
 /**
  * Writes the app's API values beside a kept key. Incomplete when a value the
- * app needs could not be written; the line then names what to add. A
- * removal setup cannot make leaves a file it does not edit as it is.
+ * app needs, or the removal of a leftover one, could not be written; the
+ * line then says what to change by hand. What `.env` holds is read when
+ * setup plans, and setup doesn't read through a symlink or a non-file, so
+ * for such a `.env` it records nothing to remove.
  */
 async function writeKeptApiValues(
   target: EnvTarget,
@@ -359,13 +391,22 @@ async function writeKeptApiValues(
       ? { written: false, reason: target.reason }
       : await upsertEnvFile(target.path, appEnv.apiValues);
   if (!write.written) {
-    if (needed.length === 0) return { complete: true, lines: [] };
-    const assignments = needed.map(([name, value]) => `${name}=${value}`);
+    const add = needed.map(([name, value]) => `${name}=${value}`);
+    const remove = leftovers(appEnv.apiValues, target.assignments);
+    const changes = [
+      ...(add.length > 0
+        ? [`Add ${listed(add)} where the app loads its environment`]
+        : []),
+      ...(remove.length > 0 ? [`Remove ${listed(remove)} from .env`] : []),
+    ];
     return {
-      complete: false,
-      lines: [
-        `.env: ${write.reason}. Add ${listed(assignments)} where the app loads its environment, so the kept key reaches the API it belongs to.`,
-      ],
+      complete: changes.length === 0,
+      lines:
+        changes.length === 0
+          ? []
+          : [
+              `.env: ${write.reason}. ${changes.join("; ")}, so the kept key reaches the API it belongs to.`,
+            ],
     };
   }
   return {
