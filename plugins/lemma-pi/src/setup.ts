@@ -5,7 +5,7 @@ import {
   writeCredentials,
   type LemmaPiCredentials,
 } from "./credentials.js";
-import { withPluginUserAgent } from "./user-agent.js";
+import { PLUGIN_USER_AGENT } from "./user-agent.js";
 
 const DEFAULT_API_URL = "https://api.uselemma.ai";
 
@@ -81,7 +81,10 @@ async function startDeviceAuthorization(
       `${apiUrl}/coding-harness/device-authorizations`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "user-agent": PLUGIN_USER_AGENT,
+        },
         body: JSON.stringify({ harness: "pi" }),
       },
     ),
@@ -114,7 +117,10 @@ async function pollDeviceAuthorization(
     `${apiUrl}/coding-harness/device-authorizations/token`,
     {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "user-agent": PLUGIN_USER_AGENT,
+      },
       body: JSON.stringify({ device_code: deviceCode }),
     },
   );
@@ -176,7 +182,7 @@ export async function runSetup(
   dependencies: SetupDependencies = {},
 ): Promise<LemmaPiCredentials> {
   const apiUrl = normalizedApiUrl(options.apiUrl ?? DEFAULT_API_URL);
-  const fetchImplementation = withPluginUserAgent(dependencies.fetch ?? fetch);
+  const fetchImplementation = dependencies.fetch ?? fetch;
   const sleep =
     dependencies.sleep ??
     ((milliseconds: number) =>
