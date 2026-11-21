@@ -9,6 +9,37 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="November 20, 2026" tags={["New releases", "Improvements", "Bug fixes", "[Billing]", "[Slack]", "[Issues]", "[Audit logs]", "[API]"]} rss={{ title: "Read the organization over the API, and a cancelled Slack connect returns you" }}>
+
+  ## Billing
+
+  - **Pro checkout:** After checkout, the toast says **You’re on Pro**, then “Enjoy higher usage limits, up to 75,000 issue reviews per month.”
+
+  ## Slack
+
+  - **Cancel:** Cancelling on [Slack](/connections/slack)’s consent screen returns you to setup, or to the project integrations page that started the connect.
+  - **Setup:** Setup says **Slack wasn’t connected**, with **Connect again or skip for now.**
+  - **Dashboard:** A cancel that can’t be matched to that connect opens the dashboard.
+
+  ## Issues
+
+  - **Writes:** Assignee, pin, tag, fix-link, and batch writes, and review, resolve, dismiss, and reopen, apply even when the issue changed since you read it.
+  - **Field:** A body that includes `expected_updated_at` returns HTTP 400, on REST and MCP. Omit the field.
+
+  ## Audit logs
+
+  - **MCP:** `list_audit_events` lists the same events as `GET /audit-events`. An owner, an admin, or an org-wide admin API key can call it. Lemma rejects a project-scoped key. Export the CSV with `GET /audit-events/export`.
+
+  ## API
+
+  - **Organization:** `GET /organization` returns the caller’s organization name, slug, logo, and `created_at`. The MCP tool is `get_organization`. An API key for that organization can call it.
+  - **Members:** `GET /organization/members` lists members, newest first, with name, email, and role. A member’s `id` is the user id you pass as an issue assignee. The MCP tool is `list_organization_members`.
+  - **Project id:** On REST, a `project_id` that isn’t a UUID returns HTTP 404 `not_found`. A valid UUID is unchanged.
+  - **Status codes:** A route that returned HTTP 400 or HTTP 500 for that id now returns HTTP 404.
+  - **MCP project id:** An MCP tool whose schema checks the UUID still returns an invalid-arguments error. `GET /otlp/authorize` still returns HTTP 400.
+
+</Update>
+
 <Update label="November 9, 2026" tags={["Improvements", "Bug fixes", "[Issues]", "[Slack]", "[Dashboard]", "[API keys]", "[Artifacts]"]} rss={{ title: "Issues open on Open, and Slack pages yellow once and red once" }}>
 
   ## Issues
