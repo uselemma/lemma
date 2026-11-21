@@ -34,9 +34,7 @@ meta:
 
   - **Organization:** `GET /organization` returns the caller’s organization name, slug, logo, and `created_at`. The MCP tool is `get_organization`. An API key for that organization can call it.
   - **Members:** `GET /organization/members` lists members, newest first, with name, email, and role. A member’s `id` is the user id you pass as an issue assignee. The MCP tool is `list_organization_members`.
-  - **Project id:** On REST, a `project_id` that isn’t a UUID returns HTTP 404 `not_found`. A valid UUID is unchanged.
-  - **Status codes:** A route that returned HTTP 400 or HTTP 500 for that id now returns HTTP 404.
-  - **MCP project id:** An MCP tool whose schema checks the UUID still returns an invalid-arguments error. `GET /otlp/authorize` still returns HTTP 400.
+  - **Project id:** On REST, a `project_id` that isn’t a UUID returns HTTP 404 `not_found`, including a route that returned HTTP 400 or HTTP 500 for that id. A valid UUID is unchanged. An MCP tool whose schema checks the UUID still returns an invalid-arguments error, and `GET /otlp/authorize` still returns HTTP 400.
 
 </Update>
 
