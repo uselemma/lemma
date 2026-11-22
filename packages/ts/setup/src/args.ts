@@ -4,6 +4,7 @@ import { DEFAULT_API_URL, lemmaApiUrl, type LemmaApiUrl } from "./api.js";
 import { EXIT_CODES, failureReason, SetupError } from "./errors.js";
 import { HARNESS_IDS, isHarnessId } from "./harness.js";
 import { WAIT_BUDGET_SECONDS } from "./poll.js";
+import { isUuid } from "./shared.js";
 import type { StartOptions } from "./start.js";
 
 export const USAGE = [
@@ -25,6 +26,8 @@ export const USAGE = [
   "",
   "start, optional:",
   "  --org <slug>            The Lemma organization to approve in, e.g. acme-inc-x1y2",
+  "  --project-id <id>       The ID of an existing Lemma project for the approval page to",
+  "                          select, from the setup prompt's Lemma project line",
   "  --repository <repo>     The repository, e.g. acme/support-bot",
   "  --framework <name>      The agent framework, e.g. vercel-ai, langgraph",
   "  --api-url <url>         The Lemma API (default https://api.uselemma.ai): HTTPS on",
@@ -121,6 +124,7 @@ const START_OPTIONS = {
   "project-name": { type: "string" },
   "agent-name": { type: "string" },
   org: { type: "string" },
+  "project-id": { type: "string" },
   repository: { type: "string" },
   framework: { type: "string" },
   "api-url": { type: "string" },
@@ -162,6 +166,12 @@ export function parseCommand(argv: string[]): ParsedCommand {
       "--org is the organization's slug, for example acme-inc-x1y2",
     );
   }
+  const projectId = optionalValue("--project-id", values["project-id"]);
+  if (projectId !== undefined && !isUuid(projectId)) {
+    throw usageError(
+      "--project-id is the project's ID from the setup prompt, for example 0b7c2f1e-4d3a-4f6b-9c8d-1a2b3c4d5e6f",
+    );
+  }
   const repository = optionalValue("--repository", values.repository);
   let apiUrl: LemmaApiUrl;
   try {
@@ -186,6 +196,7 @@ export function parseCommand(argv: string[]): ParsedCommand {
           : repositoryWithoutCredentials(repository),
       framework: optionalValue("--framework", values.framework),
       org,
+      projectId,
     },
   };
 }

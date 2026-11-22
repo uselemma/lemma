@@ -152,6 +152,7 @@ export type StartRequest = {
     framework?: string;
   };
   org_slug?: string;
+  project_id?: string;
   existing_ingest_key_project_id?: string;
   existing_mcp_key_tenant_id?: string;
 };
