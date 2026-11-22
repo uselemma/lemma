@@ -35,6 +35,7 @@ describe("start", () => {
       repository: "acme/support-bot",
       framework: "vercel-ai",
       org: "acme-inc-x1y2",
+      projectId: "0b7c2f1e-4d3a-4f6b-9c8d-1a2b3c4d5e6f",
     });
     expect(run.api.startBody()).toEqual({
       harness: "cursor",
@@ -45,6 +46,7 @@ describe("start", () => {
         framework: "vercel-ai",
       },
       org_slug: "acme-inc-x1y2",
+      project_id: "0b7c2f1e-4d3a-4f6b-9c8d-1a2b3c4d5e6f",
     });
     expect(run.api.paths()).toEqual(["POST /setup/device-authorizations"]);
     expect(run.opened).toEqual([

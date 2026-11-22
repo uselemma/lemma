@@ -5,6 +5,8 @@ import { parseCommand, repositoryWithoutCredentials } from "./args.js";
 import { EXIT_CODES, SetupError } from "./errors.js";
 import { startRequest } from "./start.js";
 
+const LEMMA_PROJECT_ID = "0b7c2f1e-4d3a-4f6b-9c8d-1a2b3c4d5e6f";
+
 describe("command-line input", () => {
   const startArgv = (...extra: string[]) => [
     "start",
@@ -42,6 +44,8 @@ describe("command-line input", () => {
           "https://x-access-token:ghp_secret@github.com/acme/bot.git",
           "--api-url",
           "http://localhost:8000/",
+          "--project-id",
+          ` ${LEMMA_PROJECT_ID} `,
           "--no-browser",
         ),
       ),
@@ -56,10 +60,15 @@ describe("command-line input", () => {
         repository: "https://github.com/acme/bot.git",
         framework: "langgraph",
         org: "acme-inc-x1y2",
+        projectId: LEMMA_PROJECT_ID,
       },
     });
     expect(parseCommand(startArgv())).toMatchObject({
-      options: { apiUrl: "https://api.uselemma.ai", openBrowser: true },
+      options: {
+        apiUrl: "https://api.uselemma.ai",
+        openBrowser: true,
+        projectId: undefined,
+      },
     });
     expect(parseCommand(["wait"])).toEqual({ kind: "wait" });
     expect(parseCommand(["--version"])).toEqual({ kind: "version" });
@@ -76,6 +85,7 @@ describe("command-line input", () => {
           openBrowser: true,
           apiUrl: lemmaApiUrl("https://api.uselemma.ai", "--api-url"),
           org: "acme-inc-x1y2",
+          projectId: LEMMA_PROJECT_ID,
         },
         {
           ingestProjectId: "3f0c6a52-0d6e-4a7b-9a51-2f4e2b9a6c11",
@@ -91,6 +101,7 @@ describe("command-line input", () => {
         framework: undefined,
       },
       org_slug: "acme-inc-x1y2",
+      project_id: LEMMA_PROJECT_ID,
       existing_ingest_key_project_id: "3f0c6a52-0d6e-4a7b-9a51-2f4e2b9a6c11",
       existing_mcp_key_tenant_id: undefined,
     });
@@ -108,11 +119,14 @@ describe("command-line input", () => {
           "",
           "--api-url",
           "",
+          "--project-id",
+          " ",
         ),
       ),
     ).toMatchObject({
       options: {
         org: undefined,
+        projectId: undefined,
         repository: undefined,
         framework: undefined,
         apiUrl: "https://api.uselemma.ai",
@@ -228,6 +242,19 @@ describe("command-line input", () => {
         usageErrorOf(startArgv("--api-url", "not a url")).message,
       ).toContain("--api-url is not a valid URL");
     });
+  });
+
+  it.each([
+    ["a project name", "Support bot"],
+    ["an ID without its dashes", "0b7c2f1e4d3a4f6b9c8d1a2b3c4d5e6f"],
+    [
+      "the name and ID from the prompt line",
+      `Support bot (${LEMMA_PROJECT_ID})`,
+    ],
+  ])("refuses %s as --project-id with exit 2", (_case, value) => {
+    expect(usageErrorOf(startArgv("--project-id", value)).message).toContain(
+      "--project-id is the project's ID from the setup prompt",
+    );
   });
 
   it("strips credentials from a repository URL", () => {

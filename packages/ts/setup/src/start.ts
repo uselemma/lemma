@@ -29,6 +29,8 @@ export type StartOptions = {
   repository?: string;
   framework?: string;
   org?: string;
+  /** An existing project for the approval page to select; a hint, never a grant. */
+  projectId?: string;
 };
 
 /** The IDs of the keys Lemma confirmed the client already holds. */
@@ -50,6 +52,7 @@ export function startRequest(
       framework: options.framework,
     },
     org_slug: options.org,
+    project_id: options.projectId,
     existing_ingest_key_project_id: verified.ingestProjectId ?? undefined,
     existing_mcp_key_tenant_id: verified.mcpTenantId ?? undefined,
   };

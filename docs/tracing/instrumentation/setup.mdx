@@ -30,7 +30,11 @@ The prompt contains no key: Lemma creates the keys when you approve. You copy th
 
 <Steps>
   <Step title="Copy the prompt">
-    In a new organization, the setup modal opens when you first sign in to [Lemma](https://platform.uselemma.ai). Copy the prompt from its **Connect your agent** step, which adds a `Lemma organization:` line naming your organization. If your organization is already set up, copy the prompt from here:
+    Copy the prompt for your case:
+
+    - **New organization**: the setup modal opens when you first sign in to [Lemma](https://platform.uselemma.ai). Copy the prompt from its **Connect your agent** step, which adds a `Lemma organization:` line naming your organization
+    - **Project created after setup**: copy the prompt from that project’s dashboard. It also has a `Lemma project:` line naming the project
+    - **Organization already set up**: copy the prompt below
 
     ```text
     Set up Lemma monitoring for this app.
@@ -56,6 +60,8 @@ The prompt contains no key: Lemma creates the keys when you approve. You copy th
 
     - **New project**: confirm or edit the project name, then choose **Approve and create project**
     - **An existing project**: pick it under **Project**, which hides the project name field, then choose **Approve**
+
+    When the prompt has a `Lemma project:` line and you approve in that project’s organization, the page selects the project under **Project**: choose **Approve**.
 
     The **Project** list appears only when your organization has projects already. The code expires 10 minutes after the agent starts the approval.
   </Step>

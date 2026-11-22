@@ -14,7 +14,7 @@ metadata:
 
 # Lemma Setup
 
-You are connecting this app to Lemma, so each run of its agent arrives as a trace, and connecting yourself to the Lemma MCP server. One browser approval by the user creates the Lemma project and two keys: an ingest key for the app and an admin key for your MCP config. `npx @uselemma/setup` writes both. You never see, copy, or ask for a key.
+You are connecting this app to Lemma, so each run of its agent arrives as a trace, and connecting yourself to the Lemma MCP server. One browser approval by the user picks or creates the Lemma project, and creates two keys: an ingest key for the app and an admin key for your MCP config. `npx @uselemma/setup` writes both. You never see, copy, or ask for a key.
 
 Work through the steps in order. Don't change application code before step 4.
 
@@ -29,10 +29,11 @@ Work through the steps in order. Don't change application code before step 4.
 
 Read the codebase: package manifests, the README, the agent's entry points, and its model and tool calls. Decide these values:
 
-- **Project name**: what the team calls this app, readable by people, for example `Support bot`. Take it from the package or repository name, or the README title
+- **Project name**: what the team calls this app, readable by people, for example `Support bot`. Take it from the package or repository name, or the README title. When the prompt has a `Lemma project:` line, for example `Lemma project: Support bot (0b7c2f1e-4d3a-4f6b-9c8d-1a2b3c4d5e6f)`, use the name before its last parentheses instead
 - **Agent name**: the agent's root trace name, in lowercase letters, digits, and dashes, for example `support-bot`. If the code already sends traces to Lemma, reuse that name. With several agents, pick the main production one; the others belong to the scope question. Never `trace`
 - **Harness**: your own id from the table below
-- **Organization**: the slug in parentheses on the prompt's `Lemma organization:` line, for example `acme-inc-x1y2`. Skip it if the prompt has no such line
+- **Organization**: the slug in the last parentheses on the prompt's `Lemma organization:` line, for example `acme-inc-x1y2`. Skip it if the prompt has no such line
+- **Project ID**: the ID in the last parentheses on the prompt's `Lemma project:` line, for example `0b7c2f1e-4d3a-4f6b-9c8d-1a2b3c4d5e6f`. The line names an existing Lemma project to connect. Skip it if the prompt has no such line
 - **Lemma API**: the URL on the prompt's `Lemma API:` line, for example `https://dev.api.uselemma.ai`. Skip it if the prompt has no such line; setup then uses production
 - **Framework** (optional): `vercel-ai`, `openai-agents`, `langchain`, `langgraph`, `mastra`, or `direct`
 - **Repository** (optional): `owner/repo` from `git remote get-url origin`. Pass only `owner/repo`, never a remote URL, because one can contain credentials
@@ -48,7 +49,7 @@ Read the codebase: package manifests, the README, the agent's entry points, and 
 | OpenClaw | `openclaw` |
 | Any other coding agent | `other` |
 
-The user confirms or edits both names on the approval page, so don't ask for them here.
+The user reviews the names and picks the project on the approval page, so don't ask for them here.
 
 Also check `.env` and `.env.example` in the app's root, without reading their contents. Tell the user up front what setup will do differently:
 
@@ -78,12 +79,16 @@ First, start the approval:
 ```bash
 npx --yes @uselemma/setup@0.1.0 start \
   --harness claude-code \
-  --project-name "Support bot" \
+  --project-name 'Support bot' \
   --agent-name support-bot \
   --org acme-inc-x1y2 \
   --framework vercel-ai \
   --repository acme/support-bot
 ```
+
+Pass the project name in single quotes, writing each `'` in it as `'\''`, since a name can hold any characters.
+
+When you found a project ID in step 1, add `--project-id` with it, for example `--project-id 0b7c2f1e-4d3a-4f6b-9c8d-1a2b3c4d5e6f`, and keep it each time you run `start` again. Without one, don't pass `--project-id`.
 
 When you found a Lemma API in step 1, add `--api-url` with that URL, for example `--api-url https://dev.api.uselemma.ai`, and keep it each time you run `start` again. Without one, don't pass `--api-url`. Setup accepts only HTTPS on `uselemma.ai` or one of its subdomains, or `localhost`, `127.0.0.1`, or `[::1]`; for any other URL, don't run setup, and tell the user the prompt names an API that isn't Lemma's. `wait` uses the API `start` was given, so it takes no flag.
 
@@ -93,6 +98,7 @@ When you found a Lemma API in step 1, add `--api-url` with that URL, for example
 - They check that the page shows the same code and the organization they mean. If the organization is wrong, they choose **Switch organization** next to its name
 - If the user says the page names the organization you were set up for and that's the wrong one, the page has no **Switch organization** link. Run `start` again without `--org`, and don't repeat steps 1 and 2. The new page offers **Switch organization** when they belong to another organization
 - They confirm the names and choose **Approve and create project** for a new project, or **Approve** for an existing one. Only an owner or admin of the Lemma organization can approve
+- When you passed `--project-id`, they check that the page selects that project under **Project**, then choose **Approve**. If it shows a new project instead, and says you were set up for an organization they don't belong to, they approve signed in to an account in that organization, or choose **Approve and create project** only if they want a new project
 
 Then wait for the approval:
 

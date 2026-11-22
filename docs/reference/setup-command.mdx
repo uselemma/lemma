@@ -30,7 +30,7 @@ Between the two, `start` keeps the approval in a file under `~/.lemma/setup/pend
 
 ## Flags for start
 
-The coding agent passes the names it inferred from the codebase. You confirm or edit both names on the approval page:
+The coding agent passes the names it inferred from the codebase. When the setup prompt names a project, it passes that project’s name instead, with its ID. On the approval page you confirm or edit the agent name and pick the project, new or existing:
 
 | Flag | Required | Value |
 | --- | --- | --- |
@@ -38,6 +38,7 @@ The coding agent passes the names it inferred from the codebase. You confirm or 
 | `--project-name` | Yes | The proposed project name, up to 200 characters |
 | `--agent-name` | Yes | The proposed agent name, the root trace `name`. Lemma stores it in lowercase with dashes, for example `support-bot`. `trace` isn’t allowed |
 | `--org` | No | The organization’s slug from the setup prompt, for example `acme-inc-x1y2`. The approval page selects that organization when you belong to it, and then offers no **Switch organization** link. To choose another organization, run `start` again without `--org` |
+| `--project-id` | No | The ID of an existing project, from the setup prompt’s `Lemma project:` line. The approval page selects that project when your organization has it, and a new project otherwise. The command refuses a value that isn’t a UUID with exit code `2` before it sends a request |
 | `--repository` | No | The repository, for example `acme/support-bot`. The command removes credentials from a URL before sending it |
 | `--framework` | No | The agent framework, for example `vercel-ai` or `langgraph` |
 | `--api-url` | No | The Lemma API. Defaults to `https://api.uselemma.ai`. The command accepts only HTTPS on `uselemma.ai` or a subdomain, or HTTP/HTTPS on `localhost`, `127.0.0.1` or `[::1]` on any port, and refuses any other URL with exit code `2` before it sends a request. For an API other than production, `wait` also writes `LEMMA_BASE_URL`, so the app sends traces to that API. `wait` uses the API `start` was given |
@@ -124,9 +125,9 @@ The commands never print a key or the device code. The approval code they print 
 
 The setup prompt in Lemma tells your coding agent to fetch and follow [`skills/lemma-setup/SKILL.md`](https://github.com/uselemma/lemma/blob/main/skills/lemma-setup/SKILL.md). The skill runs these steps in order:
 
-1. Infer the project name, agent name, framework, and repository from the codebase, and read the organization slug and, when the prompt has one, the `Lemma API:` URL from the prompt
+1. Infer the project name, agent name, framework, and repository from the codebase, and read the organization slug from the prompt. When the prompt has a `Lemma project:` line, take the project name and ID from it, and when it has a `Lemma API:` line, take that URL
 2. Ask the Approach question (which integration path) and the Scope question (which agent paths), before any code changes
-3. Run `start`, with `--api-url` set to the prompt’s `Lemma API:` URL when it has one, show you the approval URL and code, then run `wait` until it exits with `0`
+3. Run `start`, show you the approval URL and code, then run `wait` until it exits with `0`. `start` gets `--project-id` when the prompt names a project, and `--api-url` when it names a Lemma API
 4. Instrument the agent with the `lemma-tracing` skill, using the approved agent name as the root trace `name`
 5. Send a first trace, after you agree to run the agent
 6. Load the Lemma MCP server and record the agent’s context with the `lemma-artifacts` skill
