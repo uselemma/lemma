@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "rootDir": ".",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "paths": {
+      "@uselemma/tracing": ["./src/index.ts"]
+    }
+  },
+  "include": ["examples/**/*.ts"],
+  "exclude": ["node_modules", "dist", "examples/vercel-ai-v6.ts"]
+}
