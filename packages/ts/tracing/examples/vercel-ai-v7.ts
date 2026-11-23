@@ -14,6 +14,11 @@ export async function runVercelAIV7(
   const lemmaTelemetry = vercelAI({
     apiKey: process.env.LEMMA_API_KEY,
     projectId: process.env.LEMMA_PROJECT_ID,
+    // AI SDK v7 has no `telemetry.metadata`; pass identity to `vercelAI()`.
+    metadata: {
+      ...(options?.threadId ? { threadId: options.threadId } : {}),
+      ...(options?.userId ? { userId: options.userId } : {}),
+    },
   });
 
   try {
@@ -22,10 +27,6 @@ export async function runVercelAIV7(
       prompt: userMessage,
       telemetry: {
         functionId: "support-agent",
-        metadata: {
-          ...(options?.threadId ? { threadId: options.threadId } : {}),
-          ...(options?.userId ? { userId: options.userId } : {}),
-        },
         integrations: [lemmaTelemetry],
       },
     });

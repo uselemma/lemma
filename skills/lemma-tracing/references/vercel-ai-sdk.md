@@ -8,7 +8,7 @@ Use this reference when the app uses Vercel AI SDK v7 or v6.
 2. Use `vercelAI()` so the AI SDK run becomes one Lemma trace, model calls become Lemma generations, and tool executions become Lemma tool calls.
 3. Create a **new** `vercelAI()` integration per AI SDK operation. Do not share one instance across concurrent runs.
 4. Provide a stable agent name through the AI SDK `functionId` or `vercelAI({ agentName })`.
-5. Put `threadId` and `userId` in telemetry metadata so Lemma promotes them onto the root trace.
+5. Pass `threadId` and `userId` so Lemma promotes them onto the root trace: `vercelAI({ metadata })` on v7, `experimental_telemetry.metadata` on v6. AI SDK v7 has no `telemetry.metadata`.
 6. Call `flush()` after the operation (especially streaming / serverless). Use `fail(error)` when the call throws before a terminal callback.
 7. Only pass an explicit trace handle for advanced externally coordinated work.
 8. Verify with debug mode and a real AI SDK call.
@@ -39,14 +39,16 @@ Never expose `LEMMA_API_KEY` to browser code or `NEXT_PUBLIC_*`.
 
 ## AI SDK v7
 
-Use `telemetry.integrations`. Instantiate `vercelAI()` per operation.
+Use `telemetry.integrations`. Instantiate `vercelAI()` per operation and pass `threadId` / `userId` to it as `metadata`.
 
 ```typescript
 import { generateText, tool } from "ai";
 import { z } from "zod";
 import { vercelAI } from "@uselemma/tracing";
 
-const lemmaTelemetry = vercelAI();
+const lemmaTelemetry = vercelAI({
+  metadata: { threadId: conversationId, userId },
+});
 
 try {
   const result = await generateText({
@@ -60,7 +62,6 @@ try {
     },
     telemetry: {
       functionId: "support-agent",
-      metadata: { threadId: conversationId, userId },
       integrations: [lemmaTelemetry],
     },
   });
@@ -120,14 +121,15 @@ Then `await lemmaTelemetry.flush()` after the stream completes.
 import { streamText } from "ai";
 import { vercelAI } from "@uselemma/tracing";
 
-const lemmaTelemetry = vercelAI();
+const lemmaTelemetry = vercelAI({
+  metadata: { threadId: conversationId, userId },
+});
 
 const result = streamText({
   model,
   prompt: userMessage,
   telemetry: {
     functionId: "support-agent",
-    metadata: { threadId: conversationId, userId },
     integrations: [lemmaTelemetry],
   },
 });
