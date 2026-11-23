@@ -9,6 +9,46 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="November 10, 2026" tags={["New releases", "Improvements", "[Traces]", "[Issues]", "[Analytics]", "[Dashboard]", "[Artifacts]", "[API]"]} rss={{ title: "Search traces in one query, and page issues and monitors" }}>
+
+  ## Traces
+
+  - **Query:** `POST /traces/query` and `query_traces` match structure, input text, or span content. The start is included and the end is not. A cursor expires after 15 minutes.
+  - **Relevance:** Relevance sort applies only to span content. `search_traces` keeps its inclusive window.
+  - **Thread:** `GET /traces/{trace_id}/thread` and `get_trace_thread` with `response_version=page` pages one conversation. `scope=all` lists turns. `scope=neighbors` returns the adjacent turns. These pages aren’t capped at 500 turns.
+  - **Sections:** `get_trace` with `response_version=sections` returns the summary, spans, issues, and context you include, each with its own cursor.
+
+  ## Issues
+
+  - **Filtered pages:** `GET /issues` and `list_issues` with `response_version=2` filter by status, exact agent name, and a case-insensitive title, then page that set. A cursor expires after 15 minutes.
+  - **Known issues:** `POST /issues/read` and `read_issues` read up to 50 issue ids. `include` selects `state`, `evidence`, `metrics`, and `fixes`.
+  - **Status:** `POST /issues/transitions` and `transition_issues` dismiss, resolve, reopen, or start review. A dismissal needs a reason and a detail. A resolution needs evidence. Send an idempotency key.
+  - **Fields:** `PATCH /issues` and `update_issue_metadata` assign, pin, tag, or save a fix link for up to 50 issues. A fix link doesn’t resolve the issue. Send an idempotency key.
+  - **Citations:** A new issue can cite a field inside a span, and a span from another turn in the thread. Each citation has to name a span in the thread, and one citation is in the issue’s own turn.
+
+  ## Analytics
+
+  - **View:** `GET /projects/{project_id}/analytics` and `get_project_analytics` select `base`, `window`, `model_scorecard`, `agent_scorecard`, `tool_aggregates`, or `roi`.
+  - **Tagged result:** `response_version=tagged` returns that view’s payload. The view-specific tools still answer.
+
+  ## Dashboard
+
+  - **One monitor:** `GET /projects/{project_id}/monitors/{monitor_id}` and `get_monitor` return the summary, traces, issues, and feedback you include. The start of the window is included and the end is not.
+  - **Monitor list:** `list_monitors` with `response_version=page` pages the list. A summary on that page needs `start_inclusive` and `end_exclusive`.
+  - **Fit:** `POST /projects/{project_id}/monitors/{monitor_id}/corrections` records whether a trace fits that monitor. It doesn’t dismiss an issue.
+  - **Suggestion:** `POST /projects/{project_id}/monitors/{monitor_id}/suggestions/{suggestion_id}/decision` accepts or dismisses one pending phrasing suggestion. The separate accept and dismiss routes still answer.
+
+  ## Artifacts
+
+  - **Chunks:** `POST /projects/{project_id}/artifacts/read` and `read_project_artifact` read an uploaded file or one agent-understanding version in order. Continue with the field cursor. An edit after you start returns `content_changed`.
+
+  ## API
+
+  - **Versioned responses:** Omit `response_version` and the previous response stays. The unversioned thread is capped at 500 turns. This covers the thread, trace sections, the issue list, the analytics payload, and the monitor list.
+  - **Readiness:** `GET /projects/{project_id}/capabilities` and `get_project_capabilities` return the readiness, Linear, GitHub, and ingest sections you name. One section can fail without dropping the others.
+
+</Update>
+
 <Update label="November 9, 2026" tags={["Improvements", "Bug fixes", "[Issues]", "[Slack]", "[Dashboard]", "[API keys]", "[Artifacts]"]} rss={{ title: "Issues open on Open, and Slack pages yellow once and red once" }}>
 
   ## Issues
