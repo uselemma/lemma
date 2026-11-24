@@ -15,8 +15,9 @@ restate any of this.
 ## When to offer
 
 Run this once, right after the closing report in
-[record.md](record.md) — whether that report says what landed, or that the
-user declined the proposed write and nothing was written. All of the
+[record.md](record.md) — whether that report says which files were
+uploaded, or that the user declined the proposed upload and nothing was
+written. All of the
 following must hold:
 
 - **One settled production target for this run, under a fixed name.** The
@@ -31,24 +32,24 @@ following must hold:
   say nothing more about tracing.
 - **You have not offered already in this conversation.** Once.
 
-A declined artifact write does not by itself withdraw the offer: the agent is
-still identified and still uninstrumented, and the customer may want traces
-even if they did not want the description.
+A declined upload does not by itself withdraw the offer: the agent is still
+identified and still uninstrumented, and the customer may want traces even if
+they did not want the context files.
 
 ## How to offer
 
 As its own question, never folded into the artifact approval. Name the
 skill, name the agent, and say plainly that, unlike everything you have done
-so far, this step edits their code. In the spirit of, after a write:
+so far, this step edits their code. In the spirit of, after an upload:
 
-> Recorded. `checkout-agent` isn't sending traces to Lemma yet — there is no
+> Uploaded. `checkout-agent` isn't sending traces to Lemma yet — there is no
 > Lemma SDK on its path. Want me to set that up now with the `lemma-tracing`
-> skill, under the name `checkout-agent`? Unlike the recording, that step
+> skill, under the name `checkout-agent`? Unlike the upload, that step
 > edits your code, and I'll show you a plan before touching anything.
 
 And after a decline:
 
-> Understood — nothing was written. Separately: `checkout-agent` isn't
+> Understood — nothing was uploaded. Separately: `checkout-agent` isn't
 > sending traces to Lemma yet. Want me to set that up with the
 > `lemma-tracing` skill, under the name `checkout-agent`? That step edits
 > your code, and I'll show you a plan first.

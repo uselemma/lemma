@@ -87,6 +87,13 @@ the new file appears in `list_project_artifacts`, then remove the old one with
 project has a duplicate, which is recoverable, and not a gap. The replacement
 has a new `id`. Tell the user both of those things when you ask to replace.
 
+This is what the contract's "Changing one" section means by updating a file.
+That file is copied verbatim from Lemma and is never edited to fit this skill,
+so where it says update, read replace. It also says not to leave a corrected
+rule sitting beside the original, which is why the delete follows as soon as
+the new file is confirmed, and why a delete that fails goes in the closing
+report.
+
 **Removing a file** — `delete_project_artifact` when a rule is gone entirely.
 Removing a stale rule is a real edit with real consequences; confirm it as
 specifically as you would confirm adding one, and never bundle it with
