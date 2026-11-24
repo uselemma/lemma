@@ -100,7 +100,7 @@ When you found a Lemma API in step 1, add `--api-url` with that URL, for example
 - They confirm the names and choose **Approve and create project** for a new project, or **Approve** for an existing one. Only an owner or admin of the Lemma organization can approve
 - When you passed `--project-id`, they check that the page selects that project under **Project**, then choose **Approve**. If it shows a new project instead, and says you were set up for an organization they don't belong to, they approve signed in to an account in that organization, or choose **Approve and create project** only if they want a new project
 
-Before you wait, tell the user that once they approve, Lemma opens in their browser again to sign you in to the Lemma MCP server: they choose the organization and choose **Allow**. Then wait for the approval:
+Unless `start` said setup prints the `lemma` server for the user to add or keeps the one there, tell the user that once they approve, Lemma opens in their browser again to sign you in to the Lemma MCP server: they choose the organization and choose **Allow**. Then wait for the approval, with a timeout of 10 minutes, or your harness's longest if that's shorter (600000 ms in Claude Code):
 
 ```bash
 npx --yes @uselemma/setup@0.1.0 wait --sign-in
@@ -108,9 +108,9 @@ npx --yes @uselemma/setup@0.1.0 wait --sign-in
 
 Each `wait` checks for up to 90 seconds. While it exits with 5, the approval is still pending: run `wait --sign-in` again. The code expires 10 minutes after `start`.
 
-When setup writes your `lemma` server, an approved `wait --sign-in` then runs that sign-in and returns once the user allows the connection. Run it with a timeout of 10 minutes, or your harness's longest if that's shorter (600000 ms in Claude Code).
+When setup writes your `lemma` server, an approved `wait --sign-in` then runs that sign-in and returns once the user allows the connection.
 
-If your harness stops `wait --sign-in` after it printed `Approved.`, setup is done and its code is spent: don't run `wait` or `start` again. Read `Project ID:` and `Agent name:` from its output, continue to step 4, and sign in at step 6.
+If your harness stops `wait --sign-in` after it printed `Approved.`, setup is done and its code is spent: don't run `wait` or `start` again. Read `Project ID:` and `Agent name:` from its output, act on any private file it names as for exit code 0, continue to step 4, and sign in at step 6.
 
 When `wait` exits with 0, read `Project ID:` and `Agent name:` from its output. Use that agent name from here on: the user may have changed it on the approval page.
 
@@ -149,11 +149,11 @@ If the user would rather not run it now, tell them the first trace appears under
 
 ## 6. Load the MCP server and record the agent's context
 
-The Lemma tools answer only once you're signed in to the Lemma MCP server as the user. Step 3's `wait --sign-in` usually did that; the end of its output says, unless setup kept a `lemma` server that sends an API key, which needs no sign-in:
+The Lemma tools answer only once you're signed in to the Lemma MCP server as the user. When setup writes your `lemma` server, step 3's `wait --sign-in` signs you in. The end of its output says whether the sign-in finished, unless setup kept a `lemma` server that sends an API key, which needs no sign-in:
 
 - `MCP: signed in to Lemma.`: the user signed in during step 3
 - A sign-in command, such as `(cd /path/to/app && codex mcp login lemma)`: the sign-in didn't finish, or setup printed the server for the user to add. Once the server is in place, ask the user to run the command in their own terminal, or to use the step inside your harness that the output names, such as `/mcp` in Claude Code. Lemma opens in their browser: they choose the organization and choose **Allow**
-- Output that ends at `MCP: signing in to Lemma with …`: your harness stopped `wait` during the sign-in. Ask the user to run the command that line names in their own terminal, or to use the step inside your harness
+- Output whose last `MCP:` line is `MCP: signing in to Lemma with …`: your harness stopped `wait` during the sign-in. Ask the user to run the command that line names in their own terminal, or to use the step inside your harness, such as `/mcp` in Claude Code
 - Only a step inside your harness: ask the user to do it
 
 The approver in step 3 is an owner or admin, but anyone in the organization can sign in here; you then act with the role of whoever signs in.

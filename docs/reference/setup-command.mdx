@@ -46,9 +46,11 @@ The coding agent passes the names it inferred from the codebase. When the setup 
 
 ## Flags for wait
 
+`wait` takes one flag:
+
 | Flag | Required | Value |
 | --- | --- | --- |
-| `--sign-in` | No | Run the coding agent’s sign-in command once setup finishes, even when `wait` doesn’t run in a terminal. Without the flag, `wait` runs the sign-in only in a terminal, and otherwise prints the command. Pass it on every `wait`; the `lemma-setup` skill always does |
+| `--sign-in` | No | Run the coding agent’s sign-in command once setup writes the `lemma` server, even when `wait` doesn’t run in a terminal. Without the flag, `wait` runs the sign-in only in a terminal, and otherwise prints the command. The `lemma-setup` skill passes it on every `wait` |
 
 ## What one approval creates
 
@@ -142,7 +144,7 @@ The setup prompt in Lemma tells your coding agent to fetch and follow [`skills/l
 3. Run `start`, show you the approval URL and code, then run `wait --sign-in` until it exits with `0`. `start` gets `--project-id` when the prompt names a project, and `--api-url` when it names a Lemma API
 4. Instrument the agent with the `lemma-tracing` skill, using the approved agent name as the root trace `name`
 5. Send a first trace, after you agree to run the agent
-6. Make sure the agent is signed in to the Lemma MCP server. Step 3’s `wait --sign-in` usually did it; otherwise the agent runs the sign-in command `wait` printed, or asks you to. Then it loads the server and records the agent’s context with the `lemma-artifacts` skill
+6. Make sure the agent is signed in to the Lemma MCP server. When setup writes the server, step 3’s `wait --sign-in` signs it in; otherwise the agent asks you to sign in with the command or step `wait` printed. Then it loads the server and records the agent’s context with the `lemma-artifacts` skill
 7. Report the files it changed and the build or deploy steps that need attention, such as adding both variables to your deployment’s secrets
 
 ## Related pages

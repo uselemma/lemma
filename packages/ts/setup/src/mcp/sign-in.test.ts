@@ -76,7 +76,7 @@ describe("signing in to Lemma's MCP server", () => {
     ]);
   });
 
-  it("prints the command and the step inside the agent when it is not to run", async () => {
+  it("prints the command and the step inside the agent when setup doesn't run it", async () => {
     const home = await tempDir();
     const { signIn } = notKept(await plan("opencode", home));
     const at = terminal();

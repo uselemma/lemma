@@ -1,4 +1,4 @@
-import type { McpSignIn } from "../agents.js";
+import type { McpSignIn, SignInCommand } from "../agents.js";
 import type { SetupEnvironment } from "../context.js";
 import { shellWord, shownCommand } from "../shell.js";
 
@@ -10,11 +10,8 @@ import { shellWord, shownCommand } from "../shell.js";
 export type PlannedSignIn = McpSignIn & { cwd: string };
 
 /** The agent's sign-in command as a person runs it, from its directory. */
-function shownSignIn(
-  signIn: PlannedSignIn,
-  command: NonNullable<PlannedSignIn["command"]>,
-): string {
-  return `(cd ${shellWord(signIn.cwd)} && ${shownCommand(command.command, command.args)})`;
+function shownSignIn(cwd: string, command: SignInCommand): string {
+  return `(cd ${shellWord(cwd)} && ${shownCommand(command.command, command.args)})`;
 }
 
 /**
@@ -24,7 +21,7 @@ function shownSignIn(
 export function signInInstruction(signIn: PlannedSignIn): string {
   const steps = [
     ...(signIn.command
-      ? [`run \`${shownSignIn(signIn, signIn.command)}\` in a terminal`]
+      ? [`run \`${shownSignIn(signIn.cwd, signIn.command)}\` in a terminal`]
       : []),
     ...(signIn.inAgent ? [signIn.inAgent] : []),
   ];
@@ -55,7 +52,7 @@ export async function signInToMcp(input: {
   // With its directory, so output cut off during the sign-in still says how
   // to run it again.
   environment.output(
-    `MCP: signing in to Lemma with \`${shownSignIn(signIn, signIn.command)}\`…`,
+    `MCP: signing in to Lemma with \`${shownSignIn(signIn.cwd, signIn.command)}\`…`,
   );
   const result = await environment.runInteractive(command, args, signIn.cwd);
   if (result.kind === "exited" && result.code === 0) {
