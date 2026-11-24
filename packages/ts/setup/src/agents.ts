@@ -43,7 +43,8 @@ export type SignInCommand = { command: string; args: readonly string[] };
 /**
  * How a person signs one coding agent in to Lemma's MCP server once its
  * `lemma` server is in place: the agent's command, which setup runs at a
- * terminal and prints otherwise, and the same sign-in from inside the agent,
+ * terminal or under `wait --sign-in`, and prints otherwise, and the same
+ * sign-in from inside the agent,
  * a clause after "to sign in to Lemma as yourself,". Every agent has at
  * least one.
  */

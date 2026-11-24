@@ -144,7 +144,7 @@ The setup prompt in Lemma tells your coding agent to fetch and follow [`skills/l
 3. Run `start`, show you the approval URL and code, then run `wait --sign-in` until it exits with `0`. `start` gets `--project-id` when the prompt names a project, and `--api-url` when it names a Lemma API
 4. Instrument the agent with the `lemma-tracing` skill, using the approved agent name as the root trace `name`
 5. Send a first trace, after you agree to run the agent
-6. Make sure the agent is signed in to the Lemma MCP server. When setup writes the server, step 3’s `wait --sign-in` signs it in; otherwise the agent asks you to sign in with the command or step `wait` printed. Then it loads the server and records the agent’s context with the `lemma-artifacts` skill
+6. Make sure the agent is signed in to the Lemma MCP server. When setup writes the server, step 3’s `wait --sign-in` signs the agent in; if setup printed the server, or that sign-in didn’t finish, the agent asks you to sign in with the command or step `wait` printed. Then it loads the server and records the agent’s context with the `lemma-artifacts` skill
 7. Report the files it changed and the build or deploy steps that need attention, such as adding both variables to your deployment’s secrets
 
 ## Related pages

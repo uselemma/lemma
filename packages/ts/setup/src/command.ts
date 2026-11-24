@@ -36,7 +36,7 @@ export const runCommand: RunCommand = (command, args, cwd) =>
     });
   });
 
-/** How a command attached to this terminal ended. */
+/** How a command sharing setup's stdio ended. */
 export type InteractiveResult =
   | { kind: "exited"; code: number }
   | { kind: "signaled"; signal: string }
@@ -56,8 +56,8 @@ const ignoreInterrupt = () => undefined;
  * which prints a URL, opens the browser, and waits for it. It inherits
  * setup's stdio: the person's terminal, or under `wait --sign-in` whatever
  * the coding agent gave setup. Like `runCommand`, it runs without a shell.
- * At a terminal, Ctrl-C reaches the child, which shares it, while setup
- * ignores it until the child ends.
+ * At a terminal, Ctrl-C reaches the child, which shares that terminal, while
+ * setup ignores the interrupt until the child ends.
  */
 export const runInteractive: RunInteractive = (command, args, cwd) =>
   new Promise((resolvePromise) => {

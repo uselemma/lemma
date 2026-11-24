@@ -37,7 +37,10 @@ export type SetupRun = {
   home: string;
   lines: string[];
   opened: string[];
-  /** The sign-in commands setup ran at the terminal; never spawned. */
+  /**
+   * The sign-in commands setup ran, at a terminal or under `--sign-in`;
+   * never spawned.
+   */
   interactiveCalls: InteractiveCall[];
   environment: SetupEnvironment;
   start: (options?: Partial<StartOptions>) => Promise<void>;
