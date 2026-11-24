@@ -22,7 +22,7 @@ npm install @uselemma/tracing ai zod
 
 ## AI SDK v7
 
-Pass a fresh Lemma telemetry integration to the AI SDK `telemetry.integrations` option. Use `telemetry.functionId` for the agent name. AI SDK v7 has no `telemetry.metadata`, so pass conversation identity to `vercelAI({ metadata })`.
+Pass a fresh Lemma telemetry integration to the AI SDK `telemetry.integrations` option. Use `telemetry.functionId` for the agent name. AI SDK v7 has no `telemetry.metadata`, so pass conversation identity to `vercelAI({ metadata })`. Lemma doesn’t read `threadId` or `userId` from the AI SDK’s `runtimeContext`, even when `telemetry.includeRuntimeContext` includes them.
 
 ```typescript
 import { generateText, tool } from "ai";
