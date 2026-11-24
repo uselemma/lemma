@@ -1,22 +1,26 @@
 ---
 name: lemma-artifacts
 description: >-
-  Read this codebase and record what its AI agents are for in Lemma. Use when
-  the user asks to tell Lemma about their agent, set up or improve Lemma
-  artifacts or agent context, record what an agent does, describe their agent
-  to Lemma, or fix a rule Lemma still has that the codebase no longer
-  enforces. After its
-  closing report it offers to hand off to lemma-tracing when the agent it
-  settled on is not instrumented, whether or not anything was written. Do not
-  use for installing tracing or fixing trace delivery and shape — that is
-  lemma-tracing and lemma-diagnostics.
+  Read this codebase and record in Lemma the facts about its AI agents that no
+  trace shows: the rules they must follow, intended behaviour that looks like a
+  failure, and setup facts. Use when the user asks to tell Lemma about their
+  agent, describe their agent to Lemma, set up or improve Lemma artifacts or
+  agent context, or fix a rule Lemma still has that the codebase no longer
+  enforces. It uploads context files and never writes the agent understanding,
+  which Lemma generates from traces. After its closing report it offers to
+  hand off to lemma-tracing when the agent it settled on is not instrumented,
+  whether or not anything was written. Do not use for installing tracing or
+  fixing trace delivery and shape — that is lemma-tracing and
+  lemma-diagnostics.
 metadata:
   version: 3.0.0
 ---
 
 # Lemma Artifacts
 
-You are recording, in Lemma, what the AI agents in this codebase are for.
+You are recording, in Lemma, the facts about this codebase's AI agents that
+their traces will not show. What each agent is for and which tools it calls
+are Lemma's to learn from those traces, not yours to record.
 
 Lemma detects failures in production agents by reading their traces. It reads
 them better when it knows what the agent was supposed to do. That knowledge
