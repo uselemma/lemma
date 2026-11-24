@@ -24,7 +24,6 @@ export type PendingSetup = {
   /** Epoch milliseconds; the server refuses polls sooner than the interval. */
   nextPollAt: number;
   existingIngestProjectId: string | null;
-  existingMcpTenantId: string | null;
 };
 
 export function newPendingSetup(
@@ -59,8 +58,7 @@ function isPendingSetup(value: unknown): value is PendingSetup {
     typeof value.expiresAt === "number" &&
     typeof value.interval === "number" &&
     typeof value.nextPollAt === "number" &&
-    optionalUuid(value.existingIngestProjectId) &&
-    optionalUuid(value.existingMcpTenantId)
+    optionalUuid(value.existingIngestProjectId)
   );
 }
 
@@ -86,7 +84,7 @@ export async function readPendingSetup(
 
 /**
  * Deletes the handshake file once its code is spent, and returns the lines
- * to print. It never throws: the keys that code returned matter more than
+ * to print. It never throws: the key that code returned matters more than
  * the file, and a file left behind only makes the next `wait` find the code
  * spent.
  */

@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
 
 import type { HarnessId } from "../harness.js";
-import { KEY, OLD, place, plan, saved, URL_ } from "../testing/mcp.js";
+import { notKept, OLD, place, plan, URL_ } from "../testing/mcp.js";
 import { posix, temporaryDirectories } from "../testing/temp.js";
 import { codexToml, mcpServersJson, openclawJson } from "./formats.js";
 import {
@@ -23,7 +23,7 @@ import {
   openclawConfigPath,
   piConfigPath,
 } from "./paths.js";
-import { saveMcpEntryPrivately } from "./targets.js";
+import { keptMcpLine, manualMcpLines, plannedMcpNote } from "./targets.js";
 
 const tempDir = temporaryDirectories("lemma-setup-mcp-");
 
@@ -34,111 +34,83 @@ async function mode(path: string): Promise<number> {
 describe("coding agents with a documented config file", () => {
   const cases: Array<{
     harness: HarnessId;
-    extension: string;
     path: (homeDir: string) => string;
     read: (contents: string) => unknown;
     entry: unknown;
   }> = [
     {
       harness: "cursor",
-      extension: "json",
       path: (homeDir) => cursorConfigPath({ homeDir, env: {} }),
       read: (contents) => JSON.parse(contents).mcpServers.lemma,
-      entry: { url: URL_, headers: { Authorization: `Bearer ${KEY}` } },
+      entry: { url: URL_ },
     },
     {
       harness: "pi",
-      extension: "json",
       path: (homeDir) => piConfigPath({ homeDir, env: {} }),
       read: (contents) => JSON.parse(contents).mcpServers.lemma,
-      entry: { url: URL_, headers: { Authorization: `Bearer ${KEY}` } },
+      entry: { url: URL_ },
     },
     {
       harness: "opencode",
-      extension: "json",
       path: (homeDir) => opencodeConfigPath({ homeDir, env: {} }),
       read: (contents) => JSON.parse(contents).mcp.lemma,
-      entry: {
-        type: "remote",
-        url: URL_,
-        headers: { Authorization: `Bearer ${KEY}` },
-        oauth: false,
-        enabled: true,
-      },
+      entry: { type: "remote", url: URL_, enabled: true },
     },
     {
       harness: "openclaw",
-      extension: "json",
       path: (homeDir) => openclawConfigPath({ homeDir, env: {} }),
       read: (contents) => JSON.parse(contents).mcp.servers.lemma,
-      entry: {
-        url: URL_,
-        transport: "streamable-http",
-        headers: { Authorization: `Bearer ${KEY}` },
-      },
+      entry: { url: URL_, transport: "streamable-http", auth: "oauth" },
     },
     {
       harness: "hermes",
-      extension: "yaml",
       path: (homeDir) => hermesConfigPath({ homeDir, env: {} }),
       read: (contents) =>
         (parseYaml(contents) as { mcp_servers: { lemma: unknown } }).mcp_servers
           .lemma,
-      entry: { url: URL_, headers: { Authorization: `Bearer ${KEY}` } },
+      entry: { url: URL_, auth: "oauth" },
     },
     {
       harness: "codex",
-      extension: "toml",
       path: (homeDir) => codexConfigPath({ homeDir, env: {} }),
       read: (contents) => contents,
-      entry: `[mcp_servers.lemma]\nurl = "${URL_}"\nhttp_headers = { Authorization = "Bearer ${KEY}" }\n`,
+      entry: `[mcp_servers.lemma]\nurl = "${URL_}"\n`,
     },
   ];
 
   it.each(cases)(
-    "$harness: places the key in its documented config, owner-only when new, never printing the key",
+    "$harness: places a URL-only lemma server in its documented config, owner-only when new",
     async ({ harness, path, read, entry }) => {
       const home = await tempDir();
       const target = await plan(harness, home);
       expect(target).toMatchObject({ kind: "file", path: path(home) });
-      expect(target.existing).toEqual({ kind: "none" });
       const placement = await place(target);
-      expect(placement.placed).toBe(true);
+      expect(placement).toEqual({
+        placed: true,
+        lines: [`MCP: added the \`lemma\` server in ${path(home)}.`],
+      });
       expect(read(await readFile(path(home), "utf8"))).toEqual(entry);
       if (posix) expect(await mode(path(home))).toBe(0o600);
-      if (placement.placed) {
-        expect(placement.lines[0]).toContain("added the `lemma` server");
-        expect(placement.lines.join("\n")).not.toContain(KEY);
-      }
     },
   );
 
   it.each(cases)(
-    "$harness: saves the private entry in its own format, ready to paste",
-    async ({ harness, extension, path, read, entry }) => {
+    "$harness: prints the lemma server in its own format for a config it cannot edit",
+    async ({ harness, path, read, entry }) => {
       const home = await tempDir();
       await mkdir(path(home), { recursive: true });
-      const target = await plan(harness, home);
-      expect(target).toMatchObject({
-        kind: "private",
-        reason: `${path(home)} is not a regular file, so setup does not edit it`,
-      });
-      expect(target.fallbackPath.endsWith(`-${harness}-mcp.${extension}`)).toBe(
-        true,
+      const target = notKept(await plan(harness, home));
+      const reason = `${path(home)} is not a regular file, so setup does not edit it`;
+      expect(target).toMatchObject({ kind: "manual", reason });
+      const lines = manualMcpLines({ target, url: URL_, reason });
+      expect(lines[0]).toBe(
+        `MCP: ${reason}. Add this \`lemma\` server to ${target.codingAgentName}'s MCP servers:`,
       );
-
-      const result = await saveMcpEntryPrivately({
-        target,
-        url: URL_,
-        apiKey: KEY,
-        reason: "because",
-      });
-      expect(result.saved).toBe(true);
-      expect(read(await readFile(target.fallbackPath, "utf8"))).toEqual(entry);
-      if (posix) expect(await mode(target.fallbackPath)).toBe(0o600);
-      const printed = result.lines.join("\n");
-      expect(printed).toContain("lemma_admin_key_from_the_file_above");
-      expect(printed).not.toContain(KEY);
+      expect(read(`${lines[1]}\n`)).toEqual(entry);
+      expect(lines[2]).toMatch(
+        /^Once it's added, to sign in to Lemma as yourself, run `\(cd \S+ && \S+ mcp (login|auth) lemma\)` in a terminal/,
+      );
+      expect(lines).toHaveLength(3);
     },
   );
 
@@ -176,7 +148,7 @@ describe("coding agents with a documented config file", () => {
   });
 
   it.skipIf(!posix)(
-    "reads the existing key, keeps the file's mode, and warns once when others can read it",
+    "replaces a lemma server that sends no key, keeping the file's mode and other servers",
     async () => {
       const home = await tempDir();
       const path = cursorConfigPath({ homeDir: home, env: {} });
@@ -185,55 +157,71 @@ describe("coding agents with a documented config file", () => {
         path,
         JSON.stringify({
           mcpServers: {
-            lemma: {
-              url: "https://old",
-              headers: { Authorization: `Bearer ${OLD}` },
-            },
+            github: { url: "https://gh" },
+            lemma: { url: "https://dev.api.uselemma.ai/mcp/" },
           },
         }),
       );
       await chmod(path, 0o644);
       const target = await plan("cursor", home);
-      expect(target.existing).toEqual({ kind: "key", key: OLD });
-      const placement = await place(target);
-      expect(placement).toEqual({
+      expect(target.kind).toBe("file");
+      expect(plannedMcpNote(target)).toBeNull();
+      await expect(place(target)).resolves.toEqual({
         placed: true,
-        lines: [
-          `MCP: replaced the \`lemma\` server in ${path}.`,
-          `Warning: other users on this machine can read ${path} (mode 644), which holds the admin key. Run \`chmod 600 ${path}\` to keep it private.`,
-          "MCP: reload MCP servers in Cursor Settings to load the Lemma tools.",
-        ],
+        lines: [`MCP: replaced the \`lemma\` server in ${path}.`],
+      });
+      expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+        mcpServers: { github: { url: "https://gh" }, lemma: { url: URL_ } },
       });
       expect(await mode(path)).toBe(0o644);
     },
   );
 
-  it("plans the private file, with the reason, for a config it cannot read", async () => {
+  it("reads a lemma server that sends an API key, and announces that setup leaves it", async () => {
+    const home = await tempDir();
+    const path = cursorConfigPath({ homeDir: home, env: {} });
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(
+      path,
+      JSON.stringify({
+        mcpServers: {
+          lemma: {
+            url: "https://old",
+            headers: { Authorization: `Bearer ${OLD}` },
+          },
+        },
+      }),
+    );
+    const target = await plan("cursor", home);
+    expect(target).toEqual({ kind: "kept", codingAgentName: "Cursor" });
+    expect(plannedMcpNote(target)).toBe(
+      "MCP: Cursor's `lemma` server sends an API key, so setup leaves it as it is.",
+    );
+    expect(keptMcpLine("Cursor")).not.toContain(OLD);
+  });
+
+  it("plans a manual add, with the reason, for a config it cannot read", async () => {
     const home = await tempDir();
     const path = openclawConfigPath({ homeDir: home, env: {} });
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, "{ gateway: { port: 18789 }, // JSON5\n}");
     await expect(plan("openclaw", home)).resolves.toMatchObject({
-      kind: "private",
+      kind: "manual",
       reason: `${path} is not plain JSON (setup cannot keep comments or trailing commas), so setup does not edit it`,
       codingAgentName: "OpenClaw",
-      existing: { kind: "none" },
-      fallbackPath: saved(home, "openclaw", "json"),
       destination: { kind: "mcp-servers", format: openclawJson },
     });
   });
 
-  it("plans the private file for a Codex lemma server defined inline", async () => {
+  it("plans a manual add for a Codex lemma server defined inline", async () => {
     const home = await tempDir();
     const path = codexConfigPath({ homeDir: home, env: {} });
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, '[mcp_servers]\nlemma = { url = "https://old" }\n');
     await expect(plan("codex", home)).resolves.toMatchObject({
-      kind: "private",
+      kind: "manual",
       reason: `${path} defines the \`lemma\` MCP server or \`mcp_servers\` in a form setup cannot edit (use a \`[mcp_servers.lemma]\` table), so setup does not edit it`,
       codingAgentName: "Codex",
-      existing: { kind: "none" },
-      fallbackPath: saved(home, "codex", "toml"),
       destination: { kind: "mcp-servers", format: codexToml },
     });
     expect(await readFile(path, "utf8")).toBe(
@@ -242,7 +230,7 @@ describe("coding agents with a documented config file", () => {
   });
 
   it.skipIf(!posix)(
-    "plans the private file for a symlink, and refuses one planted after planning with the same reason template",
+    "plans a manual add for a symlink, and refuses one planted after planning with the same reason template",
     async () => {
       const home = await tempDir();
       const path = codexConfigPath({ homeDir: home, env: {} });
@@ -250,7 +238,7 @@ describe("coding agents with a documented config file", () => {
       await writeFile(join(home, "dotfiles.toml"), 'model = "gpt-5"\n');
       await symlink(join(home, "dotfiles.toml"), path);
       await expect(plan("codex", home)).resolves.toMatchObject({
-        kind: "private",
+        kind: "manual",
         reason: `${path} is a symlink, so setup does not edit it`,
       });
 
@@ -269,73 +257,27 @@ describe("coding agents with a documented config file", () => {
   );
 });
 
-describe("the private MCP file", () => {
-  it("holds the generic entry with the key, prints its shape without it, and is keyed by app", async () => {
+describe("a coding agent without a documented config", () => {
+  it("plans a manual add of the generic URL-only entry, announced before approval", async () => {
     const home = await tempDir();
-    const first = await plan("other", home, { appDir: join(home, "app-one") });
-    const second = await plan("other", home, { appDir: join(home, "app-two") });
-    expect(first).toMatchObject({
-      kind: "private",
-      reason: "setup has no documented MCP config format for your coding agent",
+    const target = notKept(await plan("other", home));
+    const reason =
+      "setup has no documented MCP config format for your coding agent";
+    expect(target).toMatchObject({
+      kind: "manual",
+      reason,
       codingAgentName: "your coding agent",
-      existing: { kind: "none" },
-      fallbackPath: saved(home, "other", "json", join(home, "app-one")),
       destination: { kind: "mcp-servers", format: mcpServersJson },
     });
-    expect(first.fallbackPath).not.toBe(second.fallbackPath);
-
-    const result = await saveMcpEntryPrivately({
-      target: first,
-      url: URL_,
-      apiKey: KEY,
-      reason: "setup has no documented MCP config format for your coding agent",
-    });
-    await saveMcpEntryPrivately({
-      target: second,
-      url: URL_,
-      apiKey: OLD,
-      reason: "because",
-    });
-    expect(JSON.parse(await readFile(first.fallbackPath, "utf8"))).toEqual({
-      mcpServers: {
-        lemma: { url: URL_, headers: { Authorization: `Bearer ${KEY}` } },
-      },
-    });
-    await expect(readFile(second.fallbackPath, "utf8")).resolves.toContain(OLD);
-    if (posix) expect(await mode(first.fallbackPath)).toBe(0o600);
-    expect(result.saved).toBe(true);
-    const printed = result.lines.join("\n");
-    expect(result.lines.slice(0, 3)).toEqual([
-      `MCP: setup has no documented MCP config format for your coding agent. The full entry, key included, is in ${first.fallbackPath} (readable only by you).`,
-      "Add it to your coding agent's MCP servers, then delete that file.",
-      "The entry has this shape:",
-    ]);
-    expect(printed).toContain(
-      '"Authorization": "Bearer lemma_admin_key_from_the_file_above"',
+    expect(plannedMcpNote(target)).toBe(
+      `MCP: ${reason}. After approval, setup prints the \`lemma\` server for you to add to your coding agent's MCP servers.`,
     );
-    expect(printed).not.toContain(KEY);
-  });
-
-  it("reports when the key cannot be saved either", async () => {
-    const home = await tempDir();
-    await writeFile(join(home, "blocker"), "");
-    const result = await saveMcpEntryPrivately({
-      target: {
-        kind: "private",
-        reason: "because",
-        codingAgentName: "your coding agent",
-        existing: { kind: "none" },
-        fallbackPath: join(home, "blocker", "entry.json"),
-        destination: { kind: "mcp-servers", format: mcpServersJson },
-      },
-      url: URL_,
-      apiKey: KEY,
-      reason: "because",
-    });
-    expect(result.saved).toBe(false);
-    expect(result.lines).toHaveLength(1);
-    expect(result.lines[0]).toMatch(
-      /^MCP: because, and setup could not save the admin key \(.+\)\. Run `start` again\.$/,
+    const lines = manualMcpLines({ target, url: URL_, reason });
+    expect(lines[0]).toBe(
+      `MCP: ${reason}. Add this \`lemma\` server to your coding agent's MCP servers:`,
     );
+    expect(JSON.parse(lines[1] ?? "")).toEqual({
+      mcpServers: { lemma: { url: URL_ } },
+    });
   });
 });

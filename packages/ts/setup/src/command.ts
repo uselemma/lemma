@@ -35,3 +35,44 @@ export const runCommand: RunCommand = (command, args, cwd) =>
       });
     });
   });
+
+/** How a command sharing setup's stdio ended. */
+export type InteractiveResult =
+  | { kind: "exited"; code: number }
+  | { kind: "signaled"; signal: string }
+  | { kind: "not-started" };
+
+export type RunInteractive = (
+  command: string,
+  args: readonly string[],
+  cwd: string,
+) => Promise<InteractiveResult>;
+
+/** Setup outlives an interrupted child, so it can say what to do next. */
+const ignoreInterrupt = () => undefined;
+
+/**
+ * Runs a command that talks to the person, such as a coding agent's sign-in,
+ * which prints a URL, opens the browser, and waits for it. It inherits
+ * setup's stdio: the person's terminal, or under `wait --sign-in` whatever
+ * the coding agent gave setup. Like `runCommand`, it runs without a shell.
+ * At a terminal, Ctrl-C reaches the child, which shares that terminal, while
+ * setup ignores the interrupt until the child ends.
+ */
+export const runInteractive: RunInteractive = (command, args, cwd) =>
+  new Promise((resolvePromise) => {
+    process.on("SIGINT", ignoreInterrupt);
+    const done = (result: InteractiveResult) => {
+      process.off("SIGINT", ignoreInterrupt);
+      resolvePromise(result);
+    };
+    const child = spawn(command, args, { cwd, stdio: "inherit" });
+    child.once("error", () => done({ kind: "not-started" }));
+    child.once("close", (code, signal) =>
+      done(
+        code === null
+          ? { kind: "signaled", signal: signal ?? "unknown" }
+          : { kind: "exited", code },
+      ),
+    );
+  });

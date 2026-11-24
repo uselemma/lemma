@@ -6,11 +6,12 @@ import { HARNESS_IDS, isHarnessId } from "./harness.js";
 import { WAIT_BUDGET_SECONDS } from "./poll.js";
 import { isUuid } from "./shared.js";
 import type { StartOptions } from "./start.js";
+import type { WaitOptions } from "./wait.js";
 
 export const USAGE = [
   "Usage:",
   "  npx @uselemma/setup start --harness <id> --project-name <name> --agent-name <name> [options]",
-  "  npx @uselemma/setup wait",
+  "  npx @uselemma/setup wait [--sign-in]",
   "",
   "Connects this app and its coding agent to Lemma. `start` begins a browser",
   "approval and returns at once. `wait` checks for the approval for up to",
@@ -35,6 +36,12 @@ export const USAGE = [
   "                          127.0.0.1 or [::1]",
   "  --no-browser            Print the approval URL without opening a browser",
   "",
+  "wait, optional:",
+  "  --sign-in               Run the coding agent's sign-in to Lemma's MCP server once",
+  "                          setup writes the server, even when stdin isn't a",
+  "                          terminal. Without the flag, wait runs the sign-in only",
+  "                          at a terminal, and otherwise prints the command",
+  "",
   "  --help                  Show this help",
   "  --version               Show the package version",
   "",
@@ -52,7 +59,7 @@ type ParsedCommand =
   | { kind: "help" }
   | { kind: "version" }
   | { kind: "start"; options: StartOptions }
-  | { kind: "wait" };
+  | { kind: "wait"; options: WaitOptions };
 
 function usageError(message: string): SetupError {
   return new SetupError(`${message}\n\n${USAGE}`, EXIT_CODES.usage);
@@ -118,6 +125,11 @@ const GLOBAL_OPTIONS = {
   version: { type: "boolean" },
 } as const;
 
+const WAIT_OPTIONS = {
+  ...GLOBAL_OPTIONS,
+  "sign-in": { type: "boolean" },
+} as const;
+
 const START_OPTIONS = {
   ...GLOBAL_OPTIONS,
   harness: { type: "string" },
@@ -141,9 +153,10 @@ export function parseCommand(argv: string[]): ParsedCommand {
     throw usageError("Choose a command: start or wait");
   }
   if (command === "wait") {
-    return parse(rest, GLOBAL_OPTIONS).help
+    const values = parse(rest, WAIT_OPTIONS);
+    return values.help
       ? { kind: "help" }
-      : { kind: "wait" };
+      : { kind: "wait", options: { signIn: values["sign-in"] === true } };
   }
   if (command !== "start") throw usageError(`Unknown command: ${command}`);
 

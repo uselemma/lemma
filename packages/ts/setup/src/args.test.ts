@@ -70,12 +70,19 @@ describe("command-line input", () => {
         projectId: undefined,
       },
     });
-    expect(parseCommand(["wait"])).toEqual({ kind: "wait" });
+    expect(parseCommand(["wait"])).toEqual({
+      kind: "wait",
+      options: { signIn: false },
+    });
+    expect(parseCommand(["wait", "--sign-in"])).toEqual({
+      kind: "wait",
+      options: { signIn: true },
+    });
     expect(parseCommand(["--version"])).toEqual({ kind: "version" });
     expect(parseCommand(["start", "--help"])).toEqual({ kind: "help" });
   });
 
-  it("maps validated options and the verified key IDs onto the whole start request", () => {
+  it("maps validated options and the verified ingest key's project onto the whole start request", () => {
     expect(
       startRequest(
         {
@@ -87,10 +94,7 @@ describe("command-line input", () => {
           org: "acme-inc-x1y2",
           projectId: LEMMA_PROJECT_ID,
         },
-        {
-          ingestProjectId: "3f0c6a52-0d6e-4a7b-9a51-2f4e2b9a6c11",
-          mcpTenantId: null,
-        },
+        "3f0c6a52-0d6e-4a7b-9a51-2f4e2b9a6c11",
       ),
     ).toEqual({
       harness: "cursor",
@@ -103,7 +107,6 @@ describe("command-line input", () => {
       org_slug: "acme-inc-x1y2",
       project_id: LEMMA_PROJECT_ID,
       existing_ingest_key_project_id: "3f0c6a52-0d6e-4a7b-9a51-2f4e2b9a6c11",
-      existing_mcp_key_tenant_id: undefined,
     });
   });
 
@@ -134,7 +137,7 @@ describe("command-line input", () => {
     });
   });
 
-  it("rejects a missing command, an unknown harness or flag, and wait flags with exit 2 and the usage", () => {
+  it("rejects a missing command, an unknown harness or flag, and start flags given to wait with exit 2 and the usage", () => {
     for (const argv of [
       [],
       ["setup"],

@@ -3,9 +3,8 @@ import { describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
 
 import {
-  bearerKey,
   codexToml,
-  existingKeyOf,
+  sendsKey,
   hermesYaml,
   mcpServersJson,
   opencodeJson,
@@ -14,34 +13,36 @@ import {
 } from "./formats.js";
 
 const URL_ = "https://api.uselemma.ai/mcp/";
-const KEY = "lemma_sk_admin_0123456789abcdef";
 const OLD = "lemma_sk_old_admin_0123456789";
-const AUTH = `Bearer ${KEY}`;
 
-describe("the existing key", () => {
-  it("reads a literal bearer key, and tells an env reference or odd header apart", () => {
-    expect(bearerKey(`Bearer ${OLD}`)).toBe(OLD);
-    expect(bearerKey("Bearer ${LEMMA_KEY}")).toBeNull();
-    expect(bearerKey("Basic abc")).toBeNull();
-    expect(existingKeyOf(undefined, "headers")).toEqual({ kind: "none" });
+describe("an existing lemma server", () => {
+  it("tells a server that sends a key, literal or referenced, from one that sends none", () => {
+    expect(sendsKey(undefined, ["headers"])).toBe(false);
+    expect(sendsKey(null, ["headers"])).toBe(false);
     expect(
-      existingKeyOf({ headers: { authorization: `bearer ${OLD}` } }, "headers"),
-    ).toEqual({ kind: "key", key: OLD });
+      sendsKey({ headers: { authorization: `bearer ${OLD}` } }, ["headers"]),
+    ).toBe(true);
     expect(
-      existingKeyOf(
-        { headers: { Authorization: "Bearer {env:LEMMA}" } },
+      sendsKey({ headers: { Authorization: "Bearer {env:LEMMA}" } }, [
         "headers",
-      ),
-    ).toEqual({ kind: "unusable" });
-    expect(existingKeyOf({ url: "https://x" }, "headers")).toEqual({
-      kind: "unusable",
-    });
+      ]),
+    ).toBe(true);
     expect(
-      existingKeyOf(
-        { headers: { Authorization: `Bearer ${OLD}` } },
+      sendsKey({ url: "https://x", headers: { "X-Trace": "1" } }, ["headers"]),
+    ).toBe(false);
+    expect(sendsKey("https://x", ["headers"])).toBe(false);
+    expect(
+      sendsKey({ headers: { Authorization: `Bearer ${OLD}` } }, [
         "http_headers",
+      ]),
+    ).toBe(false);
+    expect(
+      sendsKey(
+        { url: "https://x", bearer_token_env_var: "LEMMA_KEY" },
+        ["http_headers"],
+        ["bearer_token_env_var"],
       ),
-    ).toEqual({ kind: "unusable" });
+    ).toBe(true);
   });
 });
 
@@ -53,27 +54,22 @@ describe("mcpServers JSON (Cursor, Pi)", () => {
         mcpServers: { github: { url: "https://gh" } },
       }),
     );
-    expect(parsed.existing).toEqual({ kind: "none" });
-    const written = parsed.set(URL_, KEY);
+    expect(parsed.sendsKey).toBe(false);
+    const written = parsed.set(URL_);
     expect(written.replaced).toBe(false);
     expect(JSON.parse(written.contents)).toEqual({
       theme: "dark",
       mcpServers: {
         github: { url: "https://gh" },
-        lemma: { url: URL_, headers: { Authorization: AUTH } },
+        lemma: { url: URL_ },
       },
     });
-    expect(mcpServersJson.parse(written.contents).existing).toEqual({
-      kind: "key",
-      key: KEY,
-    });
+    expect(mcpServersJson.parse(written.contents).sendsKey).toBe(false);
   });
 
   it("starts a new file and replaces an existing lemma server", () => {
-    expect(
-      JSON.parse(mcpServersJson.parse(null).set(URL_, KEY).contents),
-    ).toEqual({
-      mcpServers: { lemma: { url: URL_, headers: { Authorization: AUTH } } },
+    expect(JSON.parse(mcpServersJson.parse(null).set(URL_).contents)).toEqual({
+      mcpServers: { lemma: { url: URL_ } },
     });
     const parsed = mcpServersJson.parse(
       JSON.stringify({
@@ -85,8 +81,8 @@ describe("mcpServers JSON (Cursor, Pi)", () => {
         },
       }),
     );
-    expect(parsed.existing).toEqual({ kind: "key", key: OLD });
-    expect(parsed.set(URL_, KEY).replaced).toBe(true);
+    expect(parsed.sendsKey).toBe(true);
+    expect(parsed.set(URL_).replaced).toBe(true);
   });
 
   it("refuses a config it cannot edit as JSON", () => {
@@ -108,7 +104,7 @@ describe("OpenCode", () => {
           mcp: { other: { type: "local", command: ["x"] } },
         }),
       )
-      .set(URL_, KEY);
+      .set(URL_);
     expect(JSON.parse(written.contents)).toEqual({
       $schema: "https://opencode.ai/config.json",
       mcp: {
@@ -116,16 +112,11 @@ describe("OpenCode", () => {
         lemma: {
           type: "remote",
           url: URL_,
-          headers: { Authorization: AUTH },
-          oauth: false,
           enabled: true,
         },
       },
     });
-    expect(opencodeJson.parse(written.contents).existing).toEqual({
-      kind: "key",
-      key: KEY,
-    });
+    expect(opencodeJson.parse(written.contents).sendsKey).toBe(false);
   });
 
   it("writes mcp.servers.<name> when the config uses it, reading and dropping an earlier lemma entry", () => {
@@ -141,19 +132,14 @@ describe("OpenCode", () => {
         },
       }),
     );
-    expect(parsed.existing).toEqual({ kind: "key", key: OLD });
-    const written = parsed.set(URL_, KEY);
+    expect(parsed.sendsKey).toBe(true);
+    const written = parsed.set(URL_);
     expect(written.replaced).toBe(true);
     expect(JSON.parse(written.contents)).toEqual({
       mcp: {
         servers: {
           other: { type: "remote", url: "https://x" },
-          lemma: {
-            type: "remote",
-            url: URL_,
-            headers: { Authorization: AUTH },
-            oauth: false,
-          },
+          lemma: { type: "remote", url: URL_ },
         },
       },
     });
@@ -179,17 +165,13 @@ describe("OpenClaw", () => {
           },
         }),
       )
-      .set(URL_, KEY);
+      .set(URL_);
     expect(JSON.parse(written.contents)).toEqual({
       gateway: { port: 18789 },
       mcp: {
         servers: {
           docs: { url: "https://d", transport: "streamable-http" },
-          lemma: {
-            url: URL_,
-            transport: "streamable-http",
-            headers: { Authorization: AUTH },
-          },
+          lemma: { url: URL_, transport: "streamable-http", auth: "oauth" },
         },
       },
     });
@@ -222,10 +204,10 @@ describe("Codex config.toml", () => {
     "",
   ].join("\n");
 
-  it("reads the key from http_headers, replaces the lemma table, and keeps every other line and comment", () => {
+  it("reads a key in http_headers, replaces the lemma table, and keeps every other line and comment", () => {
     const parsed = codexToml.parse(existing);
-    expect(parsed.existing).toEqual({ kind: "key", key: OLD });
-    const written = parsed.set(URL_, KEY);
+    expect(parsed.sendsKey).toBe(true);
+    const written = parsed.set(URL_);
     expect(written.replaced).toBe(true);
     expect(written.contents).toBe(
       [
@@ -240,14 +222,11 @@ describe("Codex config.toml", () => {
         "",
         "[mcp_servers.lemma]",
         `url = "${URL_}"`,
-        `http_headers = { Authorization = "${AUTH}" }`,
         "",
       ].join("\n"),
     );
     expect(parseToml(written.contents)).toMatchObject({
-      mcp_servers: {
-        lemma: { url: URL_, http_headers: { Authorization: AUTH } },
-      },
+      mcp_servers: { lemma: { url: URL_ } },
     });
   });
 
@@ -266,7 +245,7 @@ describe("Codex config.toml", () => {
       'model = "gpt-5-mini"',
       "",
     ].join("\n");
-    expect(codexToml.parse(source).set(URL_, KEY).contents).toBe(
+    expect(codexToml.parse(source).set(URL_).contents).toBe(
       [
         'model = "gpt-5"',
         "",
@@ -277,7 +256,6 @@ describe("Codex config.toml", () => {
         "",
         "[mcp_servers.lemma]",
         `url = "${URL_}"`,
-        `http_headers = { Authorization = "${AUTH}" }`,
         "",
       ].join("\n"),
     );
@@ -291,21 +269,36 @@ describe("Codex config.toml", () => {
       "# end of config",
       "",
     ].join("\n");
-    expect(codexToml.parse(source).set(URL_, KEY).contents).toBe(
+    expect(codexToml.parse(source).set(URL_).contents).toBe(
       [
         "# end of config",
         "",
         "[mcp_servers.lemma]",
         `url = "${URL_}"`,
-        `http_headers = { Authorization = "${AUTH}" }`,
         "",
       ].join("\n"),
     );
   });
 
+  it("reads a key named by bearer_token_env_var or env_http_headers, and a lemma table without one", () => {
+    for (const keyLine of [
+      'bearer_token_env_var = "LEMMA_API_KEY"',
+      'env_http_headers = { Authorization = "LEMMA_AUTHORIZATION" }',
+    ]) {
+      expect(
+        codexToml.parse(
+          `[mcp_servers.lemma]\nurl = "https://old"\n${keyLine}\n`,
+        ).sendsKey,
+      ).toBe(true);
+    }
+    expect(
+      codexToml.parse('[mcp_servers.lemma]\nurl = "https://old"\n').sendsKey,
+    ).toBe(false);
+  });
+
   it("creates the table in a new config", () => {
-    expect(codexToml.parse(null).set(URL_, KEY)).toEqual({
-      contents: `[mcp_servers.lemma]\nurl = "${URL_}"\nhttp_headers = { Authorization = "${AUTH}" }\n`,
+    expect(codexToml.parse(null).set(URL_)).toEqual({
+      contents: `[mcp_servers.lemma]\nurl = "${URL_}"\n`,
       replaced: false,
     });
   });
@@ -328,11 +321,11 @@ describe("Codex config.toml", () => {
     const parsed = codexToml.parse(
       '[mcp_servers.github]\nurl = "https://gh"\n',
     );
-    expect(() => parsed.set(URL_, KEY)).not.toThrow();
-    expect(parseToml(parsed.set(URL_, KEY).contents)).toEqual({
+    expect(() => parsed.set(URL_)).not.toThrow();
+    expect(parseToml(parsed.set(URL_).contents)).toEqual({
       mcp_servers: {
         github: { url: "https://gh" },
-        lemma: { url: URL_, http_headers: { Authorization: AUTH } },
+        lemma: { url: URL_ },
       },
     });
   });
@@ -343,8 +336,8 @@ describe("Hermes config.yaml", () => {
     const parsed = hermesYaml.parse(
       "# Hermes\nmodel: hermes-4\nmcp_servers:\n  # docs search\n  docs:\n    url: https://d\n",
     );
-    expect(parsed.existing).toEqual({ kind: "none" });
-    const written = parsed.set(URL_, KEY);
+    expect(parsed.sendsKey).toBe(false);
+    const written = parsed.set(URL_);
     expect(written.replaced).toBe(false);
     expect(written.contents).toContain("# Hermes");
     expect(written.contents).toContain("# docs search");
@@ -352,29 +345,27 @@ describe("Hermes config.yaml", () => {
       model: "hermes-4",
       mcp_servers: {
         docs: { url: "https://d" },
-        lemma: { url: URL_, headers: { Authorization: AUTH } },
+        lemma: { url: URL_, auth: "oauth" },
       },
     });
-    expect(hermesYaml.parse(written.contents).existing).toEqual({
-      kind: "key",
-      key: KEY,
-    });
+    expect(hermesYaml.parse(written.contents).sendsKey).toBe(false);
   });
 
   it("creates mcp_servers in a new or empty config and replaces an existing lemma server", () => {
-    const entry = {
-      mcp_servers: { lemma: { url: URL_, headers: { Authorization: AUTH } } },
-    };
-    expect(parseYaml(hermesYaml.parse(null).set(URL_, KEY).contents)).toEqual(
-      entry,
-    );
+    const entry = { mcp_servers: { lemma: { url: URL_, auth: "oauth" } } };
+    expect(parseYaml(hermesYaml.parse(null).set(URL_).contents)).toEqual(entry);
     expect(
-      parseYaml(hermesYaml.parse("mcp_servers:\n").set(URL_, KEY).contents),
+      parseYaml(hermesYaml.parse("mcp_servers:\n").set(URL_).contents),
     ).toEqual(entry);
+    const old = hermesYaml.parse(
+      "mcp_servers:\n  lemma:\n    url: https://old\n",
+    );
+    expect(old.sendsKey).toBe(false);
+    expect(old.set(URL_).replaced).toBe(true);
     expect(
-      hermesYaml
-        .parse("mcp_servers:\n  lemma:\n    url: https://old\n")
-        .set(URL_, KEY).replaced,
+      hermesYaml.parse(
+        "mcp_servers:\n  lemma:\n    url: https://old\n    headers:\n      Authorization: Bearer ${LEMMA_KEY}\n",
+      ).sendsKey,
     ).toBe(true);
   });
 

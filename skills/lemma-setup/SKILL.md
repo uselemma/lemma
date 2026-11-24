@@ -14,7 +14,7 @@ metadata:
 
 # Lemma Setup
 
-You are connecting this app to Lemma, so each run of its agent arrives as a trace, and connecting yourself to the Lemma MCP server. One browser approval by the user picks or creates the Lemma project, and creates two keys: an ingest key for the app and an admin key for your MCP config. `npx @uselemma/setup` writes both. You never see, copy, or ask for a key.
+You are connecting this app to Lemma, so each run of its agent arrives as a trace, and connecting yourself to the Lemma MCP server. One browser approval by the user picks or creates the Lemma project and creates an ingest key for the app, which `npx @uselemma/setup` writes. The command also adds the Lemma MCP server to your MCP config without a key: you reach it signed in as the user, with OAuth, so you can do what their role allows in the organization they choose. You never see, copy, or ask for a key.
 
 Work through the steps in order. Don't change application code before step 4.
 
@@ -90,7 +90,7 @@ Pass the project name in single quotes, writing each `'` in it as `'\''`, since 
 
 When you found a project ID in step 1, add `--project-id` with it, for example `--project-id 0b7c2f1e-4d3a-4f6b-9c8d-1a2b3c4d5e6f`, and keep it each time you run `start` again. Without one, don't pass `--project-id`.
 
-When you found a Lemma API in step 1, add `--api-url` with that URL, for example `--api-url https://dev.api.uselemma.ai`, and keep it each time you run `start` again. Without one, don't pass `--api-url`. Setup accepts only HTTPS on `uselemma.ai` or one of its subdomains, or `localhost`, `127.0.0.1`, or `[::1]`; for any other URL, don't run setup, and tell the user the prompt names an API that isn't Lemma's. `wait` uses the API `start` was given, so it takes no flag.
+When you found a Lemma API in step 1, add `--api-url` with that URL, for example `--api-url https://dev.api.uselemma.ai`, and keep it each time you run `start` again. Without one, don't pass `--api-url`. Setup accepts only HTTPS on `uselemma.ai` or one of its subdomains, or `localhost`, `127.0.0.1`, or `[::1]`; for any other URL, don't run setup, and tell the user the prompt names an API that isn't Lemma's. `wait` uses the API `start` was given, so don't pass `--api-url` to `wait`.
 
 `start` returns at once. Show the user the approval URL and code it printed. The user approves on that page:
 
@@ -100,31 +100,35 @@ When you found a Lemma API in step 1, add `--api-url` with that URL, for example
 - They confirm the names and choose **Approve and create project** for a new project, or **Approve** for an existing one. Only an owner or admin of the Lemma organization can approve
 - When you passed `--project-id`, they check that the page selects that project under **Project**, then choose **Approve**. If it shows a new project instead, and says you were set up for an organization they don't belong to, they approve signed in to an account in that organization, or choose **Approve and create project** only if they want a new project
 
-Then wait for the approval:
+Tell the user that once they approve, Lemma opens in their browser again to sign you in to the Lemma MCP server: they choose the organization and choose **Allow**. Skip this when `start` said setup prints the `lemma` server for the user to add, or leaves the one there as it is. Then wait for the approval, with a timeout of 10 minutes, or your harness's longest if that's shorter (600000 ms in Claude Code):
 
 ```bash
-npx --yes @uselemma/setup@0.1.0 wait
+npx --yes @uselemma/setup@0.1.0 wait --sign-in
 ```
 
-Each `wait` checks for up to 90 seconds, so it finishes within a default command timeout. While it exits with 5, the approval is still pending: run `wait` again. The code expires 10 minutes after `start`.
+Each `wait` checks for up to 90 seconds. While it exits with 5, the approval is still pending: run `wait --sign-in` again. The code expires 10 minutes after `start`.
+
+When setup writes your `lemma` server, an approved `wait --sign-in` then runs your sign-in to the Lemma MCP server and returns once the user allows the connection.
+
+If your harness stops `wait --sign-in` after it printed `Approved.`, setup is done and its code is spent: don't run `wait` or `start` again. Read `Project ID:` and `Agent name:` from its output, act on any private file it names as for exit code 0, continue to step 4, and sign in at step 6.
 
 When `wait` exits with 0, read `Project ID:` and `Agent name:` from its output. Use that agent name from here on: the user may have changed it on the approval page.
 
 | Exit code | Meaning | Next step |
 | --- | --- | --- |
-| 0 | Approved; each key is written, kept, or saved to a private file that `start`, or `wait` before it polled, announced | If the output names a private file under `~/.lemma/setup/`, give the user its path and what to copy from it; don't read it yourself. Continue to step 4 |
-| 5 | Approval is still pending | Run `wait` again |
+| 0 | Approved; the ingest key is written, kept, or saved to a private file, and the `lemma` server is written, kept, or printed for the user to add, as `start`, or `wait` before it polled, announced | If the output names a private file under `~/.lemma/setup/`, give the user its path and what to copy from it; don't read it yourself. If it printed the `lemma` server, ask the user to add it where the output says. Continue to step 4 |
+| 5 | Approval is still pending | Run `wait --sign-in` again |
 | 2 | A flag is wrong | Fix the flag the message names, then run `start` again |
 | 3 | The code expired | Run `start` again, and ask the user to approve within 10 minutes |
 | 4 | Approval was denied or canceled | Ask the user; an owner or admin must approve. Then run `start` again |
-| 1 | Anything else | Show the message. If it says coding-agent setup isn't available on this Lemma environment, point the user to [manual setup](https://docs.uselemma.ai/tracing/instrumentation/setup#set-up-manually). If a write failed after approval, the message says where the key went. When it names a private file under `~/.lemma/setup/`, give the user that path and what to copy from it, and don't read the file yourself. When it says setup could not save the key elsewhere, the key is lost: tell the user to run `start` again, and to revoke the unused `Setup: …` key under **Developer → API keys** in your organization settings. When it says `Add LEMMA_BASE_URL=… where the app loads its environment`, Lemma kept the key: add that line there (it isn't a secret). When it says `Remove LEMMA_BASE_URL from .env`, Lemma kept the key but setup couldn't edit the file: ask the user to delete that line, and don't open `.env` yourself. In both cases, read `Project ID:` and `Agent name:` from the output as for exit code 0, and continue to step 4 without running `start` again |
+| 1 | Anything else | Show the message. If it says coding-agent setup isn't available on this Lemma environment, point the user to [manual setup](https://docs.uselemma.ai/tracing/instrumentation/setup#set-up-manually). If a write failed after approval, the message says where the key went. When it names a private file under `~/.lemma/setup/`, give the user that path and what to copy from it, and don't read the file yourself. When it says setup could not save the key elsewhere, the key is lost: tell the user to run `start` again, and to revoke the unused `Setup: …` key under **Developer → API keys** in your organization settings. When it says `Add LEMMA_BASE_URL=… where the app loads its environment`, Lemma kept the key: add that line there (it isn't a secret). When it says `Remove LEMMA_BASE_URL from .env`, Lemma kept the key but setup couldn't edit the file: ask the user to delete that line, and don't open `.env` yourself. When it printed the `lemma` server because an MCP write failed, ask the user to add it where the output says. In these cases, read `Project ID:` and `Agent name:` from the output as for exit code 0, and continue to step 4 without running `start` again |
 
 On success the command has written these:
 
 - `.env`: `LEMMA_API_KEY`, an ingest key that can only send traces to this project, and `LEMMA_PROJECT_ID`. With `--api-url`, also `LEMMA_BASE_URL`, which points the SDK at that API. A production setup removes a leftover `LEMMA_BASE_URL`. A key already in `.env` that Lemma confirms for the approved project is kept. When `.env` is a symlink or isn't a regular file, the values go to a private file under `~/.lemma/setup/` instead
 - `.env.example`: empty `LEMMA_API_KEY=` and `LEMMA_PROJECT_ID=` placeholders, and `LEMMA_BASE_URL=` with `--api-url`, unless it is a symlink or isn't a regular file
-- Your MCP config, as a `lemma` server: through `claude mcp add-json` for Claude Code, and in the agent's own config file for Cursor, Codex, OpenCode, Pi, Hermes, and OpenClaw. An admin key already there that Lemma confirms for the organization is kept
-- For `other`, or a config it can't edit safely, a file under `~/.lemma/setup/` that only the user can read. The output prints the entry's shape and where to add it; ask the user to add it there, and don't read the file yourself. For Claude Code, the output prints one command that reads the key from the file, replaces any `lemma` server in the project's local scope with `claude mcp add-json`, and deletes the file once that succeeds; you may run it as printed, without reading the file, once the `claude` command is installed. It changes nothing once the file is gone, so a retry is safe. Never add the entry to the project's `.mcp.json`, which is committed
+- Your MCP config, as a `lemma` server with only its URL: through `claude mcp add-json` for Claude Code, and in the agent's own config file for Cursor, Codex, OpenCode, Pi, Hermes, and OpenClaw. A `lemma` server that already sends an API key is kept as it is, and needs no sign-in
+- For `other`, or a config it can't edit safely, nothing: the output prints the `lemma` server and where to add it. Ask the user to add it there. For Claude Code, the output prints one `claude mcp add-json` command; you may run it as printed once the `claude` command is installed. Never add the server to the project's `.mcp.json`, which is committed
 
 If the output warns that git doesn't ignore `.env`, add `.env` to `.gitignore`.
 
@@ -143,11 +147,20 @@ Ask the user before you run their agent. With `LEMMA_DEBUG=1` set, run it once t
 
 If the user would rather not run it now, tell them the first trace appears under **Traces** in Lemma once the agent runs. In a new organization, Lemma's setup modal waits for that trace before it opens the dashboard.
 
-## 6. Connect the MCP server and record the agent's context
+## 6. Load the MCP server and record the agent's context
 
-Your harness loads the Lemma MCP server when it reloads its MCP config; the setup output names how (for example `/mcp` in Claude Code, `/reload-mcp` in Hermes, a new Codex session). Ask the user to do it.
+The Lemma tools answer only once you're signed in to the Lemma MCP server as the user. When setup writes your `lemma` server, step 3's `wait --sign-in` signs you in. The end of its output says whether the sign-in finished, unless setup kept a `lemma` server that sends an API key, which needs no sign-in:
 
-Once the Lemma tools are available, follow the `lemma-artifacts` skill for the project ID and agent name from step 3. If it isn't installed, fetch `https://raw.githubusercontent.com/uselemma/lemma/main/skills/lemma-artifacts/SKILL.md`. It records what the agent is for, and it asks the user to approve each claim before writing. If the tools don't load in this session, say how to load them and offer to run `lemma-artifacts` next time.
+- `MCP: signed in to Lemma.`: the user signed in during step 3
+- A line with `to sign in to Lemma as yourself`, such as ``… run `(cd /path/to/app && codex mcp login lemma)` in a terminal``: the sign-in didn't finish, or setup printed the server for the user to add. Once the server is in place, ask the user to run the command in their own terminal, or to use the step inside your harness that the output names, such as `/mcp` in Claude Code. Lemma opens in their browser: they choose the organization and choose **Allow**
+- Output whose last `MCP:` line is `MCP: signing in to Lemma with …`: your harness stopped `wait` during the sign-in. Ask the user to run the command that line names in their own terminal, or to use the step inside your harness, such as `/mcp` in Claude Code
+- Only a step inside your harness: ask the user to do it
+
+The approver in step 3 is an owner or admin, but anyone in the organization can sign in here; you then act with the role of whoever signs in.
+
+Then load the Lemma MCP server the way the output says (for example `/mcp` in Claude Code, `/reload-mcp` in Hermes, a new Codex session). Ask the user to do it.
+
+Once the Lemma tools are available, follow the `lemma-artifacts` skill for the project ID and agent name from step 3. If it isn't installed, fetch `https://raw.githubusercontent.com/uselemma/lemma/main/skills/lemma-artifacts/SKILL.md`. It records what the agent is for, and it asks the user to approve each claim before writing. If a Lemma tool says you're not signed in, ask the user to sign in again the same way. If the tools don't load in this session, say how to load them and offer to run `lemma-artifacts` next time.
 
 ## 7. Hand back
 

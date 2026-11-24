@@ -4,7 +4,7 @@ description: "MCP for coding agents, plus external servers Lemma can call"
 meta:
   contentType: "How-to"
   goal: "Connect a coding agent to Lemma, or connect an external MCP server into Lemma"
-  audience: "People using Cursor, Claude Code, or similar with Lemma"
+  audience: "People using Claude Code, Cursor, Codex, or similar with Lemma, and anyone connecting a machine to Lemma MCP"
 ---
 
 Lemma has two opposite Model Context Protocol (MCP) directions. Don’t mix them:
@@ -14,66 +14,177 @@ Lemma has two opposite Model Context Protocol (MCP) directions. Don’t mix them
 
 This page is not the same connection as [Inspect](/platform/inspect). Inspect runs in-product. The Lemma MCP server is for editors and coding agents.
 
-The endpoint is `https://api.uselemma.ai/mcp/` (trailing-slash variants work the same), authenticated with `Authorization: Bearer your_organization_api_key`. Pass a project ID on project-scoped tools. Lemma only records MCP activation for a project after a successful project-scoped tool call, so saving the URL in Cursor isn’t activation by itself.
+The endpoint is `https://api.uselemma.ai/mcp/` (trailing-slash variants work the same). You connect a coding agent by signing in to Lemma with OAuth, so the agent acts as you. A machine with no person to sign in, such as a CI job, connects with an [organization API key](#connect-a-machine-with-an-api-key) instead.
+
+Pass a project ID on project-scoped tools. Lemma only records MCP activation for a project after a successful project-scoped tool call, so saving the URL in Cursor isn’t activation by itself.
 
 ## Prerequisites
 
 - A Lemma organization with at least one project that has, or will have, traces
-- An MCP client that supports Streamable HTTP, such as Cursor, Claude Desktop, or Claude Code
+- Membership in that organization, with any role
+- An MCP client that supports Streamable HTTP and OAuth sign-in, such as Claude Code, Cursor, or Codex
 
 ## Connect your coding agent
 
-Add a `lemma` server to your coding agent’s MCP config, authenticated with an organization API key.
+Add a `lemma` server to your coding agent’s MCP config with only its URL, then sign in. The config holds no key, so nothing secret goes on disk.
 
 <Note>
-  If you set up Lemma with the [agent prompt](/tracing/instrumentation/setup#set-up-with-the-agent-prompt), the setup command already added the `lemma` server to your coding agent’s MCP config. When it couldn’t edit that config, or when your coding agent isn’t one that setup configures, it saved the entry to a private file instead. [Where the admin key goes](/reference/setup-command#where-the-admin-key-goes-for-each-coding-agent) lists each config file and how to load it.
+  If you set up Lemma with the [agent prompt](/tracing/instrumentation/setup#set-up-with-the-agent-prompt), the setup command already added the `lemma` server and ran or printed the sign-in step. [Where the lemma server goes](/reference/setup-command#where-the-lemma-server-goes-for-each-coding-agent) lists each config file and how to load it.
 </Note>
 
 <Steps>
+  <Step title="Add the lemma server">
+    <Tabs>
+      <Tab title="Claude Code">
+        Run this in your project’s directory:
+
+        ```bash
+        claude mcp add --transport http lemma https://api.uselemma.ai/mcp/
+        ```
+      </Tab>
+      <Tab title="Cursor">
+        Add to `~/.cursor/mcp.json`:
+
+        ```json
+        {
+          "mcpServers": {
+            "lemma": { "url": "https://api.uselemma.ai/mcp/" }
+          }
+        }
+        ```
+      </Tab>
+      <Tab title="Codex">
+        Add to `~/.codex/config.toml`:
+
+        ```toml
+        [mcp_servers.lemma]
+        url = "https://api.uselemma.ai/mcp/"
+        ```
+      </Tab>
+      <Tab title="OpenCode">
+        Add to `opencode.json` in `~/.config/opencode`:
+
+        ```json
+        {
+          "mcp": {
+            "servers": {
+              "lemma": {
+                "type": "remote",
+                "url": "https://api.uselemma.ai/mcp/"
+              }
+            }
+          }
+        }
+        ```
+
+        Leave out `"oauth": false`, which turns sign-in off.
+      </Tab>
+      <Tab title="Pi">
+        Add to `~/.pi/agent/mcp.json`:
+
+        ```json
+        {
+          "mcpServers": {
+            "lemma": { "url": "https://api.uselemma.ai/mcp/" }
+          }
+        }
+        ```
+      </Tab>
+      <Tab title="Hermes">
+        Add to `~/.hermes/config.yaml`:
+
+        ```yaml
+        mcp_servers:
+          lemma:
+            url: https://api.uselemma.ai/mcp/
+            auth: oauth
+        ```
+
+        Hermes signs in only to a server with `auth: oauth`.
+      </Tab>
+      <Tab title="OpenClaw">
+        Add to `~/.openclaw/openclaw.json`:
+
+        ```json
+        {
+          "mcp": {
+            "servers": {
+              "lemma": {
+                "url": "https://api.uselemma.ai/mcp/",
+                "transport": "streamable-http",
+                "auth": "oauth"
+              }
+            }
+          }
+        }
+        ```
+
+        OpenClaw signs in only to a server with `"auth": "oauth"`.
+      </Tab>
+      <Tab title="Claude Desktop">
+        Add a custom connector with the URL `https://api.uselemma.ai/mcp/`, and choose to sign in. [Anthropic’s custom connector guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) shows where to add it on your plan.
+      </Tab>
+      <Tab title="Other">
+        Any MCP client that supports Streamable HTTP and OAuth uses the same shape:
+
+        ```json
+        {
+          "mcpServers": {
+            "lemma": { "url": "https://api.uselemma.ai/mcp/" }
+          }
+        }
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Sign in to Lemma">
+    Run your coding agent’s sign-in command in a terminal, from the directory where you added the server, or use the step inside the agent:
+
+    | Coding agent | Sign-in command | Inside the agent |
+    | --- | --- | --- |
+    | Claude Code | `claude mcp login lemma` | Run `/mcp`, select `lemma`, and authenticate |
+    | Cursor | `agent mcp login lemma`, with the Cursor CLI | Sign in to `lemma` from Cursor’s MCP settings |
+    | Codex | `codex mcp login lemma` | None |
+    | OpenCode | `opencode mcp auth lemma` | Run `/mcps`, select `lemma`, and sign in |
+    | Pi | `pi mcp login lemma` | Run `/mcp`, select `lemma`, and choose **Sign in** |
+    | Hermes | `hermes mcp login lemma` | None |
+    | OpenClaw | `openclaw mcp login lemma` | None |
+
+    Lemma opens in your browser. Choose the organization the agent connects to, then choose **Allow**. Reload the agent’s MCP servers afterwards, as [Where the lemma server goes](/reference/setup-command#where-the-lemma-server-goes-for-each-coding-agent) lists for each agent.
+  </Step>
+  <Step title="Call a project-scoped tool">
+    Ask your agent:
+
+    ```text
+    Use Lemma to show me my last 5 traces, including any errors.
+    ```
+
+    Include the project ID if your client hasn’t already selected one. Activation is recorded only after that project-scoped call succeeds.
+  </Step>
+</Steps>
+
+## What a signed-in agent can do
+
+A signed-in agent acts as you in the one organization you chose, and can do over MCP exactly what your role allows in the dashboard. To use another organization, sign in again and choose it.
+
+Its access ends on the next request when you leave the organization, when the connection is revoked, when you sign out everywhere or reset your password, or when your account is banned. Signing out of one browser doesn’t end it.
+
+Your connected MCP clients are listed under **Settings → Developer**. Owners and admins see each person’s clients on **Settings → Members** and can revoke them, except that an admin can’t revoke an owner’s.
+
+## Connect a machine with an API key
+
+A machine with no person to sign in, such as a CI job or a script, sends an organization API key in an `Authorization` header. A client configured with a key keeps using it, and it can do what the key’s scope allows rather than a person’s role.
+
+<Steps>
   <Step title="Get an organization API key">
-    Create an organization API key with the **Admin** scope under **Developer → API keys** in your organization settings. Keep it in your coding tool’s MCP config, never in a file you commit.
+    Create an organization API key with the **Admin** scope under **Developer → API keys** in your organization settings. Keep it in the client’s MCP config or a secret store, never in a file you commit.
 
     <Warning>
       Copy your key immediately after creating it. You won’t be able to see it again.
     </Warning>
   </Step>
-  <Step title="Add it to your editor">
+  <Step title="Add it to the client">
     <Tabs>
-      <Tab title="Cursor">
-        In **Settings > MCP Servers**, add:
-
-        ```json
-        {
-          "mcpServers": {
-            "lemma": {
-              "url": "https://api.uselemma.ai/mcp/",
-              "headers": {
-                "Authorization": "Bearer your_organization_api_key"
-              }
-            }
-          }
-        }
-        ```
-      </Tab>
-      <Tab title="Claude Desktop">
-        Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
-
-        ```json
-        {
-          "mcpServers": {
-            "lemma": {
-              "type": "http",
-              "url": "https://api.uselemma.ai/mcp/",
-              "headers": {
-                "Authorization": "Bearer your_organization_api_key"
-              }
-            }
-          }
-        }
-        ```
-
-        Restart Claude Desktop after saving.
-      </Tab>
       <Tab title="Claude Code">
         Run this in your terminal:
 
@@ -102,15 +213,6 @@ Add a `lemma` server to your coding agent’s MCP config, authenticated with an 
     </Tabs>
 
     Replace `your_organization_api_key` with the organization API key you copied.
-  </Step>
-  <Step title="Call a project-scoped tool">
-    Ask your agent:
-
-    ```text
-    Use Lemma to show me my last 5 traces, including any errors.
-    ```
-
-    Include the project ID if your client hasn’t already selected one. Activation is recorded only after that project-scoped call succeeds.
   </Step>
 </Steps>
 

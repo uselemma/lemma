@@ -9,7 +9,7 @@ import {
   type SetupEnvironment,
 } from "./context.js";
 import type { HarnessId } from "./harness.js";
-import { checkIngestKey, checkMcpKey } from "./keys.js";
+import { checkIngestKey } from "./keys.js";
 import { newPendingSetup, writePendingSetup } from "./pending.js";
 import { plan, plannedNotes } from "./plan.js";
 import {
@@ -33,15 +33,10 @@ export type StartOptions = {
   projectId?: string;
 };
 
-/** The IDs of the keys Lemma confirmed the client already holds. */
-type VerifiedKeys = {
-  ingestProjectId: string | null;
-  mcpTenantId: string | null;
-};
-
+/** `verifiedIngestProjectId` is the project Lemma confirmed the `.env` key for. */
 export function startRequest(
   options: StartOptions,
-  verified: VerifiedKeys,
+  verifiedIngestProjectId: string | null,
 ): StartRequest {
   return {
     harness: options.harness,
@@ -53,8 +48,7 @@ export function startRequest(
     },
     org_slug: options.org,
     project_id: options.projectId,
-    existing_ingest_key_project_id: verified.ingestProjectId ?? undefined,
-    existing_mcp_key_tenant_id: verified.mcpTenantId ?? undefined,
+    existing_ingest_key_project_id: verifiedIngestProjectId ?? undefined,
   };
 }
 
@@ -71,31 +65,20 @@ export async function runStart(
   const paths = setupPaths(environment.homeDir, appDir);
   const setupPlan = await plan({ environment, appDir, harness, paths, apiUrl });
 
-  const [ingest, mcp] = await Promise.all([
-    checkIngestKey({
-      existing: setupPlan.env.existing,
-      apiUrl,
-      fetch: environment.fetch,
-    }),
-    checkMcpKey({
-      existing: setupPlan.mcp.existing,
-      codingAgentName: setupPlan.mcp.codingAgentName,
-      apiUrl,
-      fetch: environment.fetch,
-    }),
-  ]);
+  const ingest = await checkIngestKey({
+    existing: setupPlan.env.existing,
+    apiUrl,
+    fetch: environment.fetch,
+  });
 
   const authorization = await startSetupAuthorization(
     apiUrl,
-    startRequest(options, {
-      ingestProjectId: ingest.verified,
-      mcpTenantId: mcp.verified,
-    }),
+    startRequest(options, ingest.verified),
     environment.fetch,
   );
   // Printed only once the handshake exists: on an environment without
   // coding-agent setup, the one line saying so is the whole output.
-  for (const note of [ingest.note, mcp.note, ...plannedNotes(setupPlan)]) {
+  for (const note of [ingest.note, ...plannedNotes(setupPlan)]) {
     if (note) environment.output(note);
   }
 
@@ -116,7 +99,6 @@ export async function runStart(
       interval,
       nextPollAt: startedAt + interval * 1_000,
       existingIngestProjectId: ingest.verified,
-      existingMcpTenantId: mcp.verified,
     }),
   );
 

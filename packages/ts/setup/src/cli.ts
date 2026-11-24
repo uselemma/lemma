@@ -25,7 +25,7 @@ async function main(argv: string[]): Promise<ExitCode> {
         await runStart(command.options, defaultEnvironment());
         return EXIT_CODES.success;
       case "wait": {
-        const result = await runWait(defaultEnvironment());
+        const result = await runWait(command.options, defaultEnvironment());
         return result.status === "pending"
           ? EXIT_CODES.pending
           : EXIT_CODES.success;

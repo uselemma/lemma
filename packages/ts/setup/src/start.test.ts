@@ -13,11 +13,12 @@ import { describe, expect, it } from "vitest";
 import { EXIT_CODES } from "./errors.js";
 import type { PendingSetup } from "./pending.js";
 import { setupPaths } from "./setup-paths.js";
+import { shellWord } from "./shell.js";
 import { DEVICE_CODE, USER_CODE } from "./testing/mock-api.js";
 import {
-  approvedWithKeys,
+  approvedWithKey,
+  cursorEntry,
   INGEST_KEY,
-  MCP_KEY,
   printed,
   PROJECT_ID,
   rejection,
@@ -65,7 +66,6 @@ describe("start", () => {
       interval: 5,
       nextPollAt: 1_005_000,
       existingIngestProjectId: null,
-      existingMcpTenantId: null,
     });
     if (posix) expect((await stat(run.pendingPath)).mode & 0o777).toBe(0o600);
     expect(printed(run)).toContain("npx --yes @uselemma/setup@0.1.0 wait");
@@ -76,7 +76,7 @@ describe("start", () => {
     "plans a symlinked .env as a private file, says so before approval, and finishes with 0",
     async () => {
       const run = await setUp({
-        api: { polls: [approvedWithKeys] },
+        api: { polls: [approvedWithKey] },
         prepare: async (app) => {
           await writeFile(join(app, "real.env"), "UNTOUCHED=1\n");
           await symlink(join(app, "real.env"), join(app, ".env"));
@@ -101,7 +101,7 @@ describe("start", () => {
 
   it("skips an .env.example that is not a file, saying so at start and wait, and never fails for it", async () => {
     const run = await setUp({
-      api: { polls: [approvedWithKeys] },
+      api: { polls: [approvedWithKey] },
       prepare: async (app) => {
         await mkdir(join(app, ".env.example"));
       },
@@ -118,61 +118,75 @@ describe("start", () => {
     expect(run.lines).toContain("Lemma setup finished.");
   });
 
-  it("accepts any coding agent as `other`, announcing the private MCP file before approval", async () => {
-    const run = await setUp({ api: { polls: [approvedWithKeys] } });
+  it("accepts any coding agent as `other`, announcing before approval that it prints the lemma server", async () => {
+    const run = await setUp({
+      api: { polls: [approvedWithKey] },
+      interactive: true,
+    });
     await run.start({ harness: "other" });
     expect(run.api.startBody()).toMatchObject({ harness: "other" });
     expect(printed(run)).toContain(
       "Approve connecting your coding agent to Lemma",
     );
-    const entry = setupPaths(run.home, run.app).savedMcpEntry("other", "json");
+    const reason =
+      "setup has no documented MCP config format for your coding agent";
     expect(printed(run)).toContain(
-      `MCP: setup has no documented MCP config format for your coding agent. After approval, setup saves the Lemma server's entry to ${entry} (readable only by you)`,
+      `MCP: ${reason}. After approval, setup prints the \`lemma\` server for you to add to your coding agent's MCP servers.`,
     );
     await expect(run.wait()).resolves.toEqual({ status: "approved" });
-    expect(printed(run)).toContain(
-      `The full entry, key included, is in ${entry}`,
+    const added = run.lines.indexOf(
+      `MCP: ${reason}. Add this \`lemma\` server to your coding agent's MCP servers:`,
     );
+    expect(JSON.parse(run.lines[added + 1] ?? "")).toEqual({
+      mcpServers: { lemma: { url: "https://api.uselemma.ai/mcp/" } },
+    });
+    expect(run.lines[added + 2]).toBe(
+      "Once it's added, to sign in to Lemma as yourself, follow your coding agent's steps for an MCP server that asks you to sign in.",
+    );
+    expect(run.interactiveCalls).toEqual([]);
     expect(printed(run)).toContain("Lemma setup finished.");
   });
 
-  it("plans a Codex lemma server defined inline as the private file, announces it, and finishes with 0", async () => {
+  it("plans a Codex lemma server defined inline as a manual add, announces it, and finishes with 0", async () => {
+    const inline = '[mcp_servers]\nlemma = { url = "https://old" }\n';
     const run = await setUp({
-      api: { polls: [approvedWithKeys] },
+      api: { polls: [approvedWithKey] },
+      interactive: true,
       prepare: async (_app, home) => {
         await mkdir(join(home, ".codex"), { recursive: true });
-        await writeFile(
-          join(home, ".codex", "config.toml"),
-          '[mcp_servers]\nlemma = { url = "https://old" }\n',
-        );
+        await writeFile(join(home, ".codex", "config.toml"), inline);
       },
     });
     await run.start({ harness: "codex" });
-    const entry = setupPaths(run.home, run.app).savedMcpEntry("codex", "toml");
     expect(printed(run)).toContain(
-      `in a form setup cannot edit (use a \`[mcp_servers.lemma]\` table), so setup does not edit it. After approval, setup saves the Lemma server's entry to ${entry}`,
+      "in a form setup cannot edit (use a `[mcp_servers.lemma]` table), so setup does not edit it. After approval, setup prints the `lemma` server for you to add to Codex's MCP servers.",
     );
     await expect(run.wait()).resolves.toEqual({ status: "approved" });
-    await expect(readFile(entry, "utf8")).resolves.toContain(MCP_KEY);
+    expect(run.lines).toContain(
+      '[mcp_servers.lemma]\nurl = "https://api.uselemma.ai/mcp/"',
+    );
+    expect(run.lines).toContain(
+      `Once it's added, to sign in to Lemma as yourself, run \`(cd ${shellWord(run.app)} && codex mcp login lemma)\` in a terminal.`,
+    );
+    // The server is not in place, so setup does not run its sign-in.
+    expect(run.interactiveCalls).toEqual([]);
     expect(
       await readFile(join(run.home, ".codex", "config.toml"), "utf8"),
-    ).toBe('[mcp_servers]\nlemma = { url = "https://old" }\n');
+    ).toBe(inline);
     expect(printed(run)).toContain("Lemma setup finished.");
   });
 
   it.skipIf(!posix || runsAsRoot)(
-    "exits 1 from wait when the admin key falls back to the private file because the write failed",
+    "exits 1 from wait when the MCP write fails, printing the lemma server to add by hand",
     async () => {
       const run = await setUp({
-        api: { polls: [approvedWithKeys] },
+        api: { polls: [approvedWithKey] },
         prepare: async (_app, home) => {
           await mkdir(join(home, ".cursor"), { recursive: true });
         },
       });
       await run.start();
-      expect(printed(run)).not.toContain(
-        "After approval, setup saves the Lemma server's entry",
-      );
+      expect(printed(run)).not.toContain("After approval, setup prints");
       await chmod(join(run.home, ".cursor"), 0o500);
       const error = await rejection(run.wait());
       await chmod(join(run.home, ".cursor"), 0o700);
@@ -180,14 +194,12 @@ describe("start", () => {
       expect(await readFile(join(run.app, ".env"), "utf8")).toContain(
         INGEST_KEY,
       );
-      await expect(
-        readFile(
-          setupPaths(run.home, run.app).savedMcpEntry("cursor", "json"),
-          "utf8",
-        ),
-      ).resolves.toContain(MCP_KEY);
+      await expect(cursorEntry(run.home)).rejects.toThrow();
+      expect(printed(run)).toMatch(
+        /MCP: setup could not place the Lemma MCP server \(.+\)\. Add this `lemma` server to Cursor's MCP servers:/,
+      );
       expect(printed(run)).toContain(
-        `MCP: setup could not place the Lemma MCP server (`,
+        `Once it's added, to sign in to Lemma as yourself, run \`(cd ${shellWord(run.app)} && agent mcp login lemma)\` in a terminal, or sign in to \`lemma\` from Cursor's MCP settings.`,
       );
       expect(printed(run)).not.toContain("Lemma setup finished.");
     },

@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-import type { HarnessId } from "./harness.js";
-
 /**
  * The files setup keeps for itself under `~/.lemma/setup/`. Each is keyed by
  * the app's directory, so setup in a second app never overwrites a key the
@@ -16,9 +14,6 @@ export function setupPaths(homeDir: string, appDir: string) {
     pending: join(root, "pending", `${app}.json`),
     /** The app's ingest key when its `.env` cannot take it. */
     savedKeys: join(root, `${app}.env`),
-    /** The MCP entry, key included, when setup cannot place it in the agent's config. */
-    savedMcpEntry: (harness: HarnessId, extension: string) =>
-      join(root, `${app}-${harness}-mcp.${extension}`),
   };
 }
 

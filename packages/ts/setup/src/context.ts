@@ -6,7 +6,12 @@ import packageJson from "../package.json" with { type: "json" };
 
 import type { Fetch } from "./api.js";
 import { launchBrowser } from "./browser.js";
-import { runCommand, type RunCommand } from "./command.js";
+import {
+  runCommand,
+  runInteractive,
+  type RunCommand,
+  type RunInteractive,
+} from "./command.js";
 
 /** The exact command the skill and the output name, pinned to this release. */
 export const SETUP_COMMAND = `npx --yes ${packageJson.name}@${packageJson.version}`;
@@ -22,6 +27,9 @@ export type SetupEnvironment = {
   now: () => number;
   output: (line: string) => void;
   run: RunCommand;
+  /** Whether a person is at this terminal: stdin is a TTY. */
+  interactive: boolean;
+  runInteractive: RunInteractive;
 };
 
 export function defaultEnvironment(): SetupEnvironment {
@@ -36,6 +44,8 @@ export function defaultEnvironment(): SetupEnvironment {
     now: Date.now,
     output: (line) => console.log(line),
     run: runCommand,
+    interactive: process.stdin.isTTY === true,
+    runInteractive,
   };
 }
 

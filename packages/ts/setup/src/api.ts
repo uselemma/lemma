@@ -27,9 +27,10 @@ function isLoopbackHost(hostname: string): boolean {
 
 /**
  * The only domain, with its subdomains, setup accepts as a Lemma API over
- * HTTPS. The API usually comes from a line of a pasted prompt, and `start`
- * sends the keys it finds to that API before anyone approves, so a lookalike
- * prompt must not be able to name another host.
+ * HTTPS. The API usually comes from a line of a pasted prompt, `start` sends
+ * the ingest key it finds to that API before anyone approves, and the coding
+ * agent signs in to that API's MCP server, so a lookalike prompt must not be
+ * able to name another host.
  */
 const LEMMA_API_DOMAIN = "uselemma.ai";
 
@@ -64,8 +65,9 @@ function isApprovalUrl(url: URL): boolean {
 
 /**
  * A URL that passed `isAllowedApi`. Every request setup makes, and every URL
- * it writes beside a key (`LEMMA_BASE_URL`, the MCP server), takes one, so
- * an unchecked URL cannot reach either.
+ * it writes (`LEMMA_BASE_URL` beside the ingest key, and the MCP server the
+ * coding agent signs in to), takes one, so an unchecked URL cannot reach
+ * either.
  */
 export type LemmaApiUrl = string & { readonly __brand: "LemmaApiUrl" };
 
@@ -154,7 +156,6 @@ export type StartRequest = {
   org_slug?: string;
   project_id?: string;
   existing_ingest_key_project_id?: string;
-  existing_mcp_key_tenant_id?: string;
 };
 
 type SetupAuthorization = {
@@ -214,14 +215,13 @@ export async function startSetupAuthorization(
   };
 }
 
-/** A key the exchange returned, or the server's word that the client's own key stays. */
+/** The ingest key the exchange returned, or the server's word that the client's own key stays. */
 export type ApprovedKey = { kind: "new"; key: string } | { kind: "kept" };
 
 export type Approval = {
   projectId: string;
   agentName: string;
   ingest: ApprovedKey;
-  mcp: ApprovedKey;
 };
 
 export type TokenPoll =
@@ -242,14 +242,16 @@ function approvedKey(value: unknown): ApprovedKey | null {
     : null;
 }
 
+/**
+ * The approved answer. The coding agent signs in to the MCP server itself,
+ * so an `mcp_key` in the answer is never read.
+ */
 function approvedPoll(body: Record<string, unknown>): TokenPoll {
   const ingest = approvedKey(body.ingest_key);
-  const mcp = approvedKey(body.mcp_key);
   if (
     !isUuid(body.project_id) ||
     typeof body.agent_name !== "string" ||
-    !ingest ||
-    !mcp
+    !ingest
   ) {
     return {
       status: "error",
@@ -263,7 +265,6 @@ function approvedPoll(body: Record<string, unknown>): TokenPoll {
       projectId: body.project_id,
       agentName: body.agent_name,
       ingest,
-      mcp,
     },
   };
 }
@@ -329,17 +330,15 @@ function isApiKeyScope(value: unknown): value is ApiKeyScope {
 
 /** What `GET /auth/key` says about the key that calls it. */
 type ApiKeyDescription = {
-  tenantId: string;
   /** Null for a key that is not limited to one project. */
   projectId: string | null;
   scope: ApiKeyScope;
 };
 
 /**
- * The calling key's own organization, project limit, and scope, or null when
- * Lemma does not answer for it (invalid, expired, revoked, unreachable, or
- * setup off). A null answer leaves the key unverified, and the server mints
- * a new one.
+ * The calling key's own project limit and scope, or null when Lemma does
+ * not answer for it (invalid, expired, revoked, unreachable, or setup off).
+ * A null answer leaves the key unverified, and the server mints a new one.
  */
 export async function describeApiKey(
   apiUrl: LemmaApiUrl,
@@ -358,14 +357,12 @@ export async function describeApiKey(
     const body = await readJson(response);
     if (
       !isRecord(body) ||
-      !isUuid(body.tenant_id) ||
       !(body.project_id === null || isUuid(body.project_id)) ||
       !isApiKeyScope(body.scope)
     ) {
       return null;
     }
     return {
-      tenantId: body.tenant_id,
       projectId: body.project_id,
       scope: body.scope,
     };
