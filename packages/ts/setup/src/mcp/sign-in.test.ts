@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { CODING_AGENTS } from "../agents.js";
 import type { RunCommand } from "../command.js";
 import { HARNESS_IDS } from "../harness.js";
+import { shellWord } from "../shell.js";
 import { notKept, plan, scriptedRun } from "../testing/mcp.js";
 import { temporaryDirectories } from "../testing/temp.js";
 import { signInToMcp } from "./sign-in.js";
@@ -83,7 +84,7 @@ describe("signing in to Lemma's MCP server", () => {
     await signInToMcp({ signIn, environment: at.environment });
     expect(at.calls).toEqual([]);
     expect(at.lines).toEqual([
-      `MCP: to sign in to Lemma as yourself, run \`(cd ${home} && opencode mcp auth lemma)\` in a terminal, or run /mcps in OpenCode, select \`lemma\`, and sign in.`,
+      `MCP: to sign in to Lemma as yourself, run \`(cd ${shellWord(home)} && opencode mcp auth lemma)\` in a terminal, or run /mcps in OpenCode, select \`lemma\`, and sign in.`,
     ]);
   });
 });

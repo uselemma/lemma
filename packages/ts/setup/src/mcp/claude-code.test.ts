@@ -14,6 +14,7 @@ import {
   scriptedRun,
   URL_,
 } from "../testing/mcp.js";
+import { shellWord } from "../shell.js";
 import { posix, temporaryDirectories } from "../testing/temp.js";
 import { claudeConfigPath } from "./claude-code.js";
 import { manualMcpLines, plannedMcpNote } from "./targets.js";
@@ -301,7 +302,7 @@ describe("Claude Code", () => {
     expect(
       manualMcpLines({ target, url: URL_, reason: placement.reason })[2],
     ).toBe(
-      `(cd ${home} && { claude mcp remove lemma --scope local >/dev/null 2>&1; claude mcp add-json lemma '${JSON.stringify({ type: "http", url: URL_ })}' --scope local; })`,
+      `(cd ${shellWord(home)} && { claude mcp remove lemma --scope local >/dev/null 2>&1; claude mcp add-json lemma '${JSON.stringify({ type: "http", url: URL_ })}' --scope local; })`,
     );
   });
 
@@ -311,7 +312,7 @@ describe("Claude Code", () => {
     const lines = manualMcpLines({ target, url: URL_, reason: "because" });
     expect(lines.slice(1, 3)).toEqual([
       `Replace any \`lemma\` server in Claude Code's local scope for ${home}, not the committed \`.mcp.json\`, with this command:`,
-      `(cd ${home} && { claude mcp remove lemma --scope local >/dev/null 2>&1; claude mcp add-json lemma '${JSON.stringify({ type: "http", url: URL_ })}' --scope local; })`,
+      `(cd ${shellWord(home)} && { claude mcp remove lemma --scope local >/dev/null 2>&1; claude mcp add-json lemma '${JSON.stringify({ type: "http", url: URL_ })}' --scope local; })`,
     ]);
   });
 
