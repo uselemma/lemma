@@ -32,9 +32,10 @@ export type SetupPlan = {
 };
 
 /**
- * Plans every local write before the exchange, since the approved keys are
+ * Plans every local write before the exchange, since the approved key is
  * returned once. A target setup will not write is planned as its private
- * file or a skip, and `plannedNotes` announces it before approval.
+ * file, a manual add, or a skip, and `plannedNotes` announces it before
+ * approval.
  */
 export async function plan(input: {
   environment: SetupEnvironment;
@@ -53,13 +54,12 @@ export async function plan(input: {
       homeDir: environment.homeDir,
       env: environment.env,
       run: environment.run,
-      paths,
     }),
   ]);
   return { env, example, mcp, appEnv: appEnvFor(input.apiUrl) };
 }
 
-/** What setup will skip or save elsewhere, said before approval. */
+/** What setup will skip, keep, or save elsewhere, said before approval. */
 export function plannedNotes(setupPlan: SetupPlan): string[] {
   return [
     plannedEnvNote(setupPlan.env, setupPlan.appEnv),

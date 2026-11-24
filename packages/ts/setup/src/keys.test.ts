@@ -11,12 +11,12 @@ import {
   type MockApiOptions,
 } from "./testing/mock-api.js";
 import {
-  approvedWithKeys,
+  approvedWithKey,
   cursorEntry,
   EXISTING_KEY,
   INGEST_KEY,
-  MCP_KEY,
   printed,
+  PRODUCTION_MCP_ENTRY,
   PROJECT_ID,
   rejection,
   runsAsRoot,
@@ -49,7 +49,6 @@ describe("existing keys", () => {
         approved({
           project_id: PROJECT_ID,
           agent_name: "support-bot",
-          mcp_key: MCP_KEY,
         }),
       ],
     });
@@ -75,7 +74,6 @@ describe("existing keys", () => {
         approved({
           project_id: PROJECT_ID,
           agent_name: "support-bot",
-          mcp_key: MCP_KEY,
         }),
       ],
     });
@@ -99,7 +97,6 @@ describe("existing keys", () => {
           approved({
             project_id: PROJECT_ID,
             agent_name: "support-bot",
-            mcp_key: MCP_KEY,
           }),
         ],
       });
@@ -113,9 +110,9 @@ describe("existing keys", () => {
       expect(printed(run)).toContain(
         `Add LEMMA_BASE_URL=${run.api.url} where the app loads its environment`,
       );
-      expect((await cursorEntry(run.home)).headers.Authorization).toBe(
-        `Bearer ${MCP_KEY}`,
-      );
+      expect(await cursorEntry(run.home)).toEqual({
+        url: `${run.api.url}/mcp/`,
+      });
       expect(printed(run)).not.toContain("Lemma setup finished.");
     },
   );
@@ -132,7 +129,6 @@ describe("existing keys", () => {
           approved({
             project_id: PROJECT_ID,
             agent_name: "support-bot",
-            mcp_key: MCP_KEY,
           }),
         ],
       });
@@ -146,9 +142,7 @@ describe("existing keys", () => {
       expect(printed(run)).toContain(
         "Remove LEMMA_BASE_URL from .env, so the kept key reaches the API it belongs to.",
       );
-      expect((await cursorEntry(run.home)).headers.Authorization).toBe(
-        `Bearer ${MCP_KEY}`,
-      );
+      expect(await cursorEntry(run.home)).toEqual(PRODUCTION_MCP_ENTRY);
       expect(printed(run)).not.toContain("Lemma setup finished.");
     },
   );
@@ -180,7 +174,7 @@ describe("existing keys", () => {
     async (_case, answer) => {
       const run = await withEnv(envWithKey, {
         keys: answer ? { [EXISTING_KEY]: answer } : {},
-        polls: [approvedWithKeys],
+        polls: [approvedWithKey],
       });
       await run.start();
       expect(run.api.startBody()).not.toHaveProperty(
@@ -207,111 +201,57 @@ describe("existing keys", () => {
     expect(printed(run)).toContain("has no usable LEMMA_PROJECT_ID");
   });
 
-  async function withCursorKey(
-    apiOptions: MockApiOptions,
-    authorization = `Bearer ${EXISTING_MCP_KEY}`,
-  ) {
+  async function withCursorServer(lemma: Record<string, unknown>) {
     return setUp({
-      api: apiOptions,
+      api: { polls: [approvedWithKey] },
+      interactive: true,
       prepare: async (_app, home) => {
         const path = cursorConfigPath({ homeDir: home, env: {} });
         await mkdir(dirname(path), { recursive: true });
-        await writeFile(
-          path,
-          JSON.stringify({
-            mcpServers: {
-              lemma: {
-                url: "https://api.uselemma.ai/mcp/",
-                headers: { Authorization: authorization },
-              },
-            },
-          }),
-        );
+        await writeFile(path, JSON.stringify({ mcpServers: { lemma } }));
       },
     });
   }
 
-  it("reports and keeps an MCP key /auth/key describes as an organization admin key, checking both keys before starting", async () => {
-    const run = await setUp({
-      api: {
-        keys: {
-          [EXISTING_MCP_KEY]: keyDescription(TENANT_ID, null, "admin"),
-          [EXISTING_KEY]: keyDescription(TENANT_ID, PROJECT_ID, "ingest"),
-        },
-        polls: [
-          approved({ project_id: PROJECT_ID, agent_name: "support-bot" }),
-        ],
-      },
-      prepare: async (app, home) => {
-        await writeFile(join(app, ".env"), envWithKey);
-        const path = cursorConfigPath({ homeDir: home, env: {} });
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(
-          path,
-          JSON.stringify({
-            mcpServers: {
-              lemma: {
-                url: "https://x/mcp/",
-                headers: { Authorization: `Bearer ${EXISTING_MCP_KEY}` },
-              },
-            },
-          }),
-        );
-      },
-    });
-    await run.start();
-    expect(run.api.paths()).toEqual([
-      "GET /auth/key",
-      "GET /auth/key",
-      "POST /setup/device-authorizations",
-    ]);
-    expect(run.api.startBody()).toMatchObject({
-      existing_ingest_key_project_id: PROJECT_ID,
-      existing_mcp_key_tenant_id: TENANT_ID,
-    });
-    await expect(run.wait()).resolves.toEqual({ status: "approved" });
-    expect((await cursorEntry(run.home)).headers.Authorization).toBe(
-      `Bearer ${EXISTING_MCP_KEY}`,
-    );
-    expect(printed(run)).toContain("kept Cursor's `lemma` server");
-    expect(printed(run)).not.toContain(EXISTING_MCP_KEY);
-  });
-
   it.each([
-    ["the key is not an admin key", keyDescription(TENANT_ID, null, "read")],
-    [
-      "the admin key is limited to one project",
-      keyDescription(TENANT_ID, PROJECT_ID, "admin"),
-    ],
-    ["Lemma rejects the key", undefined],
-  ] as const)("does not report the MCP key when %s", async (_case, answer) => {
-    const run = await withCursorKey({
-      keys: answer ? { [EXISTING_MCP_KEY]: answer } : {},
-      polls: [approvedWithKeys],
-    });
-    await run.start();
-    expect(run.api.startBody()).not.toHaveProperty(
-      "existing_mcp_key_tenant_id",
-    );
-    expect(printed(run)).toContain(
-      "as an organization admin key. Setup replaces it after approval.",
-    );
-    await run.wait();
-    expect((await cursorEntry(run.home)).headers.Authorization).toBe(
-      `Bearer ${MCP_KEY}`,
-    );
-  });
+    ["a literal key", `Bearer ${EXISTING_MCP_KEY}`],
+    ["an env reference", "Bearer ${LEMMA_MCP_KEY}"],
+  ])(
+    "leaves a lemma server that sends %s as it is, never asking Lemma about it or signing in",
+    async (_case, authorization) => {
+      const lemma = {
+        url: "https://api.uselemma.ai/mcp/",
+        headers: { Authorization: authorization },
+      };
+      const run = await withCursorServer(lemma);
+      await run.start();
+      expect(run.api.paths()).toEqual(["POST /setup/device-authorizations"]);
+      expect(run.api.startBody()).not.toHaveProperty(
+        "existing_mcp_key_tenant_id",
+      );
+      expect(printed(run)).toContain(
+        "MCP: Cursor's `lemma` server sends an API key, so setup leaves it as it is.",
+      );
+      await expect(run.wait()).resolves.toEqual({ status: "approved" });
+      expect(await cursorEntry(run.home)).toEqual(lemma);
+      expect(printed(run)).toContain(
+        "MCP: kept Cursor's `lemma` server, which sends an API key. To sign in as yourself instead, remove that server and run setup again.",
+      );
+      expect(run.interactiveCalls).toEqual([]);
+      expect(printed(run)).not.toContain("sign in to Lemma as yourself");
+      expect(printed(run)).not.toContain(EXISTING_MCP_KEY);
+    },
+  );
 
-  it("does not ask Lemma about an MCP key it cannot read, and replaces it", async () => {
-    const run = await withCursorKey(
-      { polls: [approvedWithKeys] },
-      "Bearer ${LEMMA_MCP_KEY}",
-    );
+  it("replaces a lemma server that sends no key, and signs in to it", async () => {
+    const run = await withCursorServer({ url: "https://old/mcp/" });
     await run.start();
     expect(run.api.paths()).toEqual(["POST /setup/device-authorizations"]);
-    expect(printed(run)).toContain(
-      "as an organization admin key. Setup replaces it after approval.",
-    );
+    await expect(run.wait()).resolves.toEqual({ status: "approved" });
+    expect(await cursorEntry(run.home)).toEqual(PRODUCTION_MCP_ENTRY);
+    expect(run.interactiveCalls).toEqual([
+      { argv: ["agent", "mcp", "login", "lemma"], cwd: run.app },
+    ]);
   });
 
   it("asks nothing for a coding agent without a documented config", async () => {

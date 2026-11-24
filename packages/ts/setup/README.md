@@ -1,6 +1,6 @@
 # @uselemma/setup
 
-Connects an app and its coding agent to [Lemma](https://uselemma.ai) through one browser approval. The approval picks or creates the Lemma project; the command writes a project-limited ingest key to the app's `.env` and an organization admin key to the coding agent's MCP config.
+Connects an app and its coding agent to [Lemma](https://uselemma.ai) through one browser approval. The approval picks or creates the Lemma project; the command writes a project-limited ingest key to the app's `.env`, adds Lemma's MCP server to the coding agent's MCP config without a key, and runs or prints the agent's sign-in, so the agent connects as the person with their organization role.
 
 Coding agents run it when they follow the [`lemma-setup` skill](https://github.com/uselemma/lemma/blob/main/skills/lemma-setup/SKILL.md) from the setup prompt in Lemma. `start` begins the approval and returns; `wait` checks for it for up to 90 seconds and exits with 5 while it is still pending:
 
@@ -12,7 +12,7 @@ npx --yes @uselemma/setup@0.1.0 start \
 npx --yes @uselemma/setup@0.1.0 wait
 ```
 
-Flags, the files written for each coding agent, key reuse, and exit codes: [Setup command and skill](https://docs.uselemma.ai/reference/setup-command).
+Flags, the files written for each coding agent, the sign-in, key reuse, and exit codes: [Setup command and skill](https://docs.uselemma.ai/reference/setup-command).
 
 ## Development
 

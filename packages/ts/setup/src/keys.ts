@@ -4,7 +4,6 @@ import {
   PROJECT_ID_VARIABLE,
   type ExistingIngestKey,
 } from "./env-file.js";
-import type { ExistingMcpKey } from "./mcp/formats.js";
 
 type KeyCheck = { verified: string | null; note?: string };
 
@@ -40,40 +39,6 @@ export async function checkIngestKey(input: {
         verified: null,
         note: `.env: Lemma did not confirm ${API_KEY_VARIABLE} as an ingest key limited to ${PROJECT_ID_VARIABLE}. Setup replaces both after approval.`,
       };
-    }
-  }
-}
-
-/**
- * The organization the coding agent's MCP key is reported for: only when
- * Lemma confirms an admin key that is not limited to one project, the key
- * the MCP server needs.
- */
-export async function checkMcpKey(input: {
-  existing: ExistingMcpKey;
-  codingAgentName: string;
-  apiUrl: LemmaApiUrl;
-  fetch: Fetch;
-}): Promise<KeyCheck> {
-  const replaced = `MCP: Lemma did not confirm the key in ${input.codingAgentName}'s \`lemma\` server as an organization admin key. Setup replaces it after approval.`;
-  switch (input.existing.kind) {
-    case "none":
-      return { verified: null };
-    case "unusable":
-      return { verified: null, note: replaced };
-    case "key": {
-      const key = await describeApiKey(
-        input.apiUrl,
-        input.existing.key,
-        input.fetch,
-      );
-      if (key?.scope === "admin" && key.projectId === null) {
-        return {
-          verified: key.tenantId,
-          note: `MCP: ${input.codingAgentName}'s \`lemma\` server has an admin key for organization ${key.tenantId}. Setup keeps it if you approve in that organization.`,
-        };
-      }
-      return { verified: null, note: replaced };
     }
   }
 }

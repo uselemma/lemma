@@ -81,7 +81,7 @@ function ended(
   };
 }
 
-/** Polls until the approval is exchanged for keys, the code ends, or this run's budget is spent. */
+/** Polls until the approval is exchanged, the code ends, or this run's budget is spent. */
 export async function waitForApproval(input: WaitInput): Promise<WaitOutcome> {
   let interval = boundedInterval(input.schedule.interval);
   let nextPollAt = input.schedule.nextPollAt;

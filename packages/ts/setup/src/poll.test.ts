@@ -16,7 +16,6 @@ const APPROVAL: Approval = {
   projectId: PROJECT_ID,
   agentName: "support-bot",
   ingest: { kind: "new", key: "lemma_sk_ingest_0123456789abcdef" },
-  mcp: { kind: "kept" },
 };
 const APPROVED: TokenPoll = { status: "approved", approval: APPROVAL };
 

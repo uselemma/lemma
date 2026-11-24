@@ -3,15 +3,14 @@ import { join } from "node:path";
 
 import type { RunCommand } from "../command.js";
 import { gitRoot } from "../git.js";
-import type { Placement, PrivateTarget } from "../placement.js";
+import type { Placement } from "../placement.js";
 import { isRecord } from "../shared.js";
+import { shellWord, shownCommand } from "../shell.js";
 import {
-  existingKeyOf,
-  headersOf,
   MCP_SERVER_NAME,
   parseJsonObject,
+  sendsKey,
   UnsupportedConfigError,
-  type ExistingMcpKey,
 } from "./formats.js";
 import { configured, type ConfigLocationInput } from "./paths.js";
 
@@ -26,10 +25,11 @@ export function claudeConfigPath({
 /**
  * One Claude Code server entry, as `claude mcp add-json` takes it: Claude
  * Code reads an entry without `type` as a stdio server and skips one that
- * has a `url`.
+ * has a `url`. Without a header, Claude Code signs in with OAuth when the
+ * server answers 401.
  */
-function claudeCodeEntry(url: string, apiKey: string): Record<string, unknown> {
-  return { type: "http", url, headers: headersOf(apiKey) };
+function claudeCodeEntry(url: string): Record<string, unknown> {
+  return { type: "http", url };
 }
 
 /** The scope `claude mcp add-json` writes to, which stays out of the repository. */
@@ -42,6 +42,12 @@ export type ClaudeLocalScope = {
    */
   projectRoot: string;
   claudeConfig: string;
+  /**
+   * The local-scope `lemma` entry planning read, which sends no key: what a
+   * failed replace restores, and what a printed command removes first. Null
+   * when there is none, or when Claude Code's config could not be read.
+   */
+  previousEntry: Record<string, unknown> | null;
 };
 
 /** Claude Code's part of a `claude-cli` target: what placing with the command needs. */
@@ -49,16 +55,16 @@ export type ClaudeCliPlan = {
   kind: "claude-cli";
   destination: ClaudeLocalScope;
   reload: string;
-  /** The key the local-scope `lemma` entry holds. */
-  existing: ExistingMcpKey;
-  /** The local-scope `lemma` entry as it is, restored if replacing it fails. */
-  previousEntry: Record<string, unknown> | null;
 };
 
-/** Claude Code's plan: the command, or the private file and why. */
+/**
+ * Claude Code's plan: the command, a manual add and why, or nothing for a
+ * local-scope `lemma` entry that sends an API key.
+ */
 export type ClaudeCodePlan =
   | ClaudeCliPlan
-  | (PrivateTarget & { destination: ClaudeLocalScope });
+  | { kind: "manual"; reason: string; destination: ClaudeLocalScope }
+  | { kind: "kept" };
 
 type LocalEntry =
   | { kind: "not-editable"; reason: string }
@@ -69,7 +75,9 @@ type LocalEntry =
  * config holds none; one setup cannot read at all fails `start`, like the
  * other agents' configs.
  */
-async function claudeLocalEntry(scope: ClaudeLocalScope): Promise<LocalEntry> {
+async function claudeLocalEntry(
+  scope: Pick<ClaudeLocalScope, "claudeConfig" | "projectRoot">,
+): Promise<LocalEntry> {
   let contents: string;
   try {
     contents = await readFile(scope.claudeConfig, "utf8");
@@ -97,9 +105,10 @@ async function claudeLocalEntry(scope: ClaudeLocalScope): Promise<LocalEntry> {
 }
 
 /**
- * Plans Claude Code's target: the `claude` command in the project's local
- * scope, or the private file when the command is missing or Claude Code's
- * config cannot be read safely.
+ * Plans Claude Code's target: nothing when the local `lemma` entry sends a
+ * key, which needs no `claude` command to read; otherwise the command in the
+ * project's local scope, or a manual add when the command is missing or
+ * Claude Code's config cannot be read safely.
  */
 export async function planClaudeCode(
   input: ConfigLocationInput & {
@@ -112,71 +121,84 @@ export async function planClaudeCode(
     gitRoot(input.appDir, input.run),
     input.run("claude", ["--version"], input.appDir),
   ]);
+  const projectRoot = root ?? input.appDir;
+  const claudeConfig = claudeConfigPath(input);
+  const local = await claudeLocalEntry({ claudeConfig, projectRoot });
+  // `headersHelper` is Claude Code's command that produces the headers.
+  if (
+    local.kind === "read" &&
+    sendsKey(local.entry, ["headers"], ["headersHelper"])
+  ) {
+    return { kind: "kept" };
+  }
   const destination: ClaudeLocalScope = {
     kind: "claude-local-scope",
-    projectRoot: root ?? input.appDir,
-    claudeConfig: claudeConfigPath(input),
+    projectRoot,
+    claudeConfig,
+    previousEntry: local.kind === "read" ? local.entry : null,
   };
   if (version.code !== 0) {
     return {
-      kind: "private",
+      kind: "manual",
       destination,
       reason: "the `claude` command is not on PATH",
     };
   }
-  const local = await claudeLocalEntry(destination);
   if (local.kind === "not-editable") {
-    return { kind: "private", destination, reason: local.reason };
+    return { kind: "manual", destination, reason: local.reason };
   }
-  return {
-    kind: "claude-cli",
-    destination,
-    reload: input.reload,
-    existing: existingKeyOf(local.entry, "headers"),
-    previousEntry: local.entry,
-  };
+  return { kind: "claude-cli", destination, reload: input.reload };
 }
 
 export function claudeScopeName(scope: ClaudeLocalScope): string {
   return `Claude Code's local scope for ${scope.projectRoot}`;
 }
 
-/** The private file's contents: the bare entry `claude mcp add-json` takes. */
-export function claudeSavedEntry(url: string, apiKey: string): string {
-  return `${JSON.stringify(claudeCodeEntry(url, apiKey), null, 2)}\n`;
-}
+/** The `claude mcp remove` arguments setup runs, and prints for a manual replace. */
+const REMOVE_ARGS = ["mcp", "remove", MCP_SERVER_NAME, "--scope", "local"];
 
-/** Quoted for a POSIX shell, so a printed command runs as shown for any path. */
-function shellQuoted(value: string): string {
-  return `'${value.split("'").join(`'\\''`)}'`;
-}
-
-/**
- * How to add the private file's entry. The command reads the key from the
- * file, so it never appears in the output, shell history, or a coding
- * agent's transcript. Every step waits on that read, so running it again
- * after the file is gone changes nothing. Like setup, it removes an
- * existing `lemma` server first, since Claude Code refuses a second one,
- * and it deletes the file once the add succeeds. The subshell keeps `cd`
- * and `entry` out of the caller's shell.
- */
-export function claudeAddSavedEntryLines(
-  scope: ClaudeLocalScope,
-  savedPath: string,
-): string[] {
-  const file = shellQuoted(savedPath);
+/** The `claude mcp add-json` arguments setup runs, and prints for a manual add. */
+function addJsonArgs(entry: Record<string, unknown>): string[] {
   return [
-    `Add it to ${claudeScopeName(scope)}, not the committed \`.mcp.json\`, with this command. It replaces any \`${MCP_SERVER_NAME}\` server there, deletes that file once the new one is added, and changes nothing once that file is gone:`,
-    `(cd ${shellQuoted(scope.projectRoot)} && entry="$(cat ${file})" && { claude mcp remove ${MCP_SERVER_NAME} --scope local >/dev/null 2>&1; claude mcp add-json ${MCP_SERVER_NAME} "$entry" --scope local; } && rm ${file})`,
-    `Or, with Claude Code closed, add it as \`projects[${JSON.stringify(scope.projectRoot)}].mcpServers.${MCP_SERVER_NAME}\` in ${scope.claudeConfig}, then delete that file.`,
+    "mcp",
+    "add-json",
+    MCP_SERVER_NAME,
+    JSON.stringify(entry),
+    "--scope",
+    "local",
   ];
 }
 
-function redacted(text: string, secrets: readonly string[]): string {
-  return secrets.reduce(
-    (result, secret) => result.split(secret).join("[redacted]"),
-    text,
-  );
+/**
+ * How to add the `lemma` server by hand: the commands setup runs, from the
+ * project root, or the entry in Claude Code's config. With a local `lemma`
+ * entry planning read, which sends no key, the command removes it first,
+ * since Claude Code refuses a second entry of the same name; that removal
+ * may find nothing, after a failed restore, so its failure is ignored. The
+ * braces keep a failed `cd` from running either command elsewhere, and the
+ * subshell keeps `cd` out of the caller's shell.
+ */
+export function claudeAddCommandLines(
+  scope: ClaudeLocalScope,
+  url: string,
+): string[] {
+  const entry = claudeCodeEntry(url);
+  const root = shellWord(scope.projectRoot);
+  const add = shownCommand("claude", addJsonArgs(entry));
+  const server = `\`${MCP_SERVER_NAME}\` server`;
+  const scopeName = claudeScopeName(scope);
+  const [heading, command] =
+    scope.previousEntry === null
+      ? [`Add the ${server} to ${scopeName}`, `(cd ${root} && ${add})`]
+      : [
+          `Replace any ${server} in ${scopeName}`,
+          `(cd ${root} && { ${shownCommand("claude", REMOVE_ARGS)} >/dev/null 2>&1; ${add}; })`,
+        ];
+  return [
+    `${heading}, not the committed \`.mcp.json\`, with this command:`,
+    command,
+    `Or, with Claude Code closed, set \`projects[${JSON.stringify(scope.projectRoot)}].mcpServers.${MCP_SERVER_NAME}\` to ${JSON.stringify(entry)} in ${scope.claudeConfig}.`,
+  ];
 }
 
 /**
@@ -189,35 +211,25 @@ function redacted(text: string, secrets: readonly string[]): string {
 export async function placeWithClaude(
   target: ClaudeCliPlan,
   url: string,
-  apiKey: string,
   run: RunCommand,
 ): Promise<Placement> {
-  const { existing } = target;
-  const secrets = [apiKey, ...(existing.kind === "key" ? [existing.key] : [])];
   const outputOf = (result: { stdout: string; stderr: string }) =>
-    redacted(`${result.stdout}${result.stderr}`, secrets).trim();
+    `${result.stdout}${result.stderr}`.trim();
   const { projectRoot } = target.destination;
   const claude = (args: string[]) => run("claude", args, projectRoot);
-  // The same command the private file's instructions print.
+  // The same command a manual add prints.
   const addJson = (entry: Record<string, unknown>) =>
-    claude([
-      "mcp",
-      "add-json",
-      MCP_SERVER_NAME,
-      JSON.stringify(entry),
-      "--scope",
-      "local",
-    ]);
+    claude(addJsonArgs(entry));
   const placed = (verb: string): Placement => ({
     placed: true,
     lines: [
       `MCP: ${verb} the \`${MCP_SERVER_NAME}\` server in Claude Code for ${projectRoot} (local scope).`,
-      `MCP: ${target.reload}.`,
     ],
   });
 
-  if (target.previousEntry === null) {
-    const added = await addJson(claudeCodeEntry(url, apiKey));
+  const { previousEntry } = target.destination;
+  if (previousEntry === null) {
+    const added = await addJson(claudeCodeEntry(url));
     return added.code === 0
       ? placed("added")
       : {
@@ -225,22 +237,16 @@ export async function placeWithClaude(
           reason: `Claude Code did not add the Lemma MCP server (${outputOf(added)})`,
         };
   }
-  const removed = await claude([
-    "mcp",
-    "remove",
-    MCP_SERVER_NAME,
-    "--scope",
-    "local",
-  ]);
+  const removed = await claude(REMOVE_ARGS);
   if (removed.code !== 0) {
     return {
       placed: false,
       reason: `Claude Code did not remove its existing \`${MCP_SERVER_NAME}\` server, so that server is unchanged (${outputOf(removed)})`,
     };
   }
-  const added = await addJson(claudeCodeEntry(url, apiKey));
+  const added = await addJson(claudeCodeEntry(url));
   if (added.code === 0) return placed("replaced");
-  const restored = await addJson(target.previousEntry);
+  const restored = await addJson(previousEntry);
   return {
     placed: false,
     reason: `Claude Code did not accept the new Lemma MCP server (${outputOf(added)}); ${restored.code === 0 ? "setup restored the previous" : "setup could not restore the previous"} \`${MCP_SERVER_NAME}\` server`,

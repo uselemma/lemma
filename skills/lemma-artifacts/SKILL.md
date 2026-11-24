@@ -49,12 +49,13 @@ those words first, every time.
 4. **Never modify the user's code.** You are reading their repository to
    describe it. No edits, no new files, no reformatting — not even to a
    README, and not to "fix" something you noticed. Mention it and move on.
-5. **Never touch the key.** You reach Lemma through the `lemma` server in
-   your MCP config, which holds the key in its `Authorization` header or reads
-   it from `LEMMA_MCP_API_KEY`. Never read, print, echo, or write the key's
-   value into any file, tracked or not, and never ask the user to paste it
-   into this conversation. A placeholder line such as `LEMMA_MCP_API_KEY=` in
-   an env example is fine. If the key is missing, see [When Lemma refuses the connection](#when-lemma-refuses-the-connection).
+5. **Never touch the credential.** You reach Lemma through the `lemma` server
+   in your MCP config, either signed in as the user with OAuth or with a key
+   in its `Authorization` header or read from `LEMMA_MCP_API_KEY`. Never read,
+   print, echo, or write a key or token into any file, tracked or not, and
+   never ask the user to paste one into this conversation. A placeholder line
+   such as `LEMMA_MCP_API_KEY=` in an env example is fine. If Lemma refuses
+   the connection, see [When Lemma refuses the connection](#when-lemma-refuses-the-connection).
 6. **Never call `regenerate_project_artifacts`.** That starts Lemma's own
    trace-driven learning run, which is a different thing costing real time and
    money, and it is not how this skill writes.
@@ -103,19 +104,25 @@ Read all three before acting. Run them in that order.
 
 ## When Lemma refuses the connection
 
-A `401` from any Lemma tool means the key your `lemma` MCP server sends is
-missing, expired, or revoked. It is a thing for the user to fix, never a thing
-to work around.
+A `401` from any Lemma tool means your `lemma` MCP server is not signed in,
+its sign-in ended (the user left the organization, or the connection was
+revoked), or the key it sends is missing, expired, or revoked. It is a thing
+for the user to fix, never a thing to work around.
 
-Stop there. Write nothing, offer nothing, and ask the user to replace the key
-wherever their `lemma` server gets it: its `Authorization` header, or
-`LEMMA_MCP_API_KEY` when the header refers to that variable. Running Lemma
-setup again replaces it, and so does a new admin key from
-**Developer → API keys** in your organization settings. Then run you again.
+Stop there. Write nothing, offer nothing, and ask the user to fix it the way
+their `lemma` server connects:
 
-Do not ask them to paste the key to you. Do not read it back out of a file or
-the environment to check it. Do not retry the call until they say the key is
-replaced.
+- **No key in its config**: sign in again with your harness's sign-in for
+  that server, such as `claude mcp login lemma` or `/mcp` in Claude Code, or
+  `codex mcp login lemma`.
+- **A key**: replace it wherever the server gets it, its `Authorization`
+  header or `LEMMA_MCP_API_KEY` when the header refers to that variable, with
+  a new admin key from **Developer → API keys** in your organization
+  settings.
+
+Then run you again. Do not ask them to paste a key to you. Do not read it back
+out of a file or the environment to check it. Do not retry the call until they
+say they signed in or replaced the key.
 
 ## When this is not the right skill
 

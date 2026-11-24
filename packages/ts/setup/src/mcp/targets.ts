@@ -5,20 +5,11 @@ import { CODING_AGENTS } from "../agents.js";
 import type { LemmaApiUrl } from "../api.js";
 import type { RunCommand } from "../command.js";
 import { failureReason } from "../errors.js";
-import {
-  inspectFile,
-  othersCanRead,
-  othersCanReadWarning,
-  PRIVATE_FILE_MODE,
-  writeFileAtomic,
-  writePrivateFile,
-} from "../files.js";
+import { inspectFile, PRIVATE_FILE_MODE, writeFileAtomic } from "../files.js";
 import type { HarnessId } from "../harness.js";
-import type { Placement, PrivateSave, PrivateTarget } from "../placement.js";
-import type { SetupPaths } from "../setup-paths.js";
+import type { Placement } from "../placement.js";
 import {
-  claudeAddSavedEntryLines,
-  claudeSavedEntry,
+  claudeAddCommandLines,
   claudeScopeName,
   placeWithClaude,
   planClaudeCode,
@@ -27,57 +18,60 @@ import {
 } from "./claude-code.js";
 import {
   MCP_SERVER_NAME,
-  NO_EXISTING_KEY,
   UnsupportedConfigError,
-  type ExistingMcpKey,
   type McpConfigFormat,
   type ParsedMcpConfig,
 } from "./formats.js";
 import type { ConfigLocationInput } from "./paths.js";
+import { signInInstruction, type PlannedSignIn } from "./sign-in.js";
 
 /** An agent's MCP servers, which take a new config in `format`. */
 type McpServersDestination = { kind: "mcp-servers"; format: McpConfigFormat };
 
 /**
- * Where the user adds the private file's entry, which also decides what the
- * file holds: a new config in `format`, or Claude Code's bare entry.
+ * Where the person adds the `lemma` server when setup cannot, which also
+ * decides what setup prints: a config in `format`, or Claude Code's command.
  */
-type SavedEntryDestination = McpServersDestination | ClaudeLocalScope;
+type ManualDestination = McpServersDestination | ClaudeLocalScope;
 
-/** What every MCP target carries, set once at planning. */
-export type McpTargetBase = {
+/** What every target setup writes or prints carries, set once at planning. */
+type McpTargetBase = {
   codingAgentName: string;
-  /** The key the target already holds for Lemma. */
-  existing: ExistingMcpKey;
-  /**
-   * The private file the key goes to: the plan for a private target, and
-   * the fallback when another target's write fails.
-   */
-  fallbackPath: string;
-  destination: SavedEntryDestination;
+  destination: ManualDestination;
+  signIn: PlannedSignIn;
 };
 
 type ClaudeCliTarget = McpTargetBase & ClaudeCliPlan;
 
 type McpFileTarget = McpTargetBase & {
   kind: "file";
-  /** The config's format, which the private file shares. */
+  /** The config's format, which the printed entry shares. */
   destination: McpServersDestination;
   path: string;
   reload: string;
 };
 
 /**
- * Where the admin key goes, decided before the handshake starts; `private`
- * announces the private file up front.
+ * A target setup does not write: it prints the `lemma` server for the person
+ * to add. `reason` is a clause the line that prints it ends.
  */
+type ManualTarget = McpTargetBase & { kind: "manual"; reason: string };
+
+/**
+ * An agent whose `lemma` server already sends an API key: setup leaves it as
+ * it is, since API keys keep working for MCP, and it needs no sign-in.
+ */
+type KeptTarget = { kind: "kept"; codingAgentName: string };
+
+/** Where the `lemma` server goes, decided before the handshake starts. */
 export type McpTarget =
   | ClaudeCliTarget
   | McpFileTarget
-  | (McpTargetBase & PrivateTarget);
+  | ManualTarget
+  | KeptTarget;
 
-/** A target setup writes the admin key into. */
-export type PlaceableMcpTarget = Exclude<McpTarget, PrivateTarget>;
+/** A target setup writes the `lemma` server into. */
+export type PlaceableMcpTarget = ClaudeCliTarget | McpFileTarget;
 
 /** The Lemma MCP server's URL for a Lemma API URL. */
 export function mcpServerUrl(apiUrl: LemmaApiUrl): string {
@@ -124,118 +118,91 @@ function notEditableReason(path: string, why: string): string {
   return `${path} ${why}, so setup does not edit it`;
 }
 
-/** The private file for one destination: what it holds, and where and how the user adds it. */
-type SavedEntry = {
-  fileExtension: string;
-  contents(url: string, apiKey: string): string;
-  /** Where the entry goes, as the planned note and the saved lines both name it. */
-  destinationName: string;
-  addLines(savedPath: string): string[];
-};
-
-function savedEntryOf(
-  destination: SavedEntryDestination,
-  codingAgentName: string,
-): SavedEntry {
-  if (destination.kind === "claude-local-scope") {
-    return {
-      fileExtension: "json",
-      contents: claudeSavedEntry,
-      destinationName: claudeScopeName(destination),
-      addLines: (savedPath) => claudeAddSavedEntryLines(destination, savedPath),
-    };
-  }
-  const destinationName = `${codingAgentName}'s MCP servers`;
-  return {
-    fileExtension: destination.format.fileExtension,
-    contents: (url, apiKey) =>
-      destination.format.parse(null).set(url, apiKey).contents,
-    destinationName,
-    addLines: () => [`Add it to ${destinationName}, then delete that file.`],
-  };
+/** Where the person adds the server by hand, as the planned note and the printed lines both name it. */
+function destinationName(target: PlaceableMcpTarget | ManualTarget): string {
+  return target.destination.kind === "claude-local-scope"
+    ? claudeScopeName(target.destination)
+    : `${target.codingAgentName}'s MCP servers`;
 }
 
 /**
- * Picks the MCP target and reads what it already holds. A config whose
- * contents or kind setup cannot edit is planned as the private file; one it
- * cannot read at all (for example `EACCES`) fails `start`.
+ * Picks the MCP target and reads what it already holds. A `lemma` server
+ * that sends a key is kept; a config whose contents or kind setup cannot
+ * edit is planned as a manual add; one it cannot read at all (for example
+ * `EACCES`) fails `start`.
  */
 export async function planMcpTarget(
   input: ConfigLocationInput & {
     harness: HarnessId;
     appDir: string;
     run: RunCommand;
-    paths: SetupPaths;
   },
 ): Promise<McpTarget> {
   const agent = CODING_AGENTS[input.harness];
-  const baseFor = <Destination extends SavedEntryDestination>(
-    destination: Destination,
-  ): McpTargetBase & { destination: Destination } => ({
-    codingAgentName: agent.codingAgentName,
-    existing: NO_EXISTING_KEY,
-    fallbackPath: input.paths.savedMcpEntry(
-      input.harness,
-      savedEntryOf(destination, agent.codingAgentName).fileExtension,
-    ),
-    destination,
-  });
+  const { codingAgentName } = agent;
+  const kept: KeptTarget = { kind: "kept", codingAgentName };
+  const signIn = (cwd: string): PlannedSignIn => ({ ...agent.signIn, cwd });
+  const serversBase = (format: McpConfigFormat) => {
+    const destination: McpServersDestination = { kind: "mcp-servers", format };
+    return { codingAgentName, destination, signIn: signIn(input.appDir) };
+  };
   switch (agent.mcp.kind) {
     case "claude-cli": {
       const plan = await planClaudeCode({ ...input, reload: agent.mcp.reload });
-      return { ...baseFor(plan.destination), ...plan };
+      if (plan.kind === "kept") return kept;
+      return {
+        ...plan,
+        codingAgentName,
+        signIn: signIn(plan.destination.projectRoot),
+      };
     }
     case "file": {
-      const base = baseFor({ kind: "mcp-servers", format: agent.mcp.format });
+      const base = serversBase(agent.mcp.format);
       const path = agent.mcp.path(input);
-      const config = await readMcpConfig(path, base.destination.format);
-      return config.kind === "not-editable"
-        ? { ...base, kind: "private", reason: config.reason }
-        : {
-            ...base,
-            kind: "file",
-            path,
-            reload: agent.mcp.reload,
-            existing: config.parsed.existing,
-          };
+      const config = await readMcpConfig(path, agent.mcp.format);
+      if (config.kind === "not-editable") {
+        return { ...base, kind: "manual", reason: config.reason };
+      }
+      if (config.parsed.sendsKey) return kept;
+      return { ...base, kind: "file", path, reload: agent.mcp.reload };
     }
     case "manual":
       return {
-        ...baseFor({ kind: "mcp-servers", format: agent.mcp.format }),
-        kind: "private",
-        reason: `setup has no documented MCP config format for ${agent.codingAgentName}`,
+        ...serversBase(agent.mcp.format),
+        kind: "manual",
+        reason: `setup has no documented MCP config format for ${codingAgentName}`,
       };
   }
 }
 
-/** The line announcing that the admin key will go to its private file. */
+/** What setup will leave alone or print, said before approval. */
 export function plannedMcpNote(target: McpTarget): string | null {
-  return target.kind === "private"
-    ? `MCP: ${target.reason}. After approval, setup saves the Lemma server's entry to ${target.fallbackPath} (readable only by you) for you to add to ${savedEntryOf(target.destination, target.codingAgentName).destinationName}.`
-    : null;
+  switch (target.kind) {
+    case "manual":
+      return `MCP: ${target.reason}. After approval, setup prints the \`${MCP_SERVER_NAME}\` server for you to add to ${destinationName(target)}.`;
+    case "kept":
+      return `MCP: ${target.codingAgentName}'s \`${MCP_SERVER_NAME}\` server sends an API key, so setup leaves it as it is.`;
+    case "claude-cli":
+    case "file":
+      return null;
+  }
 }
 
-export function keptMcpLines(target: McpTarget): string[] {
-  return [
-    `MCP: kept ${target.codingAgentName}'s \`${MCP_SERVER_NAME}\` server; its key is already an admin key for this organization.`,
-  ];
-}
-
-export function missingMcpLine(target: McpTarget): string {
-  return `MCP: Lemma returned no admin key, and ${target.codingAgentName}'s MCP config holds none it confirmed. Run \`start\` again.`;
+export function keptMcpLine(codingAgentName: string): string {
+  return `MCP: kept ${codingAgentName}'s \`${MCP_SERVER_NAME}\` server, which sends an API key. To sign in as yourself instead, remove that server and run setup again.`;
 }
 
 async function placeInFile(
   target: McpFileTarget,
   url: string,
-  apiKey: string,
 ): Promise<Placement> {
   const config = await readMcpConfig(target.path, target.destination.format);
   if (config.kind === "not-editable") {
     return { placed: false, reason: config.reason };
   }
-  const result = config.parsed.set(url, apiKey);
+  const result = config.parsed.set(url);
   await mkdir(dirname(target.path), { recursive: true });
+  // A new config is owner-only: the agent keeps other servers' keys there.
   await writeFileAtomic(
     target.path,
     result.contents,
@@ -245,26 +212,21 @@ async function placeInFile(
     placed: true,
     lines: [
       `MCP: ${result.replaced ? "replaced" : "added"} the \`${MCP_SERVER_NAME}\` server in ${target.path}.`,
-      ...(config.mode !== null && othersCanRead(config.mode)
-        ? [othersCanReadWarning(target.path, config.mode, "the admin key")]
-        : []),
-      `MCP: ${target.reload}.`,
     ],
   };
 }
 
-/** Places the admin key in the agent's config, or says why not. */
-export async function placeMcpKey(input: {
+/** Places the `lemma` server in the agent's config, or says why not. */
+export async function placeMcpServer(input: {
   target: PlaceableMcpTarget;
   url: string;
-  apiKey: string;
   run: RunCommand;
 }): Promise<Placement> {
-  const { target, url, apiKey } = input;
+  const { target, url } = input;
   try {
     return target.kind === "file"
-      ? await placeInFile(target, url, apiKey)
-      : await placeWithClaude(target, url, apiKey, input.run);
+      ? await placeInFile(target, url)
+      : await placeWithClaude(target, url, input.run);
   } catch (error) {
     // Only I/O reaches here: content setup cannot edit is a placement reason.
     return {
@@ -275,37 +237,25 @@ export async function placeMcpKey(input: {
 }
 
 /**
- * Saves the entry, key included, where only the user can read it, and
- * prints where to add it and its shape without the key.
+ * The `lemma` server for the person to add by hand, and where, then how to
+ * sign in. It holds no key: the coding agent signs in once it is added.
  */
-export async function saveMcpEntryPrivately(input: {
-  target: McpTarget;
+export function manualMcpLines(input: {
+  target: PlaceableMcpTarget | ManualTarget;
   url: string;
-  apiKey: string;
   reason: string;
-}): Promise<PrivateSave> {
+}): string[] {
   const { target, url, reason } = input;
-  const entry = savedEntryOf(target.destination, target.codingAgentName);
-  try {
-    await writePrivateFile(
-      target.fallbackPath,
-      entry.contents(url, input.apiKey),
-    );
-  } catch (error) {
-    return {
-      saved: false,
-      lines: [
-        `MCP: ${reason}, and setup could not save the admin key (${failureReason(error)}). Run \`start\` again.`,
-      ],
-    };
-  }
-  return {
-    saved: true,
-    lines: [
-      `MCP: ${reason}. The full entry, key included, is in ${target.fallbackPath} (readable only by you).`,
-      ...entry.addLines(target.fallbackPath),
-      "The entry has this shape:",
-      entry.contents(url, "lemma_admin_key_from_the_file_above").trimEnd(),
-    ],
-  };
+  const { destination } = target;
+  const add =
+    destination.kind === "claude-local-scope"
+      ? [`MCP: ${reason}.`, ...claudeAddCommandLines(destination, url)]
+      : [
+          `MCP: ${reason}. Add this \`${MCP_SERVER_NAME}\` server to ${destinationName(target)}:`,
+          destination.format.parse(null).set(url).contents.trimEnd(),
+        ];
+  return [
+    ...add,
+    `Once it's added, to sign in to Lemma as yourself, ${signInInstruction(target.signIn)}.`,
+  ];
 }

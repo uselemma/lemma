@@ -35,3 +35,42 @@ export const runCommand: RunCommand = (command, args, cwd) =>
       });
     });
   });
+
+/** How a command attached to this terminal ended. */
+export type InteractiveResult =
+  | { kind: "exited"; code: number }
+  | { kind: "signaled"; signal: string }
+  | { kind: "not-started" };
+
+export type RunInteractive = (
+  command: string,
+  args: readonly string[],
+  cwd: string,
+) => Promise<InteractiveResult>;
+
+/** Setup outlives an interrupted child, so it can say what to do next. */
+const ignoreInterrupt = () => undefined;
+
+/**
+ * Runs a command that talks to the person at this terminal, such as a coding
+ * agent's sign-in, which prints a URL, opens the browser, and waits for it.
+ * Like `runCommand`, it runs without a shell. Ctrl-C reaches the child, which
+ * shares the terminal, while setup ignores it until the child ends.
+ */
+export const runInteractive: RunInteractive = (command, args, cwd) =>
+  new Promise((resolvePromise) => {
+    process.on("SIGINT", ignoreInterrupt);
+    const done = (result: InteractiveResult) => {
+      process.off("SIGINT", ignoreInterrupt);
+      resolvePromise(result);
+    };
+    const child = spawn(command, args, { cwd, stdio: "inherit" });
+    child.once("error", () => done({ kind: "not-started" }));
+    child.once("close", (code, signal) =>
+      done(
+        code === null
+          ? { kind: "signaled", signal: signal ?? "unknown" }
+          : { kind: "exited", code },
+      ),
+    );
+  });

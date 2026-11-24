@@ -4,18 +4,18 @@ sidebarTitle: "Setup Command"
 description: "The start and wait commands of npx @uselemma/setup, the files they write, and the lemma-setup skill that runs them"
 meta:
   contentType: "Reference"
-  goal: "Look up what the setup command writes for each coding agent, when it reuses a key, and what its exit codes mean"
+  goal: "Look up what the setup command writes for each coding agent, how the agent signs in to Lemma MCP, when it reuses a key, and what its exit codes mean"
   audience: "Developers whose coding agent runs Lemma setup, and anyone debugging a setup run"
 ---
 
-`npx @uselemma/setup` connects an app and its coding agent to Lemma through one browser approval. Your coding agent runs it when it follows the `lemma-setup` skill from the setup prompt in Lemma. This page lists the two commands, their flags, what they write for each coding agent, when an existing key is reused, and the exit codes.
+`npx @uselemma/setup` connects an app and its coding agent to Lemma through one browser approval. Your coding agent runs it when it follows the `lemma-setup` skill from the setup prompt in Lemma. This page lists the two commands, their flags, what they write for each coding agent, how the agent signs in to the Lemma Model Context Protocol (MCP) server, when an existing key or server is kept, and the exit codes.
 
 ## Start, then wait
 
 Setup runs as two commands, so neither one outlasts a coding agent’s default command timeout. Run both from the app’s root directory, where the app loads `.env`:
 
 1. `start` checks every file it will write, starts the approval, prints the approval URL and a code, opens the browser, and returns at once
-2. `wait` checks for the approval for up to 90s. While the approval is pending it exits with `5`; run it again. Once you approve, it writes the keys and exits with `0`
+2. `wait` checks for the approval for up to 90s. While the approval is pending it exits with `5`; run it again. Once you approve, it writes the ingest key and the coding agent’s `lemma` server, runs or prints the agent’s sign-in, and exits with `0`
 
 ```bash
 npx --yes @uselemma/setup@0.1.0 start \
@@ -48,12 +48,9 @@ The coding agent passes the names it inferred from the codebase. When the setup 
 
 ## What one approval creates
 
-An owner or admin of your Lemma organization approves the request on the page `start` opens, after choosing a plan if the organization has none. The approval creates the project, or uses an existing project you pick, and `wait` then receives each new key once:
+An owner or admin of your Lemma organization approves the request on the page `start` opens, after choosing a plan if the organization has none. The approval creates the project, or uses an existing project you pick, and `wait` then receives one new key once: an **ingest key** limited to the project. It can only send traces, so a leaked copy can’t read your data or write to another project.
 
-- **Ingest key**: limited to the project. It can only send traces, so a leaked copy can’t read your data or write to another project
-- **Admin key**: organization-wide, for the Lemma Model Context Protocol (MCP) server in your coding agent
-
-Each key is named for the coding agent and the day, for example `Setup: Claude Code, Nov 18`. Find and revoke earlier ones under **Developer → API keys** in your organization settings.
+The key is named for the coding agent and the day, for example `Setup: Claude Code, Nov 18`. Find and revoke earlier ones under **Developer → API keys** in your organization settings. Setup creates no key for MCP: your coding agent signs in to the Lemma MCP server as you, so it can do what your role allows in the organization you choose.
 
 ## Files written to the app directory
 
@@ -64,45 +61,56 @@ Each key is named for the coding agent and the day, for example `Setup: Claude C
 
 If git doesn’t ignore `.env`, the command prints a warning. Add `.env` to `.gitignore` before you commit.
 
-Lemma returns each new key once, so `wait` never drops one. When `.env` can’t take the ingest key although neither `start` nor `wait` found anything wrong before polling, `wait` saves `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`, with `LEMMA_BASE_URL` for an API other than production, to that private file, says where, finishes the other steps, and exits with `1`. Copy the values where the app loads its environment, then delete that file. When `wait` can’t set `LEMMA_BASE_URL` beside a key Lemma kept, or can’t remove a leftover one on a production setup, it says what to change by hand and exits with `1`.
+Lemma returns the new key once, so `wait` never drops it. When `.env` can’t take the ingest key although neither `start` nor `wait` found anything wrong before polling, `wait` saves `LEMMA_API_KEY` and `LEMMA_PROJECT_ID`, with `LEMMA_BASE_URL` for an API other than production, to that private file, says where, finishes the other steps, and exits with `1`. Copy the values where the app loads its environment, then delete that file. When `wait` can’t set `LEMMA_BASE_URL` beside a key Lemma kept, or can’t remove a leftover one on a production setup, it says what to change by hand and exits with `1`.
 
-## Where the admin key goes for each coding agent
+## Where the lemma server goes for each coding agent
 
-The admin key goes into your coding agent’s user-level MCP config as a server named `lemma`, pointing at `/mcp/` on the Lemma API (`https://api.uselemma.ai/mcp/` by default). Setup replaces an existing `lemma` entry and leaves other servers and settings as they are:
+`wait` adds a server named `lemma` to your coding agent’s user-level MCP config, pointing at `/mcp/` on the Lemma API (`https://api.uselemma.ai/mcp/` by default). The entry holds only the URL, with no key. Setup replaces a `lemma` entry that sends no key and leaves other servers and settings as they are:
 
 | Coding agent | Where setup writes the `lemma` server | How to load it |
 | --- | --- | --- |
-| Claude Code | `claude mcp add-json lemma '<entry>' --scope local`, run from the repository root, so the key stays in your Claude Code config for this project and out of the repository | `/mcp`, or restart |
+| Claude Code | `claude mcp add-json lemma '<entry>' --scope local`, run from the repository root, so the server stays in your Claude Code config for this project and out of the repository | `/mcp`, or restart |
 | Cursor | `~/.cursor/mcp.json`, under `mcpServers` | Reload MCP servers in Settings |
-| Codex | A `[mcp_servers.lemma]` table with `http_headers` in `config.toml` under `CODEX_HOME` (default `~/.codex`) | Start a new session |
+| Codex | A `[mcp_servers.lemma]` table in `config.toml` under `CODEX_HOME` (default `~/.codex`) | Start a new session |
 | OpenCode | `opencode.json` in `~/.config/opencode` (or `OPENCODE_CONFIG_DIR`), under `mcp.servers` when the file already uses it, otherwise under `mcp` | Restart OpenCode |
 | Pi | `~/.pi/agent/mcp.json`, under `mcpServers` | `/reload` |
-| Hermes | `config.yaml` under `HERMES_HOME` (default `~/.hermes`), under `mcp_servers`. Comments stay as they are | `/reload-mcp` |
-| OpenClaw | `~/.openclaw/openclaw.json` (or `OPENCLAW_CONFIG_PATH`), under `mcp.servers` with the `streamable-http` transport | The gateway applies it; restart it if the tools don’t appear |
-| Any other agent | A file in `~/.lemma/setup/` named for the app and the agent, readable only by you | Add the entry to your agent’s MCP config, then delete the file |
+| Hermes | `config.yaml` under `HERMES_HOME` (default `~/.hermes`), under `mcp_servers`, with `auth: oauth`. Comments stay as they are | `/reload-mcp` |
+| OpenClaw | `~/.openclaw/openclaw.json` (or `OPENCLAW_CONFIG_PATH`), under `mcp.servers` with the `streamable-http` transport and `"auth": "oauth"` | The gateway applies it; restart it if the tools don’t appear |
+| Any other agent | Nothing: `wait` prints the entry for you to add to your agent’s MCP config | Your agent’s own step |
 
-A new config file is readable only by you. Setup never changes an existing config’s permissions. When the file’s group or other users can read it, the command prints one warning that names the file and the `chmod 600` command to run.
+A new config file is readable only by you, since agents keep other servers’ keys there. Setup never changes an existing config’s permissions.
 
-When a config is a symlink, has contents setup can’t edit safely (for example a JSON5 file with comments, or a Codex `lemma` server written inline instead of as a `[mcp_servers.lemma]` table), or the `claude` command isn’t on your `PATH`, `start` says why and that the entry will go to the private file. `wait` says so too before it polls, including for a config that changed after `start`, then saves the entry there and exits with `0`. When an MCP write fails after approval instead (for example the config’s directory isn’t writable, the file changed while `wait` was polling, or Claude Code refuses the new server), `wait` saves the entry to the private file, so the admin key is never lost, and exits with `1`. The private file holds the entry in the agent’s own config format (TOML for Codex, YAML for Hermes, JSON for the others), ready to paste. For Claude Code it holds the bare `lemma` entry, `{ "type": "http", "url": …, "headers": … }`, as `claude mcp add-json` takes it. Each app gets its own private file, so setup in a second app never overwrites a key you haven’t copied yet. The command prints the entry’s shape, never the key.
+When a config is a symlink, has contents setup can’t edit safely (for example a JSON5 file with comments, or a Codex `lemma` server written inline instead of as a `[mcp_servers.lemma]` table), or the `claude` command isn’t on your `PATH`, `start` says why and that setup will print the server instead. `wait` says so too before it polls, including for a config that changed after `start`, then prints the entry in the agent’s own config format and exits with `0`.
 
-For Claude Code, `start` reads the project’s local `lemma` entry. Without one, `wait` adds the server once, and if Claude Code refuses, saves the key to the private file without removing anything. With one, `wait` removes it and adds the new server; if that add fails, it restores the old entry and saves the new key to the private file. If Claude Code refuses the removal, the old entry stays as it is, and the new key goes to the private file.
+When an MCP write fails after approval instead (for example the config’s directory isn’t writable, or Claude Code refuses the new server), `wait` prints the entry the same way and exits with `1`. Either way, add the entry yourself, then sign in.
 
-Add Claude Code’s private entry to the same local scope, not the committed `.mcp.json`. Setup prints this command with the paths filled in and quoted for the shell. It reads the key from the file, so the key never appears in your shell history, and every step waits on that read: running it again after the file is gone changes nothing. Like setup, it then removes any `lemma` server in that scope, adds the entry with the same `claude mcp add-json` command setup runs, and deletes the private file once the add succeeds. It runs in a subshell, so your shell stays in its directory:
+For Claude Code, `start` reads the project’s local `lemma` entry. Without one, `wait` adds the server once, and removes nothing if Claude Code refuses. With one that sends no key, `wait` removes it and adds the new server; if that add fails, it restores the old entry.
 
-```bash
-(cd '<repository root>' && entry="$(cat '<private file>')" && { claude mcp remove lemma --scope local >/dev/null 2>&1; claude mcp add-json lemma "$entry" --scope local; } && rm '<private file>')
-```
+When `wait` prints Claude Code’s server instead, it prints the same `claude mcp add-json` command, run from the repository root. When the project had a local `lemma` entry that sends no key, the command runs `claude mcp remove lemma --scope local` first and ignores a removal that finds nothing. It also prints the entry to set as `projects["<repository root>"].mcpServers.lemma` in `~/.claude.json` (or `.claude.json` in `CLAUDE_CONFIG_DIR`) with Claude Code closed. Never add it to the committed `.mcp.json`.
 
-Without the `claude` command, add the entry as `projects["<repository root>"].mcpServers.lemma` in `~/.claude.json` (or `.claude.json` in `CLAUDE_CONFIG_DIR`), with Claude Code closed, then delete the private file.
+## How the coding agent signs in
 
-## When an existing key is reused
+Once the `lemma` server is in place, the coding agent signs in to Lemma with OAuth: Lemma opens in your browser, you choose the organization and allow the connection, and the agent then acts as you. When you run `wait` yourself in a terminal, it runs the agent’s sign-in command for you. When your coding agent runs `wait`, it prints the command instead, with the step inside the agent where there is one:
 
-A re-run reuses a key only when Lemma confirms what it’s allowed to do. `start` asks Lemma’s `GET /auth/key` about each existing key before the approval begins:
+| Coding agent | Sign-in command | Inside the agent |
+| --- | --- | --- |
+| Claude Code | `claude mcp login lemma` | `/mcp`, select `lemma`, and authenticate |
+| Cursor | `agent mcp login lemma` (the Cursor CLI) | Sign in to `lemma` from Cursor’s MCP settings |
+| Codex | `codex mcp login lemma` | None |
+| OpenCode | `opencode mcp auth lemma` | `/mcps`, select `lemma`, and sign in |
+| Pi | `pi mcp login lemma` | `/mcp`, select `lemma`, and choose **Sign in** |
+| Hermes | `hermes mcp login lemma` | None |
+| OpenClaw | `openclaw mcp login lemma` | None |
+| Any other agent | None | Your agent’s sign-in for an MCP server that uses OAuth |
 
-- **Ingest key in `.env`**: kept when Lemma confirms an `ingest` key limited to the project in `LEMMA_PROJECT_ID`, and you approve that same project. Any other key, including a read or admin key for that project, gets a new ingest key, and `wait` replaces both values in `.env`. For an API other than production, `wait` also sets `LEMMA_BASE_URL`, beside a kept key too
-- **Admin key in the MCP config**: kept when Lemma confirms an admin key that isn’t limited to one project, and you approve in that key’s organization. Otherwise Lemma creates a new admin key, and `wait` replaces the `lemma` entry
+Setup prints each command with the directory to run it from: the repository root for Claude Code, whose local scope holds the server, and the app’s directory for the others. A sign-in that doesn’t finish leaves the server in place, and `wait` prints how to sign in later; it doesn’t change the exit code. [What a signed-in agent can do](/connections/mcp#what-a-signed-in-agent-can-do) covers the organization, role, and when access ends.
 
-A key Lemma rejects, or an answer that doesn’t arrive, counts as unconfirmed.
+## When an existing key or server is kept
+
+A re-run keeps an ingest key only when Lemma confirms what it’s allowed to do, and keeps an MCP server that already sends a key:
+
+- **Ingest key in `.env`**: `start` asks Lemma’s `GET /auth/key` about it before the approval begins. It’s kept when Lemma confirms an `ingest` key limited to the project in `LEMMA_PROJECT_ID`, and you approve that same project. Any other key, including a read or admin key for that project, gets a new ingest key, and `wait` replaces both values in `.env`. For an API other than production, `wait` also sets `LEMMA_BASE_URL`, beside a kept key too. A key Lemma rejects, or an answer that doesn’t arrive, counts as unconfirmed
+- **`lemma` server that sends an API key**: kept as it is, since API keys keep working for MCP. That covers a literal key or a reference such as an environment variable, in an `Authorization` header, in Claude Code’s `headersHelper`, or in Codex’s `bearer_token_env_var` or `env_http_headers`. `start` and `wait` say so, and `wait` skips the sign-in. To sign in as yourself instead, remove that server and run setup again
 
 ## Exit codes
 
@@ -110,9 +118,9 @@ The `lemma-setup` skill uses the exit code to decide the next step:
 
 | Code | Command | Meaning |
 | --- | --- | --- |
-| `0` | `start`, `wait` | `start`: the approval started. `wait`: approved, and each key is written, kept, or saved to a private file that `start`, or `wait` before it polled, announced; the output names that file and includes `Project ID:` and `Agent name:` |
+| `0` | `start`, `wait` | `start`: the approval started. `wait`: approved; the ingest key is written, kept, or saved to a private file, and the `lemma` server is written, kept, or printed for you to add, as `start`, or `wait` before it polled, announced. The output names any private file, includes `Project ID:` and `Agent name:`, and says how the agent signs in, unless setup kept a `lemma` server that sends an API key |
 | `5` | `wait` | The approval is still pending. Run `wait` again |
-| `1` | `start`, `wait` | Setup failed. The message says why, for example no pending setup in this directory, or no coding-agent setup on this Lemma environment. After approval, `wait` also exits with `1` when a key went to a private file because a write failed, no key was saved, or `LEMMA_BASE_URL` couldn’t be set or removed beside a kept key (the output says what to change); it finishes every other step first |
+| `1` | `start`, `wait` | Setup failed. The message says why, for example no pending setup in this directory, or no coding-agent setup on this Lemma environment. After approval, `wait` also exits with `1` when the ingest key went to a private file because a write failed, no key was saved, the `lemma` server was printed because a write failed, or `LEMMA_BASE_URL` couldn’t be set or removed beside a kept key (the output says what to change); it finishes every other step first |
 | `2` | `start`, `wait` | A command or flag is missing or invalid |
 | `3` | `wait` | The approval code expired. Run `start` again |
 | `4` | `wait` | The approver canceled, or is no longer an owner or admin. Run `start` again |
@@ -130,7 +138,7 @@ The setup prompt in Lemma tells your coding agent to fetch and follow [`skills/l
 3. Run `start`, show you the approval URL and code, then run `wait` until it exits with `0`. `start` gets `--project-id` when the prompt names a project, and `--api-url` when it names a Lemma API
 4. Instrument the agent with the `lemma-tracing` skill, using the approved agent name as the root trace `name`
 5. Send a first trace, after you agree to run the agent
-6. Load the Lemma MCP server and record the agent’s context with the `lemma-artifacts` skill
+6. Make sure the agent is signed in to the Lemma MCP server, by running the sign-in command `wait` printed or asking you to, then load the server and record the agent’s context with the `lemma-artifacts` skill
 7. Report the files it changed and the build or deploy steps that need attention, such as adding both variables to your deployment’s secrets
 
 ## Related pages
@@ -140,6 +148,6 @@ The setup prompt in Lemma tells your coding agent to fetch and follow [`skills/l
     Set up with the agent prompt or manually, then check the first trace.
   </Card>
   <Card title="Lemma MCP server" href="/connections/mcp">
-    The MCP endpoint, its authentication, and client config.
+    The MCP endpoint, OAuth sign-in for people, and API keys for machines.
   </Card>
 </CardGroup>

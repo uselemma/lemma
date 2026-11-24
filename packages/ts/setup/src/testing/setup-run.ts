@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { afterEach, expect } from "vitest";
 
 import { DEFAULT_API_URL, lemmaApiUrl, type Fetch } from "../api.js";
-import type { RunCommand } from "../command.js";
+import type { InteractiveResult, RunCommand } from "../command.js";
 import type { SetupEnvironment } from "../context.js";
 import { SetupError } from "../errors.js";
 import { cursorConfigPath } from "../mcp/paths.js";
@@ -17,16 +17,19 @@ import { temporaryDirectories } from "./temp.js";
 export const runsAsRoot = process.getuid?.() === 0;
 export const PROJECT_ID = "3f0c6a52-0d6e-4a7b-9a51-2f4e2b9a6c11";
 export const INGEST_KEY = "lemma_sk_ingest_0123456789abcdef";
-export const MCP_KEY = "lemma_sk_admin_fedcba9876543210";
 export const EXISTING_KEY = "lemma_sk_existing_00112233445566";
+/** The `lemma` server setup writes for a production run. */
+export const PRODUCTION_MCP_ENTRY = { url: `${DEFAULT_API_URL}/mcp/` };
 
-export const approvedWithKeys = approved({
+export const approvedWithKey = approved({
   project_id: PROJECT_ID,
   agent_name: "support-bot",
   harness: "cursor",
   ingest_key: INGEST_KEY,
-  mcp_key: MCP_KEY,
 });
+
+/** One command the interactive runner was asked to run. */
+export type InteractiveCall = { argv: string[]; cwd: string };
 
 export type SetupRun = {
   api: MockApi;
@@ -34,6 +37,8 @@ export type SetupRun = {
   home: string;
   lines: string[];
   opened: string[];
+  /** The sign-in commands setup ran at the terminal; never spawned. */
+  interactiveCalls: InteractiveCall[];
   environment: SetupEnvironment;
   start: (options?: Partial<StartOptions>) => Promise<void>;
   wait: () => ReturnType<typeof runWait>;
@@ -44,6 +49,10 @@ export type SetupRunInput = {
   api?: MockApiOptions;
   prepare?: (app: string, home: string) => Promise<void>;
   gitIgnored?: boolean;
+  /** Whether a person is at the terminal; off by default, as when a coding agent runs setup. */
+  interactive?: boolean;
+  /** How the sign-in command ends; it exits with 0 by default. */
+  signInResult?: InteractiveResult;
 };
 
 /**
@@ -88,6 +97,7 @@ export function setupRuns(): {
     await input.prepare?.(app, home);
     const lines: string[] = [];
     const opened: string[] = [];
+    const interactiveCalls: InteractiveCall[] = [];
     let clock = 1_000_000;
     const run: RunCommand = async (command, args) => {
       if (command === "git" && args[0] === "check-ignore") {
@@ -114,6 +124,11 @@ export function setupRuns(): {
       now: () => clock,
       output: (line) => lines.push(line),
       run,
+      interactive: input.interactive ?? false,
+      runInteractive: async (command, args, cwd) => {
+        interactiveCalls.push({ argv: [command, ...args], cwd });
+        return input.signInResult ?? { kind: "exited", code: 0 };
+      },
     };
     return {
       api,
@@ -121,6 +136,7 @@ export function setupRuns(): {
       home,
       lines,
       opened,
+      interactiveCalls,
       environment,
       pendingPath: setupPaths(home, app).pending,
       start: (options = {}) =>
@@ -157,9 +173,7 @@ export function printed(run: SetupRun): string {
   return run.lines.join("\n");
 }
 
-export async function cursorEntry(
-  home: string,
-): Promise<{ headers: { Authorization: string } }> {
+export async function cursorEntry(home: string): Promise<unknown> {
   const config = JSON.parse(
     await readFile(cursorConfigPath({ homeDir: home, env: {} }), "utf8"),
   );

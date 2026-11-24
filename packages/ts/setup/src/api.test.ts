@@ -84,7 +84,12 @@ describe("the API client", () => {
     ).resolves.toEqual({ status: "not_found" });
   });
 
-  it("types each key of an approval as new or kept", async () => {
+  it("types the ingest key of an approval as new or kept, with or without an MCP key beside it", async () => {
+    const approval = {
+      projectId: PROJECT_ID,
+      agentName: "support-bot",
+      ingest: { kind: "new", key: "lemma_sk_ingest_0123456789abcdef" },
+    };
     await expect(
       pollOnce([
         approved({
@@ -94,14 +99,18 @@ describe("the API client", () => {
           ingest_key: "lemma_sk_ingest_0123456789abcdef",
         }),
       ]),
+    ).resolves.toEqual({ status: "approved", approval });
+    await expect(
+      pollOnce([
+        approved({
+          project_id: PROJECT_ID,
+          agent_name: "support-bot",
+          mcp_key: "lemma_sk_admin_0123456789abcdef",
+        }),
+      ]),
     ).resolves.toEqual({
       status: "approved",
-      approval: {
-        projectId: PROJECT_ID,
-        agentName: "support-bot",
-        ingest: { kind: "new", key: "lemma_sk_ingest_0123456789abcdef" },
-        mcp: { kind: "kept" },
-      },
+      approval: { ...approval, ingest: { kind: "kept" } },
     });
   });
 
@@ -134,11 +143,7 @@ describe("the API client", () => {
     }).listen();
     await expect(
       describeApiKey(api.url, "lemma_sk_admin_0123456789abcdef", fetch),
-    ).resolves.toEqual({
-      tenantId: TENANT_ID,
-      projectId: null,
-      scope: "admin",
-    });
+    ).resolves.toEqual({ projectId: null, scope: "admin" });
     expect(api.requests[0].headers.authorization).toBe(
       "Bearer lemma_sk_admin_0123456789abcdef",
     );

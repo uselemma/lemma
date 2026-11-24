@@ -1,11 +1,14 @@
 import type { CommandResult, RunCommand } from "../command.js";
 import type { HarnessId } from "../harness.js";
-import { placeMcpKey, planMcpTarget, type McpTarget } from "../mcp/targets.js";
-import { setupPaths } from "../setup-paths.js";
+import {
+  placeMcpServer,
+  planMcpTarget,
+  type McpTarget,
+} from "../mcp/targets.js";
 
 const API_URL = "https://api.uselemma.ai";
 export const URL_ = `${API_URL}/mcp/`;
-export const KEY = "lemma_sk_admin_0123456789abcdef";
+/** A key an existing `lemma` server sends, which setup must leave alone. */
 export const OLD = "lemma_sk_old_admin_0123456789";
 
 const ok: CommandResult = { code: 0, stdout: "", stderr: "" };
@@ -25,15 +28,6 @@ export function scriptedRun(answers: Record<string, CommandResult[]> = {}) {
   return { run, calls, claudeCalls };
 }
 
-export function saved(
-  home: string,
-  harness: HarnessId,
-  extension: string,
-  appDir = home,
-): string {
-  return setupPaths(home, appDir).savedMcpEntry(harness, extension);
-}
-
 export async function plan(
   harness: HarnessId,
   home: string,
@@ -46,15 +40,23 @@ export async function plan(
     env: extra.env ?? {},
     appDir,
     run: extra.run ?? scriptedRun().run,
-    paths: setupPaths(home, appDir),
   });
+}
+
+/** The target, which the test expects setup to write or print rather than keep. */
+export function notKept(
+  target: McpTarget,
+): Exclude<McpTarget, { kind: "kept" }> {
+  if (target.kind === "kept") throw new Error("expected a target setup writes");
+  return target;
 }
 
 export async function place(
   target: McpTarget,
   run: RunCommand = scriptedRun().run,
 ) {
-  if (target.kind === "private")
-    throw new Error("a private target is not placed");
-  return placeMcpKey({ target, url: URL_, apiKey: KEY, run });
+  if (target.kind === "manual" || target.kind === "kept") {
+    throw new Error(`a ${target.kind} target is not placed`);
+  }
+  return placeMcpServer({ target, url: URL_, run });
 }
