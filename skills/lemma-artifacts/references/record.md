@@ -5,17 +5,19 @@
 Always, before proposing anything. Every call below takes the `project_id`
 settled in [SKILL.md](../SKILL.md#the-project-id):
 
-- `list_project_artifacts` with the project ID and the settled agent name —
-  the context files uploaded for that agent, and its understanding if Lemma
-  has written one. `agent_name` is required. Call it a second time with
-  `agent_name: null` for the files of the untagged agent.
-- `get_project_artifact` with an `artifact_id` from that list, to read the
-  text. Pass `version: null` for an uploaded file and `version: "latest"` for
-  the understanding. It returns one window of the text at a time. While
+- `list_project_artifacts` with `project_id` and `agent_name` (the settled
+  agent name) — the context files uploaded for that agent, and its
+  understanding if Lemma has written one. `agent_name` is required. Call it a
+  second time with `agent_name: null` for the files of the untagged agent.
+  Keep each file's `id`: it is the `artifact_id` every later call needs.
+- `get_project_artifact` with `project_id`, an `artifact_id` from that list,
+  and `version`, to read the text. Pass `version: null` for an uploaded file
+  and `version: "latest"` for the understanding. It returns one window of the text at a time. While
   `next_request` is not null, call the tool again with the arguments it gives
   you. Never judge a file from its first window.
-- `get_agent_understanding_history` with the agent name, when you need to know
-  whether Lemma has written an understanding yet and how many versions exist.
+- `get_agent_understanding_history` with `project_id` and `agent_name`, when
+  you need to know whether Lemma has written an understanding yet and how many
+  versions exist.
 
 No call lists every agent a project has. An agent that has files in Lemma but
 no traces cannot be found by browsing, only by asking for its name.
@@ -82,9 +84,12 @@ Every upload creates a new file, including when one with the same filename
 already exists. Check the list from step 1 first, so you replace a file you
 meant to replace instead of adding a second copy beside it.
 
-**Replacing a file** — there is no edit in place. Upload the new text, confirm
-the new file appears in `list_project_artifacts`, then remove the old one with
-`delete_project_artifact`. Do it in that order: if the second call fails, the
+**Replacing a file** — there is no edit in place. Upload the new text with
+`upload_project_artifact` as above, confirm the new file appears in
+`list_project_artifacts`, then remove the old one with
+`delete_project_artifact`, passing `project_id` and the old file's
+`artifact_id` from step 1, never the `id` the upload just returned. Do it in
+that order: if the second call fails, the
 project has a duplicate, which is recoverable, and not a gap. The replacement
 has a new `id`. Tell the user both of those things when you ask to replace.
 
@@ -95,7 +100,8 @@ rule sitting beside the original, which is why the delete follows as soon as
 the new file is confirmed, and why a delete that fails goes in the closing
 report.
 
-**Removing a file** — `delete_project_artifact` when a rule is gone entirely.
+**Removing a file** — `delete_project_artifact` with `project_id` and the
+file's `artifact_id` from step 1, when a rule is gone entirely.
 Removing a stale rule is a real edit with real consequences; confirm it as
 specifically as you would confirm adding one, and never bundle it with
 unrelated changes.
