@@ -137,7 +137,7 @@ describe("command-line input", () => {
     });
   });
 
-  it("rejects a missing command, an unknown harness or flag, and wait flags with exit 2 and the usage", () => {
+  it("rejects a missing command, an unknown harness or flag, and start flags given to wait with exit 2 and the usage", () => {
     for (const argv of [
       [],
       ["setup"],

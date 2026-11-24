@@ -71,7 +71,7 @@ describe("signing in to Lemma's MCP server", () => {
       { argv: ["claude", "mcp", "login", "lemma"], cwd: home },
     ]);
     expect(at.lines).toEqual([
-      "MCP: signing in to Lemma with `claude mcp login lemma`…",
+      `MCP: signing in to Lemma with \`(cd ${shellWord(home)} && claude mcp login lemma)\`…`,
       "MCP: signed in to Lemma.",
     ]);
   });

@@ -90,7 +90,7 @@ Pass the project name in single quotes, writing each `'` in it as `'\''`, since 
 
 When you found a project ID in step 1, add `--project-id` with it, for example `--project-id 0b7c2f1e-4d3a-4f6b-9c8d-1a2b3c4d5e6f`, and keep it each time you run `start` again. Without one, don't pass `--project-id`.
 
-When you found a Lemma API in step 1, add `--api-url` with that URL, for example `--api-url https://dev.api.uselemma.ai`, and keep it each time you run `start` again. Without one, don't pass `--api-url`. Setup accepts only HTTPS on `uselemma.ai` or one of its subdomains, or `localhost`, `127.0.0.1`, or `[::1]`; for any other URL, don't run setup, and tell the user the prompt names an API that isn't Lemma's. `wait` uses the API `start` was given, so it takes no flag.
+When you found a Lemma API in step 1, add `--api-url` with that URL, for example `--api-url https://dev.api.uselemma.ai`, and keep it each time you run `start` again. Without one, don't pass `--api-url`. Setup accepts only HTTPS on `uselemma.ai` or one of its subdomains, or `localhost`, `127.0.0.1`, or `[::1]`; for any other URL, don't run setup, and tell the user the prompt names an API that isn't Lemma's. `wait` uses the API `start` was given, so don't pass `--api-url` to `wait`.
 
 `start` returns at once. Show the user the approval URL and code it printed. The user approves on that page:
 
@@ -100,7 +100,7 @@ When you found a Lemma API in step 1, add `--api-url` with that URL, for example
 - They confirm the names and choose **Approve and create project** for a new project, or **Approve** for an existing one. Only an owner or admin of the Lemma organization can approve
 - When you passed `--project-id`, they check that the page selects that project under **Project**, then choose **Approve**. If it shows a new project instead, and says you were set up for an organization they don't belong to, they approve signed in to an account in that organization, or choose **Approve and create project** only if they want a new project
 
-Then wait for the approval:
+Before you wait, tell the user that once they approve, Lemma opens in their browser again to sign you in to the Lemma MCP server: they choose the organization and choose **Allow**. Then wait for the approval:
 
 ```bash
 npx --yes @uselemma/setup@0.1.0 wait --sign-in
@@ -108,7 +108,9 @@ npx --yes @uselemma/setup@0.1.0 wait --sign-in
 
 Each `wait` checks for up to 90 seconds. While it exits with 5, the approval is still pending: run `wait --sign-in` again. The code expires 10 minutes after `start`.
 
-Once approved, `wait --sign-in` also runs your sign-in to the Lemma MCP server: Lemma opens in the user's browser, and `wait` returns once they allow the connection. Tell the user to choose the organization on that page and choose **Allow**. Give `wait --sign-in` the longest command timeout your harness allows, since the sign-in waits for the user.
+When setup writes your `lemma` server, an approved `wait --sign-in` then runs that sign-in and returns once the user allows the connection. Run it with a timeout of 10 minutes, or your harness's longest if that's shorter (600000 ms in Claude Code).
+
+If your harness stops `wait --sign-in` after it printed `Approved.`, setup is done and its code is spent: don't run `wait` or `start` again. Read `Project ID:` and `Agent name:` from its output, continue to step 4, and sign in at step 6.
 
 When `wait` exits with 0, read `Project ID:` and `Agent name:` from its output. Use that agent name from here on: the user may have changed it on the approval page.
 
@@ -150,7 +152,8 @@ If the user would rather not run it now, tell them the first trace appears under
 The Lemma tools answer only once you're signed in to the Lemma MCP server as the user. Step 3's `wait --sign-in` usually did that; the end of its output says, unless setup kept a `lemma` server that sends an API key, which needs no sign-in:
 
 - `MCP: signed in to Lemma.`: the user signed in during step 3
-- A sign-in command, such as `(cd /path/to/app && codex mcp login lemma)`: the sign-in didn't finish, or setup printed the server for the user to add. Once the server is in place, run the command as printed. It opens Lemma in the user's browser and returns once they approve. Tell the user to choose the organization on that page and choose **Allow**. If the command fails, times out, or your sandbox blocks it, ask the user to run it in their own terminal, or to use the step inside your harness that the output names, such as `/mcp` in Claude Code
+- A sign-in command, such as `(cd /path/to/app && codex mcp login lemma)`: the sign-in didn't finish, or setup printed the server for the user to add. Once the server is in place, ask the user to run the command in their own terminal, or to use the step inside your harness that the output names, such as `/mcp` in Claude Code. Lemma opens in their browser: they choose the organization and choose **Allow**
+- Output that ends at `MCP: signing in to Lemma with …`: your harness stopped `wait` during the sign-in. Ask the user to run the command that line names in their own terminal, or to use the step inside your harness
 - Only a step inside your harness: ask the user to do it
 
 The approver in step 3 is an owner or admin, but anyone in the organization can sign in here; you then act with the role of whoever signs in.

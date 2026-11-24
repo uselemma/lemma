@@ -12,7 +12,7 @@ meta:
 
 ## Start, then wait
 
-Setup runs as two commands, so neither one outlasts a coding agent’s default command timeout. Run both from the app’s root directory, where the app loads `.env`:
+Setup runs as two commands, so `start` returns at once and a pending `wait` ends within a coding agent’s default command timeout. With `--sign-in`, an approved `wait` also waits for the sign-in. Run both from the app’s root directory, where the app loads `.env`:
 
 1. `start` checks every file it will write, starts the approval, prints the approval URL and a code, opens the browser, and returns at once
 2. `wait` checks for the approval for up to 90s. While the approval is pending it exits with `5`; run it again. Once you approve, it writes the ingest key and the coding agent’s `lemma` server, runs or prints the agent’s sign-in, and exits with `0`
@@ -44,7 +44,11 @@ The coding agent passes the names it inferred from the codebase. When the setup 
 | `--api-url` | No | The Lemma API. Defaults to `https://api.uselemma.ai`. The command accepts only HTTPS on `uselemma.ai` or a subdomain, or HTTP/HTTPS on `localhost`, `127.0.0.1` or `[::1]` on any port, and refuses any other URL with exit code `2` before it sends a request. For an API other than production, `wait` also writes `LEMMA_BASE_URL`, so the app sends traces to that API. `wait` uses the API `start` was given |
 | `--no-browser` | No | Print the approval URL without opening a browser |
 
-`wait` takes one flag, `--sign-in`: it runs the coding agent’s sign-in command once setup finishes, also when `wait` doesn’t run in a terminal. Without it, `wait` runs the sign-in only in a terminal and prints it otherwise. The `lemma-setup` skill always passes it.
+## Flags for wait
+
+| Flag | Required | Value |
+| --- | --- | --- |
+| `--sign-in` | No | Run the coding agent’s sign-in command once setup finishes, even when `wait` doesn’t run in a terminal. Without the flag, `wait` runs the sign-in only in a terminal, and otherwise prints the command. Pass it on every `wait`; the `lemma-setup` skill always does |
 
 ## What one approval creates
 
@@ -119,7 +123,7 @@ The `lemma-setup` skill uses the exit code to decide the next step:
 | Code | Command | Meaning |
 | --- | --- | --- |
 | `0` | `start`, `wait` | `start`: the approval started. `wait`: approved; the ingest key is written, kept, or saved to a private file, and the `lemma` server is written, kept, or printed for you to add, as `start`, or `wait` before it polled, announced. The output names any private file, includes `Project ID:` and `Agent name:`, and says how the agent signs in, unless setup kept a `lemma` server that sends an API key |
-| `5` | `wait` | The approval is still pending. Run `wait` again |
+| `5` | `wait` | The approval is still pending. Run `wait` again, with the same flags |
 | `1` | `start`, `wait` | Setup failed. The message says why, for example no pending setup in this directory, or no coding-agent setup on this Lemma environment. After approval, `wait` also exits with `1` when the ingest key went to a private file because a write failed, no key was saved, the `lemma` server was printed because a write failed, or `LEMMA_BASE_URL` couldn’t be set or removed beside a kept key (the output says what to change); it finishes every other step first |
 | `2` | `start`, `wait` | A command or flag is missing or invalid |
 | `3` | `wait` | The approval code expired. Run `start` again |

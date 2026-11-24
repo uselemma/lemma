@@ -80,7 +80,7 @@ export async function runWait(
       throw outcome.error;
     case "pending":
       environment.output(
-        `Approval is still pending. Run \`${SETUP_COMMAND} wait\` again.`,
+        `Approval is still pending. Run \`${SETUP_COMMAND} wait${options.signIn ? " --sign-in" : ""}\` again.`,
       );
       return { status: "pending" };
     case "approved": {

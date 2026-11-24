@@ -132,7 +132,7 @@ describe("wait", () => {
     ]);
     expect(pendingAtSignIn).toBe(false);
     expect(run.lines.slice(-4)).toEqual([
-      "MCP: signing in to Lemma with `codex mcp login lemma`…",
+      `MCP: signing in to Lemma with \`(cd ${shellWord(run.app)} && codex mcp login lemma)\`…`,
       "MCP: signed in to Lemma.",
       "MCP: start a new Codex session to load the Lemma tools.",
       "Lemma setup finished.",
@@ -266,7 +266,12 @@ describe("wait", () => {
     ) as PendingSetup;
     expect(saved.nextPollAt).toBe(1_000_000 + (polled + 1) * 5_000);
 
-    await expect(run.wait()).resolves.toEqual({ status: "pending" });
+    await expect(run.wait({ signIn: true })).resolves.toEqual({
+      status: "pending",
+    });
+    expect(printed(run)).toContain(
+      "Approval is still pending. Run `npx --yes @uselemma/setup@0.1.0 wait --sign-in` again.",
+    );
     await expect(run.wait()).resolves.toEqual({ status: "approved" });
     await expect(stat(run.pendingPath)).rejects.toThrow();
   });

@@ -70,7 +70,9 @@ The prompt contains no key: Lemma creates the app’s ingest key when you approv
 
     When the setup command can’t edit your coding agent’s MCP config, or your coding agent isn’t one that setup configures, it prints the `lemma` server for you to add. For Claude Code, add it the way the message says, either with its command or in `~/.claude.json`; both keep it in the project’s local scope. Never paste it into the committed `.mcp.json`. [Setup command and skill](/reference/setup-command) lists each file and step.
 
-    The agent then adds tracing, and asks before it runs your app to send a first trace. Then it asks you to sign in to Lemma from your coding agent, with the command or step the setup command printed: Lemma opens in your browser, and you choose the organization and allow the connection. The agent then acts as you, with your role in that organization. It proposes [artifact](/platform/artifacts) claims about what your agent is for, and you approve each one.
+    Right after you approve, the setup command also signs your coding agent in to Lemma: Lemma opens in your browser again, and you choose the organization and allow the connection. The agent then acts as you, with your role in that organization. If that sign-in didn’t finish, the agent later asks you to sign in with the command or step the setup command printed.
+
+    The agent then adds tracing, and asks before it runs your app to send a first trace. It proposes [artifact](/platform/artifacts) claims about what your agent is for, and you approve each one.
   </Step>
 </Steps>
 
