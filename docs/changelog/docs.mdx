@@ -9,6 +9,25 @@ meta:
   audience: "People reading the Lemma docs"
 ---
 
+<Update label="November 23, 2026" tags={["Improvements", "[Connections]", "[Guides]", "[Integrations]"]} rss={{ title: "Slack alerts skip resolve and reopen, and AI SDK v7 passes thread ids to vercelAI" }}>
+
+  ## Connections
+
+  - **Alert rule:** [Slack](/connections/slack) says an issue gets at most one yellow alert and one red alert. Red can come first. Slack doesn’t post when the issue is resolved, dismissed, or reopens. [Webhooks](/connections/webhooks) report those changes.
+  - **Where to read it:** [Issues](/platform/issues), [Concepts](/platform/concepts), [Monitors](/platform/monitors), and [Turning issues into fixes](/guides/turning-issues-into-fixes) point to [when Slack alerts](/connections/slack#set-up-issue-alerts-in-your-workspace).
+
+  ## Guides
+
+  - **Reopen:** [Turning issues into fixes](/guides/turning-issues-into-fixes) says to catch a reopen on the `issue.reopened` webhook or on **Issues**.
+  - **Linear comment:** [Turning issues into fixes](/guides/turning-issues-into-fixes) says a reopen from matching evidence adds one comment on the linked [Linear](/connections/linear) ticket.
+
+  ## Integrations
+
+  - **AI SDK v7:** On [Vercel AI SDK](/integrations/vercel-ai), pass `threadId` and `userId` in `vercelAI({ metadata })`. AI SDK v7 has no `telemetry.metadata`. Lemma doesn’t read those ids from `runtimeContext`.
+  - **LangGraph:** The [LangGraph](/integrations/langgraph) TypeScript snippet defines graph state with `Annotation.Root`.
+
+</Update>
+
 <Update label="October 29, 2026" tags={["Improvements", "[Platform]"]} rss={{ title: "Issues explains how to open an occurrence" }}>
 
   ## Platform
