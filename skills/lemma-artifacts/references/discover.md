@@ -57,7 +57,7 @@ want only one. If the user does not choose, the run ends: see
 ## Nothing to record
 
 If no production agent is identifiable, say what you looked at and what you
-were looking for, and **write nothing**. An empty project is a correct outcome
+were looking for, and **upload nothing**. An empty project is a correct outcome
 here. Do not record a placeholder, do not record the repository itself as an
 agent, and do not record a demo because it was the only candidate.
 
@@ -68,7 +68,7 @@ the run ends: see [When discover ends the run](#when-discover-ends-the-run).
 
 This matters more than it looks. Lemma files everything — traces, issues,
 understanding, context — under an agent name. If the name you record does not
-match the name the running code reports, the artifacts you write describe an
+match the name the running code reports, the files you upload describe an
 agent that never appears, and the real one stays uncalibrated. Nothing will
 warn you; both will simply exist.
 
@@ -80,7 +80,7 @@ Find the name in this order:
    and the `lemma-tracing` skill's contract pins the same string as the root
    trace `name`. If the code already passes a *different* name to the Lemma
    SDK, do not pick one silently — say both names and ask which is correct
-   before writing; unsettled, the run ends (see
+   before uploading; unsettled, the run ends (see
    [When discover ends the run](#when-discover-ends-the-run)). If the
    supplied name plausibly fits more than one
    production candidate — an annual and a quarterly billing agent when the
@@ -91,9 +91,11 @@ Find the name in this order:
 2. **The instrumentation.** Whatever the code passes to the Lemma SDK as the
    agent name is authoritative, exactly as written. Copy it character for
    character — `checkout-agent` and `CheckoutAgent` are two different agents.
-3. **The names already in Lemma.** `list_project_artifacts` returns the agents
-   this project knows about. If one clearly corresponds, use it rather than
-   coining a variant.
+3. **The names already in Lemma.** `list_project_artifacts` needs an agent
+   name, so it cannot tell you which agents a project has. Use it to check a
+   candidate instead: call it with the name you are considering and see
+   whether Lemma already holds files or an understanding under it. If it
+   does, use that name rather than coining a variant.
 4. **Ask.** If the agent is not instrumented yet, there is no fact to find.
    Propose a name, say it must match what the SDK will send, and let the user
    confirm or correct it. If they do neither, the run ends: see
@@ -126,7 +128,7 @@ Discover can end the whole run, not only its own step. It does so when:
   ([The agent's name](#the-agents-name)).
 
 In every one of these cases, the same thing happens: say what you looked at,
-what you found, and why you are stopping; **write nothing**; and do not
+what you found, and why you are stopping; **upload nothing**; and do not
 continue to [record.md](record.md) or [tracing-handoff.md](tracing-handoff.md).
 A run that ended here has no settled production agent, so there is nothing to
 propose and nothing to offer instrumentation for. Do not record a placeholder
