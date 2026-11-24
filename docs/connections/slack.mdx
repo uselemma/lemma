@@ -28,6 +28,8 @@ This delivers issue alerts, and optionally Issue Briefs, into your Slack workspa
   </Step>
 </Steps>
 
+Slack alerts on each issue at most twice: once when it reaches yellow priority and once at red. Red can come first. Slack doesn’t post when an issue is resolved, dismissed, or reopens; [webhooks](/connections/webhooks) report those changes.
+
 Disconnecting the workspace stops delivery for the whole organization; reconnect from the same settings to restore it. Connecting Slack never creates Linear tickets and never files issues on its own; it only notifies you about issues Lemma already detected. Owners and admins are the only ones who can connect or disconnect the workspace, but once it’s connected, any project member can set the alert channel and briefs, subject to their own Slack channel membership.
 
 ## Request the Lemma support channel
@@ -49,13 +51,13 @@ Availability depends on plan and environment, so treat an unavailable or failed 
 
 <CardGroup cols={2}>
   <Card title="Issues" href="/platform/issues">
-    The lifecycle Slack alerts and briefs report on.
+    The issues Slack alerts and briefs report on.
   </Card>
   <Card title="Inspect" href="/platform/inspect">
     In-Slack investigations use the customer integration, not support Connect.
   </Card>
   <Card title="Webhooks" href="/connections/webhooks">
-    The same issue lifecycle events outside Slack.
+    Issue lifecycle events, including resolve and reopen.
   </Card>
   <Card title="Connect your workflow" href="/connections/overview">
     When to use Slack, Linear, MCP, or webhooks.

@@ -13,7 +13,7 @@ An **issue** is a durable grouped failure pattern that Lemma infers from trace e
   <img src="/images/platform/issues-workspace.png" alt="Issues table grouped by agent, showing signals, supporting-trace counts, assignee, status, and last seen" />
 </Frame>
 
-You don’t write assertions for this to work. Lemma analyzes traces and groups repeated evidence into issues on its own. Detection and grouping are probabilistic: always open supporting traces before you treat a title as a confirmed bug. Alerting follows this issue lifecycle through [Slack](/connections/slack) and [webhooks](/connections/webhooks). See [Product boundaries](/platform/concepts#product-boundaries) for what Lemma does not ship.
+You don’t write assertions for this to work. Lemma analyzes traces and groups repeated evidence into issues on its own. Detection and grouping are probabilistic: always open supporting traces before you treat a title as a confirmed bug. See [Workflow connections](#workflow-connections) for how Slack and webhooks report on issues. See [Product boundaries](/platform/concepts#product-boundaries) for what Lemma does not ship.
 
 ## Issues and supporting traces
 
@@ -40,7 +40,7 @@ Matching evidence can reopen a resolved issue, but never reopens a dismissed one
 
 Priority comes from recurrence and impact measured across your whole population of issues, things like volume and spikes. It is not a threshold you set. Treat it as a triage hint rather than a guarantee.
 
-A [behavior monitor](/platform/monitors) writes its own issues when a trace fits that monitor. Alerting on this page still follows the issue lifecycle.
+A [behavior monitor](/platform/monitors) writes its own issues when a trace fits that monitor. See [Workflow connections](#workflow-connections) for what each connection reports.
 
 Grouping aims for one issue per underlying defect, but it isn’t perfect. If two issues look like the same bug, check their supporting traces rather than assuming Lemma missed an obvious merge. Grouping gets revised as more traces arrive.
 
@@ -52,9 +52,9 @@ Do not resolve from the issue title, an Inspect answer, or an open pull request.
 
 ## Workflow connections
 
-Each connection reports on the issue lifecycle in a different way:
+Each connection reports on issues in a different way:
 
-- **[Slack](/connections/slack)**: issue alerts and Issue Briefs sent to a project channel
+- **[Slack](/connections/slack)**: priority alerts and Issue Briefs sent to a project channel; see [when Slack alerts](/connections/slack#set-up-issue-alerts-in-your-workspace)
 - **[Linear](/connections/linear)**: an optional one-to-one ticket link that you create, exact-link, or unlink explicitly
 - **[Lemma MCP server](/connections/mcp)**: lets coding agents list and act on issues, signed in as you or with an organization API key
 - **[Webhooks](/connections/webhooks)**: `issue.created`, `issue.resolved`, `issue.dismissed`, and `issue.reopened` events

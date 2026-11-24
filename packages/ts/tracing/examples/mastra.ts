@@ -8,6 +8,7 @@ const lemmaExporter = new LemmaMastraExporter();
 export const mastra = new Mastra({
   agents: {
     supportAgent: new Agent({
+      id: "support-agent",
       name: "support-agent",
       instructions: "Answer customer questions clearly and concisely.",
       model: "openai/gpt-4o",

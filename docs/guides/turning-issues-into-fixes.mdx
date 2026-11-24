@@ -181,11 +181,11 @@ Lemma groups repeated [trace](/platform/concepts#trace) evidence into an [issue]
     1. Ship through your usual release path.
     2. Keep the issue `in_progress` until new production traces for that agent and scenario do not match the original failure.
     3. Resolve the issue and note the fix, including a pull request link when you have one.
-    4. Watch the issue. Matching evidence can reopen a `resolved` issue. It never reopens a `dismissed` one.
+    4. Check whether the issue reopens: subscribe to the `issue.reopened` [webhook](/connections/webhooks), or open **Issues** in the dashboard. Matching evidence can reopen a `resolved` issue. It never reopens a `dismissed` one.
     5. If it reopens, treat that as failed verification. Inspect the new supporting traces.
 
     <Check>
-      The issue is `resolved`, or it reopened and you are investigating again with fresh traces. Slack and [webhooks](/connections/webhooks) follow this lifecycle (`issue.resolved`, `issue.reopened`). Recurrence does not create a new Linear ticket.
+      The issue is `resolved`, or it reopened and you are investigating again with fresh traces. [Webhooks](/connections/webhooks) send `issue.resolved` and `issue.reopened`. Slack alerts work differently: see [when Slack alerts](/connections/slack#set-up-issue-alerts-in-your-workspace). A reopen from matching evidence adds one comment to the linked [Linear](/connections/linear) ticket instead of creating a new one.
     </Check>
 
     <Note>
