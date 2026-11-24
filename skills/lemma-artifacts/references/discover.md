@@ -91,9 +91,11 @@ Find the name in this order:
 2. **The instrumentation.** Whatever the code passes to the Lemma SDK as the
    agent name is authoritative, exactly as written. Copy it character for
    character — `checkout-agent` and `CheckoutAgent` are two different agents.
-3. **The names already in Lemma.** `list_project_artifacts` returns the agents
-   this project knows about. If one clearly corresponds, use it rather than
-   coining a variant.
+3. **The names already in Lemma.** `list_project_artifacts` needs an agent
+   name, so it cannot tell you which agents a project has. Use it to check a
+   candidate instead: call it with the name you are considering and see
+   whether Lemma already holds files or an understanding under it. If it
+   does, use that name rather than coining a variant.
 4. **Ask.** If the agent is not instrumented yet, there is no fact to find.
    Propose a name, say it must match what the SDK will send, and let the user
    confirm or correct it. If they do neither, the run ends: see
