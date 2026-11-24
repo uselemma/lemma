@@ -27,29 +27,30 @@ npx skills add uselemma/lemma --skill "lemma-artifacts"
 ### Cursor
 
 ```bash
-npx skills add uselemma/lemma --skill "lemma-tracing" --target cursor
-npx skills add uselemma/lemma --skill "lemma-diagnostics" --target cursor
-npx skills add uselemma/lemma --skill "lemma-mcp" --target cursor
-npx skills add uselemma/lemma --skill "lemma-analytics" --target cursor
-npx skills add uselemma/lemma --skill "lemma-artifacts" --target cursor
+npx skills add uselemma/lemma --skill "lemma-tracing" --agent cursor
+npx skills add uselemma/lemma --skill "lemma-diagnostics" --agent cursor
+npx skills add uselemma/lemma --skill "lemma-mcp" --agent cursor
+npx skills add uselemma/lemma --skill "lemma-analytics" --agent cursor
+npx skills add uselemma/lemma --skill "lemma-artifacts" --agent cursor
 ```
 
-Or install manually into your project's `.cursor/rules/` directory:
+Or install manually into your project's `.cursor/skills/` directory. Copy each skill's whole folder, because `SKILL.md` links to the reference files beside it:
 
 ```bash
-mkdir -p .cursor/rules
-curl -o .cursor/rules/lemma-tracing.md \
-  https://raw.githubusercontent.com/uselemma/lemma/main/skills/lemma-tracing/SKILL.md
+git clone --depth 1 https://github.com/uselemma/lemma.git lemma-src
+mkdir -p .cursor/skills
+cp -R lemma-src/skills/lemma-* .cursor/skills/
+rm -rf lemma-src
 ```
 
 ### Claude Code
 
 ```bash
-npx skills add uselemma/lemma --skill "lemma-tracing" --target claude
-npx skills add uselemma/lemma --skill "lemma-diagnostics" --target claude
-npx skills add uselemma/lemma --skill "lemma-mcp" --target claude
-npx skills add uselemma/lemma --skill "lemma-analytics" --target claude
-npx skills add uselemma/lemma --skill "lemma-artifacts" --target claude
+npx skills add uselemma/lemma --skill "lemma-tracing" --agent claude-code
+npx skills add uselemma/lemma --skill "lemma-diagnostics" --agent claude-code
+npx skills add uselemma/lemma --skill "lemma-mcp" --agent claude-code
+npx skills add uselemma/lemma --skill "lemma-analytics" --agent claude-code
+npx skills add uselemma/lemma --skill "lemma-artifacts" --agent claude-code
 ```
 
 ## Usage
