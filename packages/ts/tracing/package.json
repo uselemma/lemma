@@ -1,6 +1,6 @@
 {
   "name": "@uselemma/tracing",
-  "version": "7.13.0",
+  "version": "7.13.1",
   "description": "HTTP tracing SDK for Lemma",
   "license": "MIT",
   "author": "Lemma",
@@ -36,6 +36,7 @@
   ],
   "scripts": {
     "type-check": "tsc --noEmit",
+    "type-check:examples": "tsc -p tsconfig.examples.json && tsc -p tsconfig.examples.v6.json",
     "build": "tsc",
     "clean": "rm -rf dist",
     "test": "vitest run",
@@ -45,6 +46,7 @@
   "devDependencies": {
     "@langchain/core": "^1.0.0",
     "@langchain/langgraph": "^1.0.0",
+    "@langchain/openai": "^1.0.0",
     "@mastra/core": "^1.0.0",
     "@mastra/observability": "^1.0.0",
     "@openai/agents": "^0.3.0",
@@ -52,6 +54,7 @@
     "@types/node": "^22.18.8",
     "@vitest/coverage-v8": "^3.2.4",
     "ai": "^7.0.0",
+    "ai-v6": "npm:ai@^6.0.111",
     "langchain": "^1.0.0",
     "openai": "^6.26.0",
     "prettier": "^3.6.2",

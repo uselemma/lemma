@@ -7,7 +7,7 @@ description: >-
   Agents SDK, LangChain, LangGraph, Langfuse side-by-side installs, or
   debugging Lemma trace delivery and trace shape.
 metadata:
-  version: 1.1.0
+  version: 1.1.1
 ---
 
 # Lemma Tracing

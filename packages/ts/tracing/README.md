@@ -282,7 +282,7 @@ treated as execution errors unless the harness reports an error.
 
 ## Vercel AI SDK
 
-Pass a fresh `vercelAI()` to the AI SDK telemetry integrations option for each operation. The integration creates and closes the Lemma trace for the AI SDK run, puts the current user turn on the root, promotes `threadId` / `userId` from telemetry metadata, and records model calls and tool executions as child spans. AI SDK v7 uses `telemetry`; AI SDK v6 uses `experimental_telemetry`.
+Pass a fresh `vercelAI()` to the AI SDK telemetry integrations option for each operation. The integration creates and closes the Lemma trace for the AI SDK run, puts the current user turn on the root, promotes `threadId` / `userId` from metadata, and records model calls and tool executions as child spans. AI SDK v7 uses `telemetry`; AI SDK v6 uses `experimental_telemetry`. AI SDK v7 has no `telemetry.metadata`, so pass `threadId` / `userId` to `vercelAI({ metadata })`.
 
 ```typescript
 import { generateText } from "ai";
@@ -291,6 +291,10 @@ import { vercelAI } from "@uselemma/tracing";
 const lemmaTelemetry = vercelAI({
   apiKey: process.env.LEMMA_API_KEY,
   projectId: process.env.LEMMA_PROJECT_ID,
+  metadata: {
+    threadId: conversationId,
+    userId: user.id,
+  },
 });
 
 try {
@@ -299,10 +303,6 @@ try {
     prompt: userMessage,
     telemetry: {
       functionId: "support-agent",
-      metadata: {
-        threadId: conversationId,
-        userId: user.id,
-      },
       integrations: [lemmaTelemetry],
     },
   });

@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.examples.json",
+  "compilerOptions": {
+    "paths": {
+      "@uselemma/tracing": ["./src/index.ts"],
+      "ai": ["./node_modules/ai-v6"]
+    }
+  },
+  "include": ["examples/vercel-ai-v6.ts"],
+  "exclude": ["node_modules", "dist"]
+}

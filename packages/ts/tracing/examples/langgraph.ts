@@ -1,12 +1,12 @@
-import { StateGraph, START, END } from "@langchain/langgraph";
+import { Annotation, StateGraph, START, END } from "@langchain/langgraph";
 import { langGraph } from "@uselemma/tracing";
 
-type GraphState = {
-  input: string;
-  output?: string;
-};
+const GraphState = Annotation.Root({
+  input: Annotation<string>(),
+  output: Annotation<string | undefined>(),
+});
 
-const graph = new StateGraph<GraphState>()
+const graph = new StateGraph(GraphState)
   .addNode("answer", async (state) => ({
     output: `You said: ${state.input}`,
   }))

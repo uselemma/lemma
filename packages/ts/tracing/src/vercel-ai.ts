@@ -275,10 +275,22 @@ export type VercelAIIntegrationOptions = {
     | ((
         event: VercelAIToolExecutionEndEvent | VercelAIV6ToolCallFinishEvent,
       ) => string);
+  /**
+   * Metadata recorded on the trace. Lemma reads `threadId` and `userId` from
+   * it. On AI SDK v7 this is the only source, because v7 telemetry options
+   * have no `metadata`. On v6, `experimental_telemetry.metadata` is merged
+   * over it and wins when both set a key.
+   */
   metadata?: Record<string, unknown>;
-  /** Key looked up on telemetry metadata for threadId. Default: `threadId`. */
+  /**
+   * Key looked up on integration or event metadata for threadId.
+   * Default: `threadId`.
+   */
   threadIdKey?: string;
-  /** Key looked up on telemetry metadata for userId. Default: `userId`. */
+  /**
+   * Key looked up on integration or event metadata for userId.
+   * Default: `userId`.
+   */
   userIdKey?: string;
 };
 
