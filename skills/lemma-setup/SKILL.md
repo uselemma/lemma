@@ -114,8 +114,8 @@ When `wait` exits with 0, read `Project ID:` and `Agent name:` from its output. 
 
 | Exit code | Meaning | Next step |
 | --- | --- | --- |
-| 0 | Approved; the ingest key is written, kept, or saved to a private file, and the `lemma` server is written, kept, or printed for the user to add, as `start`, or `wait` before it polled, announced | If the output names a private file under `~/.lemma/setup/`, give the user its path and what to copy from it; don't read it yourself. If it printed the `lemma` server, ask the user to add it where the output says. Continue to step 4; step 6 signs you in |
-| 5 | Approval is still pending | Run `wait` again |
+| 0 | Approved; the ingest key is written, kept, or saved to a private file, and the `lemma` server is written, kept, or printed for the user to add, as `start`, or `wait` before it polled, announced | If the output names a private file under `~/.lemma/setup/`, give the user its path and what to copy from it; don't read it yourself. If it printed the `lemma` server, ask the user to add it where the output says. Continue to step 4 |
+| 5 | Approval is still pending | Run `wait --sign-in` again |
 | 2 | A flag is wrong | Fix the flag the message names, then run `start` again |
 | 3 | The code expired | Run `start` again, and ask the user to approve within 10 minutes |
 | 4 | Approval was denied or canceled | Ask the user; an owner or admin must approve. Then run `start` again |
@@ -145,12 +145,12 @@ Ask the user before you run their agent. With `LEMMA_DEBUG=1` set, run it once t
 
 If the user would rather not run it now, tell them the first trace appears under **Traces** in Lemma once the agent runs. In a new organization, Lemma's setup modal waits for that trace before it opens the dashboard.
 
-## 6. Sign in to the MCP server and record the agent's context
+## 6. Load the MCP server and record the agent's context
 
-The Lemma tools answer only once you're signed in to the Lemma MCP server as the user. The end of the `wait` output says how, unless setup kept a `lemma` server that sends an API key, which needs no sign-in:
+The Lemma tools answer only once you're signed in to the Lemma MCP server as the user. Step 3's `wait --sign-in` usually did that; the end of its output says, unless setup kept a `lemma` server that sends an API key, which needs no sign-in:
 
-- `MCP: signed in to Lemma.`: the user signed in while `wait` ran
-- A sign-in command, such as `(cd /path/to/app && codex mcp login lemma)`: run it as printed. It opens Lemma in the user's browser and returns once they approve. Tell the user to choose the organization on that page and choose **Allow**. If the command fails, times out, or your sandbox blocks it, ask the user to run it in their own terminal, or to use the step inside your harness that the output names, such as `/mcp` in Claude Code
+- `MCP: signed in to Lemma.`: the user signed in during step 3
+- A sign-in command, such as `(cd /path/to/app && codex mcp login lemma)`: the sign-in didn't finish, or setup printed the server for the user to add. Once the server is in place, run the command as printed. It opens Lemma in the user's browser and returns once they approve. Tell the user to choose the organization on that page and choose **Allow**. If the command fails, times out, or your sandbox blocks it, ask the user to run it in their own terminal, or to use the step inside your harness that the output names, such as `/mcp` in Claude Code
 - Only a step inside your harness: ask the user to do it
 
 The approver in step 3 is an owner or admin, but anyone in the organization can sign in here; you then act with the role of whoever signs in.
