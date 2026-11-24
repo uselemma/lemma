@@ -185,7 +185,7 @@ Lemma groups repeated [trace](/platform/concepts#trace) evidence into an [issue]
     5. If it reopens, treat that as failed verification. Inspect the new supporting traces.
 
     <Check>
-      The issue is `resolved`, or it reopened and you are investigating again with fresh traces. [Webhooks](/connections/webhooks) send `issue.resolved` and `issue.reopened`. Slack alerts work differently: see [when Slack alerts](/connections/slack#set-up-issue-alerts-in-your-workspace). Recurrence adds one comment to a linked [Linear](/connections/linear) ticket and doesn’t create a new one.
+      The issue is `resolved`, or it reopened and you are investigating again with fresh traces. [Webhooks](/connections/webhooks) send `issue.resolved` and `issue.reopened`. Slack alerts work differently: see [when Slack alerts](/connections/slack#set-up-issue-alerts-in-your-workspace). A reopen from matching evidence adds one comment to the linked [Linear](/connections/linear) ticket instead of creating a new one.
     </Check>
 
     <Note>
