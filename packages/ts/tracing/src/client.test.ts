@@ -1,3 +1,4 @@
+import net from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Lemma, TraceContext } from "./client";
 import { disableDebugMode, enableDebugMode } from "./debug-mode";
@@ -94,6 +95,118 @@ describe("Lemma", () => {
       },
     ]);
   });
+
+  it("gives every request to Lemma a deadline", async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      url.includes("/traces/ingest-status")
+        ? new Response('{"status":"ready"}', { status: 200 })
+        : new Response("{}", { status: 201 }),
+    );
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+
+    await lemma.trace("support-agent", async () => "ok");
+    // Smoke test: one ingest POST and one ingest-status GET.
+    await lemma.debugSmokeTest();
+
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+    const posts = urls.filter((url) => url.endsWith("/traces/ingest"));
+    expect(posts).toHaveLength(2);
+    expect(urls.some((url) => url.includes("ingest-status"))).toBe(true);
+    for (const call of fetchMock.mock.calls) {
+      expect((call[1] as RequestInit).signal).toBeInstanceOf(AbortSignal);
+    }
+  });
+
+  it("sends without a deadline when timeoutMs is null", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as typeof fetch,
+      timeoutMs: null,
+    });
+
+    await lemma.trace("support-agent", async () => "ok");
+
+    expect((fetchMock.mock.calls[0][1] as RequestInit).signal).toBeUndefined();
+  });
+
+  it("aborts a custom fetch that only settles on abort", async () => {
+    const fetchMock = vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () =>
+            reject(init.signal?.reason),
+          );
+        }),
+    );
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      fetch: fetchMock as unknown as typeof fetch,
+      timeoutMs: 50,
+    });
+
+    await expect(lemma.trace("support-agent", async () => "ok")).resolves.toBe(
+      "ok",
+    );
+    await expect(
+      lemma.ingest(new TraceContext({ name: "support-agent" }), {
+        startedAt: new Date(),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("returns from trace() when ingest never answers", async () => {
+    // The server accepts connections and never responds. The guard keeps a
+    // regression from hanging the suite: cleanup below always runs.
+    const held: net.Socket[] = [];
+    const server = net.createServer((socket) => held.push(socket));
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const { port } = server.address() as net.AddressInfo;
+    const lemma = new Lemma({
+      apiKey: "key",
+      projectId: "10000000-0000-0000-0000-000000000001",
+      baseUrl: `http://127.0.0.1:${port}`,
+      timeoutMs: 200,
+    });
+
+    let guard: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const outcome = await Promise.race([
+        lemma.trace("support-agent", async () => "ok"),
+        new Promise((resolve) => {
+          guard = setTimeout(() => resolve("still waiting"), 10_000);
+        }),
+      ]);
+      expect(outcome).toBe("ok");
+      expect(held.length).toBeGreaterThan(0);
+    } finally {
+      clearTimeout(guard);
+      held.forEach((socket) => socket.destroy());
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }, 15_000);
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, 2500.5, 2 ** 31])(
+    "rejects timeoutMs %s",
+    (timeoutMs) => {
+      expect(
+        () =>
+          new Lemma({
+            apiKey: "key",
+            projectId: "10000000-0000-0000-0000-000000000001",
+            timeoutMs,
+          }),
+      ).toThrow("timeoutMs");
+    },
+  );
 
   it("emits wire usage + GenAI attributes from recordGeneration", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 201 }));
