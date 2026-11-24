@@ -42,7 +42,8 @@ those words first, every time.
 ## Core rules
 
 1. **Read Lemma's current state before proposing anything.** Call
-   `list_project_artifacts` with the settled agent name first, always —
+   `list_project_artifacts` with the project ID and the settled agent name
+   first, always —
    including when you expect it to be empty. What is already recorded changes
    what is worth adding.
 2. **Never upload or delete before the user has approved that specific
@@ -109,6 +110,15 @@ for you to fill.
 | Hand off | After the closing report, offer tracing when the settled target agent is not instrumented — uploaded or declined | [references/tracing-handoff.md](references/tracing-handoff.md) |
 
 Read all three before acting. Run them in that order.
+
+## The project ID
+
+Every Lemma tool this skill calls takes a `project_id`. Use the one the user
+gave you: Lemma's onboarding prompt states it as "Lemma project ID". If they
+gave none, call `list_projects`, show the user what it returns, and ask which
+project to use, including when it returns only one. Never guess a project ID,
+and never take one from the codebase's environment files: the app may send
+its traces to a different project from the one the user wants described.
 
 ## When Lemma refuses the connection
 

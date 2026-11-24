@@ -2,7 +2,8 @@
 
 ## 1. Read what Lemma already has
 
-Always, before proposing anything:
+Always, before proposing anything. Every call below takes the `project_id`
+settled in [SKILL.md](../SKILL.md#the-project-id):
 
 - `list_project_artifacts` with the project ID and the settled agent name —
   the context files uploaded for that agent, and its understanding if Lemma
