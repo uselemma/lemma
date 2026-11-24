@@ -9,7 +9,7 @@ import { SetupError } from "../errors.js";
 import { cursorConfigPath } from "../mcp/paths.js";
 import { setupPaths } from "../setup-paths.js";
 import { runStart, type StartOptions } from "../start.js";
-import { runWait } from "../wait.js";
+import { runWait, type WaitOptions } from "../wait.js";
 import { approved, MockApi, type MockApiOptions } from "./mock-api.js";
 import { temporaryDirectories } from "./temp.js";
 
@@ -41,7 +41,8 @@ export type SetupRun = {
   interactiveCalls: InteractiveCall[];
   environment: SetupEnvironment;
   start: (options?: Partial<StartOptions>) => Promise<void>;
-  wait: () => ReturnType<typeof runWait>;
+  /** `wait`, without `--sign-in` unless the options say so. */
+  wait: (options?: WaitOptions) => ReturnType<typeof runWait>;
   pendingPath: string;
 };
 
@@ -151,7 +152,7 @@ export function setupRuns(): {
           },
           environment,
         ),
-      wait: () => runWait(environment),
+      wait: (options = { signIn: false }) => runWait(options, environment),
     };
   }
 

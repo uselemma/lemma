@@ -27,22 +27,20 @@ export function signInInstruction(signIn: PlannedSignIn): string {
 
 /**
  * Signs the coding agent in to Lemma's MCP server once setup has written its
- * `lemma` server. At a terminal, setup runs the agent's own sign-in command,
- * which opens Lemma in the browser and waits for the person; otherwise, as
- * when a coding agent runs setup, it prints how. A sign-in that does not
+ * `lemma` server. With `run` (at a terminal, or `wait --sign-in`), setup runs
+ * the agent's own sign-in command, which opens Lemma in the browser and
+ * waits for the person; otherwise it prints how. A sign-in that does not
  * finish leaves the server in place and prints how to sign in later, since
  * the agent can sign in at any time.
  */
 export async function signInToMcp(input: {
   signIn: PlannedSignIn;
-  environment: Pick<
-    SetupEnvironment,
-    "interactive" | "runInteractive" | "output"
-  >;
+  run: boolean;
+  environment: Pick<SetupEnvironment, "runInteractive" | "output">;
 }): Promise<void> {
-  const { signIn, environment } = input;
+  const { signIn, run, environment } = input;
   const later = `to sign in to Lemma as yourself, ${signInInstruction(signIn)}`;
-  if (!signIn.command || !environment.interactive) {
+  if (!signIn.command || !run) {
     environment.output(`MCP: ${later}.`);
     return;
   }

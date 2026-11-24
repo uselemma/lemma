@@ -139,6 +139,28 @@ describe("wait", () => {
     ]);
   });
 
+  it("runs the agent's sign-in with --sign-in when no person is at the terminal", async () => {
+    const run = await setUp({ api: { polls: [approvedWithKey] } });
+    await run.start({ harness: "codex" });
+    await expect(run.wait({ signIn: true })).resolves.toEqual({
+      status: "approved",
+    });
+    expect(run.interactiveCalls).toEqual([
+      { argv: ["codex", "mcp", "login", "lemma"], cwd: run.app },
+    ]);
+    expect(run.lines).toContain("MCP: signed in to Lemma.");
+  });
+
+  it("prints the agent's sign-in without --sign-in when no person is at the terminal", async () => {
+    const run = await setUp({ api: { polls: [approvedWithKey] } });
+    await run.start({ harness: "codex" });
+    await expect(run.wait()).resolves.toEqual({ status: "approved" });
+    expect(run.interactiveCalls).toEqual([]);
+    expect(run.lines).toContain(
+      `MCP: to sign in to Lemma as yourself, run \`(cd ${shellWord(run.app)} && codex mcp login lemma)\` in a terminal.`,
+    );
+  });
+
   it.each<[string, InteractiveResult, string]>([
     ["exits with 1", { kind: "exited", code: 1 }, "exit code 1"],
     ["cannot start", { kind: "not-started" }, "`codex` could not start"],
@@ -212,13 +234,16 @@ describe("wait", () => {
     );
     const requested: string[] = [];
     const error = await rejection(
-      runWait({
-        ...run.environment,
-        fetch: async (input) => {
-          requested.push(String(input));
-          throw new Error("no request expected");
+      runWait(
+        { signIn: false },
+        {
+          ...run.environment,
+          fetch: async (input) => {
+            requested.push(String(input));
+            throw new Error("no request expected");
+          },
         },
-      }),
+      ),
     );
     expect(error.message).toContain("is unreadable. Run `start` again.");
     expect(requested).toEqual([]);
@@ -338,7 +363,7 @@ describe("wait", () => {
     await elsewhere.start();
     const other = await temporaryDirectory();
     await expect(
-      runWait({ ...elsewhere.environment, cwd: other }),
+      runWait({ signIn: false }, { ...elsewhere.environment, cwd: other }),
     ).rejects.toThrow("No setup is waiting");
     expect(await readdir(dirname(elsewhere.pendingPath))).toHaveLength(1);
   });

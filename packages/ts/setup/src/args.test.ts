@@ -70,7 +70,14 @@ describe("command-line input", () => {
         projectId: undefined,
       },
     });
-    expect(parseCommand(["wait"])).toEqual({ kind: "wait" });
+    expect(parseCommand(["wait"])).toEqual({
+      kind: "wait",
+      options: { signIn: false },
+    });
+    expect(parseCommand(["wait", "--sign-in"])).toEqual({
+      kind: "wait",
+      options: { signIn: true },
+    });
     expect(parseCommand(["--version"])).toEqual({ kind: "version" });
     expect(parseCommand(["start", "--help"])).toEqual({ kind: "help" });
   });

@@ -13,14 +13,13 @@ import { signInToMcp } from "./sign-in.js";
 const tempDir = temporaryDirectories("lemma-setup-sign-in-");
 
 /** A terminal that records what setup would run and prints, and runs nothing. */
-function terminal(interactive: boolean) {
+function terminal() {
   const lines: string[] = [];
   const calls: Array<{ argv: string[]; cwd: string }> = [];
   return {
     lines,
     calls,
     environment: {
-      interactive,
       output: (line: string) => lines.push(line),
       runInteractive: async (
         command: string,
@@ -66,8 +65,8 @@ describe("signing in to Lemma's MCP server", () => {
       await plan("claude-code", home, { run: gitRun, appDir }),
     );
     expect(signIn.cwd).toBe(home);
-    const at = terminal(true);
-    await signInToMcp({ signIn, environment: at.environment });
+    const at = terminal();
+    await signInToMcp({ signIn, run: true, environment: at.environment });
     expect(at.calls).toEqual([
       { argv: ["claude", "mcp", "login", "lemma"], cwd: home },
     ]);
@@ -77,11 +76,11 @@ describe("signing in to Lemma's MCP server", () => {
     ]);
   });
 
-  it("prints the command and the step inside the agent when no person is at the terminal", async () => {
+  it("prints the command and the step inside the agent when it is not to run", async () => {
     const home = await tempDir();
     const { signIn } = notKept(await plan("opencode", home));
-    const at = terminal(false);
-    await signInToMcp({ signIn, environment: at.environment });
+    const at = terminal();
+    await signInToMcp({ signIn, run: false, environment: at.environment });
     expect(at.calls).toEqual([]);
     expect(at.lines).toEqual([
       `MCP: to sign in to Lemma as yourself, run \`(cd ${shellWord(home)} && opencode mcp auth lemma)\` in a terminal, or run /mcps in OpenCode, select \`lemma\`, and sign in.`,

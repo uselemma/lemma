@@ -18,6 +18,14 @@ import { setupPaths } from "./setup-paths.js";
 
 type WaitResult = { status: "approved" } | { status: "pending" };
 
+export type WaitOptions = {
+  /**
+   * Runs the agent's sign-in even when stdin is not a terminal, as when a
+   * coding agent runs `wait`; without it the sign-in runs only at a terminal.
+   */
+  signIn: boolean;
+};
+
 /**
  * Polls the handshake `start` began in this directory for up to
  * `WAIT_BUDGET_SECONDS`. On approval it writes `.env`, `.env.example`, and
@@ -27,6 +35,7 @@ type WaitResult = { status: "approved" } | { status: "pending" };
  * server, and manual add is announced before the key arrives.
  */
 export async function runWait(
+  options: WaitOptions,
   environment: SetupEnvironment,
 ): Promise<WaitResult> {
   const appDir = await appDirectory(environment);
@@ -86,7 +95,11 @@ export async function runWait(
       // After the spent code is gone: the sign-in waits on the person, who
       // may interrupt it.
       if (mcp.kind === "written") {
-        await signInToMcp({ signIn: mcp.target.signIn, environment });
+        await signInToMcp({
+          signIn: mcp.target.signIn,
+          run: options.signIn || environment.interactive,
+          environment,
+        });
         environment.output(`MCP: ${mcp.target.reload}.`);
       }
       if (failed) {

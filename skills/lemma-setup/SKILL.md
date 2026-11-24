@@ -103,10 +103,12 @@ When you found a Lemma API in step 1, add `--api-url` with that URL, for example
 Then wait for the approval:
 
 ```bash
-npx --yes @uselemma/setup@0.1.0 wait
+npx --yes @uselemma/setup@0.1.0 wait --sign-in
 ```
 
-Each `wait` checks for up to 90 seconds, so it finishes within a default command timeout. While it exits with 5, the approval is still pending: run `wait` again. The code expires 10 minutes after `start`.
+Each `wait` checks for up to 90 seconds. While it exits with 5, the approval is still pending: run `wait --sign-in` again. The code expires 10 minutes after `start`.
+
+Once approved, `wait --sign-in` also runs your sign-in to the Lemma MCP server: Lemma opens in the user's browser, and `wait` returns once they allow the connection. Tell the user to choose the organization on that page and choose **Allow**. Give `wait --sign-in` the longest command timeout your harness allows, since the sign-in waits for the user.
 
 When `wait` exits with 0, read `Project ID:` and `Agent name:` from its output. Use that agent name from here on: the user may have changed it on the approval page.
 
@@ -147,7 +149,7 @@ If the user would rather not run it now, tell them the first trace appears under
 
 The Lemma tools answer only once you're signed in to the Lemma MCP server as the user. The end of the `wait` output says how, unless setup kept a `lemma` server that sends an API key, which needs no sign-in:
 
-- `MCP: signed in to Lemma.`: the user signed in while `wait` ran in their terminal
+- `MCP: signed in to Lemma.`: the user signed in while `wait` ran
 - A sign-in command, such as `(cd /path/to/app && codex mcp login lemma)`: run it as printed. It opens Lemma in the user's browser and returns once they approve. Tell the user to choose the organization on that page and choose **Allow**. If the command fails, times out, or your sandbox blocks it, ask the user to run it in their own terminal, or to use the step inside your harness that the output names, such as `/mcp` in Claude Code
 - Only a step inside your harness: ask the user to do it
 
