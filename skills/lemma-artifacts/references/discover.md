@@ -57,7 +57,7 @@ want only one. If the user does not choose, the run ends: see
 ## Nothing to record
 
 If no production agent is identifiable, say what you looked at and what you
-were looking for, and **write nothing**. An empty project is a correct outcome
+were looking for, and **upload nothing**. An empty project is a correct outcome
 here. Do not record a placeholder, do not record the repository itself as an
 agent, and do not record a demo because it was the only candidate.
 
@@ -68,7 +68,7 @@ the run ends: see [When discover ends the run](#when-discover-ends-the-run).
 
 This matters more than it looks. Lemma files everything — traces, issues,
 understanding, context — under an agent name. If the name you record does not
-match the name the running code reports, the artifacts you write describe an
+match the name the running code reports, the files you upload describe an
 agent that never appears, and the real one stays uncalibrated. Nothing will
 warn you; both will simply exist.
 
@@ -80,7 +80,7 @@ Find the name in this order:
    and the `lemma-tracing` skill's contract pins the same string as the root
    trace `name`. If the code already passes a *different* name to the Lemma
    SDK, do not pick one silently — say both names and ask which is correct
-   before writing; unsettled, the run ends (see
+   before uploading; unsettled, the run ends (see
    [When discover ends the run](#when-discover-ends-the-run)). If the
    supplied name plausibly fits more than one
    production candidate — an annual and a quarterly billing agent when the
@@ -128,7 +128,7 @@ Discover can end the whole run, not only its own step. It does so when:
   ([The agent's name](#the-agents-name)).
 
 In every one of these cases, the same thing happens: say what you looked at,
-what you found, and why you are stopping; **write nothing**; and do not
+what you found, and why you are stopping; **upload nothing**; and do not
 continue to [record.md](record.md) or [tracing-handoff.md](tracing-handoff.md).
 A run that ended here has no settled production agent, so there is nothing to
 propose and nothing to offer instrumentation for. Do not record a placeholder

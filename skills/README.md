@@ -10,7 +10,7 @@
 | [`lemma-diagnostics`](./lemma-diagnostics/SKILL.md) | Improve the quality of traces already landing in Lemma — audit local instrumentation, score received shape against live docs, and hand off apply-work to `lemma-tracing` |
 | [`lemma-mcp`](./lemma-mcp/SKILL.md) | Drive the Lemma MCP from the terminal — find and read issues, check traces and monitors, and choose the right action (lifecycle, metadata, monitor correction, or ticket) within what the user authorized |
 | [`lemma-analytics`](./lemma-analytics/SKILL.md) | Answer questions about production numbers with the analytics API — volume, latency, tool failures, and estimated cost by agent, model, tool, or day, over the Lemma MCP or REST |
-| [`lemma-artifacts`](./lemma-artifacts/SKILL.md) | Read a codebase and record in Lemma the facts about its agents that no trace shows — tell production agents from examples, propose claims with the evidence behind them, and upload context files only after the user approves the specifics. Lemma generates the agent understanding itself from traces — then, after its closing report, offer to hand off to `lemma-tracing` when the agent it settled on is not instrumented, written or not |
+| [`lemma-artifacts`](./lemma-artifacts/SKILL.md) | Read a codebase and record in Lemma the facts about its agents that no trace shows — tell production agents from examples, propose claims with the evidence behind them, and upload context files only after the user approves the specifics. Lemma generates the agent understanding itself from traces — then, after its closing report, offer to hand off to `lemma-tracing` when the agent it settled on is not instrumented, uploaded or not |
 
 ## Installation
 

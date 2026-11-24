@@ -29,7 +29,7 @@ the user should hear it.
 
 ## 2. Propose, in specifics
 
-Show the user what you intend to record, before any write. The confirmation
+Show the user what you intend to record, before any upload or delete. The confirmation
 has to be specific enough to judge, which means:
 
 - Name the agent, exactly as it will be recorded.
@@ -57,15 +57,15 @@ In the spirit of:
 > All of this comes from the code; I haven't seen any traces. Should I
 > record it?
 
-Then stop and wait. Do not write on an implied yes, a "sounds good" about
+Then stop and wait. Do not upload on an implied yes, a "sounds good" about
 something else, or your own confidence.
 
 If the user corrects you, revise and show them the revision. Confirmation
 covers the content you showed — if the content changes, ask again.
 
-If the user declines, write nothing. Do not offer a reduced version unless
+If the user declines, upload nothing. Do not offer a reduced version unless
 they ask. Go straight to the [closing report](#closing-report), which is
-where you say what was not written: a decline ends the write, not the run.
+where you say what was not uploaded: a decline ends the upload, not the run.
 
 ## 3. Upload
 
@@ -104,14 +104,14 @@ core rule 7 in [SKILL.md](../SKILL.md).
 
 ## If the file changed while you were working
 
-Lemma does not lock a file between your read and your write, and it will not
+Lemma does not lock a file between your read and your replace or delete, and it will not
 reject a delete because someone else changed the file first. The check is
 yours to make.
 
 Before you replace or delete a file, read it again in full and compare it
 with the text you showed the user, along with its `updated_at` and
 `byte_length` in the list. If anything differs, **show the user the new
-situation before writing**. Their approval was for a file that no longer
+situation before you replace or delete**. Their approval was for a file that no longer
 exists in that form. Never carry an approval across a change.
 
 ## Closing report
@@ -122,7 +122,7 @@ Every run ends here, whichever way step 2 and step 3 went:
   or removed. Say once that Lemma writes the understanding itself, from traces
   and from these files, so none appears until the agent's first traces have
   been processed.
-- **Declined.** Say that nothing was written and what the proposal was, so
+- **Declined.** Say that nothing was uploaded and what the proposal was, so
   the user can come back to it.
 - **Failed part-way.** Say what failed and what state the project is in now.
   A partial run is fine; a partial run the user thinks was complete is not.

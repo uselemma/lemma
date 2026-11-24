@@ -9,7 +9,7 @@ description: >-
   enforces. It uploads context files and never writes the agent understanding,
   which Lemma generates from traces. After its closing report it offers to
   hand off to lemma-tracing when the agent it settled on is not instrumented,
-  whether or not anything was written. Do not use for installing tracing or
+  whether or not anything was uploaded. Do not use for installing tracing or
   fixing trace delivery and shape — that is lemma-tracing and
   lemma-diagnostics.
 metadata:
@@ -35,7 +35,7 @@ Two things follow from where you are standing, and they govern everything below.
 meant to build. Only traces show what actually happens, so leave out anything
 only a run could tell you: the shape of a trace, latencies, call counts.
 
-**Nothing is written without the user saying yes to specifics.** You are about
+**Nothing is uploaded or deleted without the user saying yes to specifics.** You are about
 to put words in their vendor's mouth about their own system. They get to read
 those words first, every time.
 
@@ -45,10 +45,10 @@ those words first, every time.
    `list_project_artifacts` with the settled agent name first, always —
    including when you expect it to be empty. What is already recorded changes
    what is worth adding.
-2. **Never call a write tool before the user has approved that specific
+2. **Never upload or delete before the user has approved that specific
    content in this conversation.** `upload_project_artifact` and
    `delete_project_artifact` both wait for an explicit yes.
-3. **Itemize the claims in the confirmation.** "Write 3 artifacts?" is not a
+3. **Itemize the claims in the confirmation.** "Upload 3 files?" is not a
    confirmation. Name the agent, state the claims, and say which file each
    would land in. See [references/record.md](references/record.md).
 4. **Never modify the user's code.** You are reading their repository to
@@ -67,20 +67,20 @@ those words first, every time.
 7. **Only replace or delete a file this run uploaded, or one the user named.**
    Every other uploaded file is read-only to you, whatever its name or
    content. A project's uploads also hold runbooks and custom pricing
-   schedules that this skill did not write and cannot judge.
+   schedules that this skill did not upload and cannot judge.
 8. **Say what convinced you.** Every proposed claim cites the file that
    supports it. A claim you cannot point at is a claim you should drop.
 9. Keep tool names exactly as written here so transport mappings stay valid.
 
-## Two kinds of artifact, and you write only one
+## Two kinds of artifact, and you upload only one
 
 Lemma stores two things and the word "artifact" is used loosely for both. They
-behave differently, and this skill reads both but writes only the second.
+behave differently, and this skill reads both but uploads only the second.
 
 | | Agent understanding | Project context files |
 | --- | --- | --- |
 | Holds | how the agent works: its task and its tools | facts no trace shows: rules, intended behaviour that looks like a failure, setup facts |
-| Written by | Lemma's learning runs, from traces and from the context files | the customer, and you |
+| Written by | Lemma's learning runs, from traces and from the context files | the customer, and you by upload |
 | Rewritten by Lemma | on every learning run | never |
 | Your tools | read only: `list_project_artifacts`, `get_project_artifact`, `get_agent_understanding_history` | `upload_project_artifact`, `delete_project_artifact`, and `get_project_artifact` to read |
 | Contract | [references/agent-artifact-contract.md](references/agent-artifact-contract.md), for reading what Lemma wrote | [references/project-context-contract.md](references/project-context-contract.md) |
@@ -106,7 +106,7 @@ for you to fill.
 | --- | --- | --- |
 | Discover | Find the real agents, tell them from examples and dead code, settle their names | [references/discover.md](references/discover.md) |
 | Record | Read current state, propose, confirm, upload, report | [references/record.md](references/record.md) |
-| Hand off | After the closing report, offer tracing when the settled target agent is not instrumented — written or declined | [references/tracing-handoff.md](references/tracing-handoff.md) |
+| Hand off | After the closing report, offer tracing when the settled target agent is not instrumented — uploaded or declined | [references/tracing-handoff.md](references/tracing-handoff.md) |
 
 Read all three before acting. Run them in that order.
 
@@ -116,7 +116,7 @@ A `401` from any Lemma tool means the key behind `LEMMA_MCP_API_KEY` is
 missing, expired, or revoked. It is a thing for the user to fix, never a thing
 to work around.
 
-Stop there. Write nothing, offer nothing, and tell the user to set
+Stop there. Upload nothing, offer nothing, and tell the user to set
 `LEMMA_MCP_API_KEY` in the environment this agent runs in, then run you again.
 A key comes from the **Describe your agent** step in Lemma onboarding, or from
 **Settings → API keys** in the dashboard.

@@ -17,7 +17,7 @@ restate any of this.
 Run this once, right after the closing report in
 [record.md](record.md) — whether that report says which files were
 uploaded, or that the user declined the proposed upload and nothing was
-written. All of the
+uploaded. All of the
 following must hold:
 
 - **One settled production target for this run, under a fixed name.** The
