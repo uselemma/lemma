@@ -7,7 +7,7 @@ Always, before proposing anything:
 - `list_project_artifacts` with the project ID and the settled agent name —
   the context files uploaded for that agent, and its understanding if Lemma
   has written one. `agent_name` is required. Call it a second time with
-  `agent_name: null` for files that are not tied to any agent.
+  `agent_name: null` for the files of the untagged agent.
 - `get_project_artifact` with an `artifact_id` from that list, to read the
   text. Pass `version: null` for an uploaded file and `version: "latest"` for
   the understanding. It returns one window of the text at a time. While
