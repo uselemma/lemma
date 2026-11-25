@@ -9,6 +9,27 @@ meta:
   audience: "People using the Lemma dashboard and API"
 ---
 
+<Update label="November 24, 2026" tags={["Improvements", "Bug fixes", "[Issues]", "[Traces]", "[Billing]", "[Settings]"]} rss={{ title: "Issues show impact, and traces name the monitors that count them" }}>
+
+  ## Issues
+
+  - **Impact:** The [issues](/platform/issues) list shows **Impact**, the percent of recent threads the issue affected. An issue with no judged threads shows a dash. You can’t sort or filter by it.
+  - **Impact share:** `GET /issues` and `list_issues` return `impact_share` from 0 to 1. It is null when no thread was judged, and when the list names a monitor.
+
+  ## Traces
+
+  - **Monitor:** The [traces](/platform/traces) table’s **Monitor** column sits before **Duration**. Each badge is a live monitor that counts the trace, and it opens that monitor. Badges that don’t fit show **+N**. The cell shows a dash when no monitor counts the trace.
+
+  ## Billing
+
+  - **Checkout:** If starting checkout fails, you can start it again. The toast says **We couldn’t start checkout. Please try again.**
+
+  ## Settings
+
+  - **Linear:** **Open organization settings** on a project’s [Linear](/connections/linear) card opens that organization’s Linear settings. **Connect Linear to Lemma organization** on the dashboard opens the same page. **Connect your Lemma account with Linear** opens **Profile**.
+
+</Update>
+
 <Update label="November 9, 2026" tags={["Improvements", "Bug fixes", "[Issues]", "[Slack]", "[Dashboard]", "[API keys]", "[Artifacts]"]} rss={{ title: "Issues open on Open, and Slack pages yellow once and red once" }}>
 
   ## Issues
